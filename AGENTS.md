@@ -1,6 +1,6 @@
 # AGENTS.md — 给后续接手的 Agent / 开发者
 
-> 其他 Agent 接手本项目时，**先读本文件**，再按 `docs/README.md` 的索引阅读对应文档。
+> 其他 Agent 接手本项目时，**先读 `skills/mend-dev/SKILL.md`**（开发总入口：约束、落点、命令、验证口径、隐私红线、关联 Skill 用法），再读本文件，之后按 `docs/README.md` 的索引阅读对应文档。
 > 决策、架构、数据模型、加密方案、接口约定等设计/规则文档沉淀在 `docs/`（提交到 GitHub）；开发日志在本地私有目录 `local/DEVLOG.md`（已被 `.gitignore` 忽略，**不推送到 GitHub**）。不要凭印象改架构，改动后必须回写对应 `docs/` 文档，并在 `local/DEVLOG.md` 追加日志。
 
 ## 1. 项目一句话定位
@@ -14,7 +14,7 @@
 - 后端结构：主 crate `mend` 只保留 IPC 命令层（`commands/`）与会话状态（`vault/`）；`mend-core` 不依赖 Tauri/WebView。新增业务逻辑优先落在 `mend-core`，命令层只做参数搬运与状态守卫。
 - 主密码策略：最短 4 位（`mend-core` 的 `MIN_PASSWORD_LEN`，前端同值校验）。开发期允许弱口令便于本地调试，具体测试口令只在本地 `local/` 记录，不写入仓库。
 - 测试：`cargo test --manifest-path src-tauri\core\Cargo.toml`（单元测试 + `tests/flow.rs` 数据链路测试）。**不要在 `src-tauri` 主 crate 上跑 `cargo test`**——测试二进制链接 WebView 依赖，本机会以 `STATUS_ENTRYPOINT_NOT_FOUND` 崩溃（应用本身正常）。
-- 仓库现状：前端 `src/`、`src-tauri/`（含 `core/`）、`scripts/dev-env.ps1`、`docs/`；`node_modules/`、`dist/`、`target/`、`local/` 已忽略。
+- 仓库现状：前端 `src/`、`src-tauri/`（含 `core/`）、`scripts/dev-env.ps1`、`docs/`、`skills/`（开发 Skill 统一存放：`mend-dev` 为总入口，`self-improving` / `impeccable` / `awesome-design-md` 为配套，来源与许可见 `skills/NOTICE.md`）；`node_modules/`、`dist/`、`target/`、`local/` 已忽略。
 - 工具链：Node 22.23.2 / npm 10.9.8；Rust 1.99.1（GNU 目标）；MinGW-w64 gcc 16.2.0；git 2.55；gh CLI。安装位置、初始化与取舍见 `docs/09-env-setup.md`。
 - **每个新 PowerShell 会话先执行 `.\scripts\dev-env.ps1`**，把 cargo/MinGW/git/gh 加入会话 PATH（默认不在系统 PATH）。
 - 阶段 1 遗留：ESLint/Prettier 未配；占位图标；rusqlite 留待阶段 2 启用。
