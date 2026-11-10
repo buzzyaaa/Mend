@@ -1,7 +1,7 @@
 // Tauri IPC 封装：命令契约见 docs/03-architecture.md §3。
 // 浏览器（纯 Vite 开发）环境下不调用 invoke，避免报错。
 
-import type { Category, EntryView, VaultStatus } from '@/types'
+import type { Category, EntryView, GeneratorOptions, Preset, PresetInput, VaultStatus } from '@/types'
 
 type InvokeArgs = Record<string, unknown>
 
@@ -44,4 +44,17 @@ export const entryApi = {
   create: (input: unknown) => invoke<EntryView>('entry_create', { input }),
   update: (id: string, input: unknown) => invoke<EntryView>('entry_update', { id, input }),
   remove: (id: string) => invoke<void>('entry_delete', { id }),
+}
+
+/** 预设值：值在 Rust 侧加密落库，前端只见解密后的展示模型。 */
+export const presetApi = {
+  list: () => invoke<Preset[]>('preset_list'),
+  create: (input: PresetInput) => invoke<Preset>('preset_create', { input }),
+  update: (id: string, input: PresetInput) => invoke<Preset>('preset_update', { id, input }),
+  remove: (id: string) => invoke<void>('preset_delete', { id }),
+}
+
+/** 密码生成器：纯本地 CSPRNG，结果不落库。 */
+export const generatorApi = {
+  generate: (options: GeneratorOptions) => invoke<string>('generator_generate', { options }),
 }

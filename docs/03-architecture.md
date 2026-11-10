@@ -102,9 +102,11 @@ Mend/
 | `entry_create` | `{ input: EntryInput }` | `EntryView` | 敏感字段后端加密后落库（已实现） |
 | `entry_update` | `{ id, input: EntryInput }` | `EntryView` | 已实现 |
 | `entry_delete` | `{ id }` | — | 已实现 |
-| `preset_list` | `{ field_type }` | `Vec<Preset>` | 账号/邮箱/手机号预设值 |
-| `preset_create/update/delete` | 结构体 | `Preset` |
-| `generator_generate` | `GeneratorOptions` | `{ password }` | 纯本地 CSPRNG，不入库 |
+| `preset_list` | — | `Vec<PresetView>` | 账号/邮箱/手机号预设值，解锁态解密返回（已实现） |
+| `preset_create` | `{ input: PresetInput }` | `PresetView` | 值加密落库，排序号自动取 max+1（已实现） |
+| `preset_update` | `{ id, input: PresetInput }` | `PresetView` | 保留原排序号与创建时间（已实现） |
+| `preset_delete` | `{ id }` | — | 已实现 |
+| `generator_generate` | `{ options: GeneratorOptions }` | `String` | 纯本地 CSPRNG，结果不入库（已实现） |
 | `backup_export` | `{ target_path }` | `{ path }` | 导出加密备份文件 |
 | `backup_import` | `{ source_path, master_password? }` | `{ ok, count }` | 校验后恢复 |
 | `sync_webdav_test`（预留） | `WebdavConfig` | `{ ok }` | 阶段 5 仅定义接口，默认未启用联网 |

@@ -90,7 +90,28 @@
     "symbols": "Symbols",
     "excludeAmbiguous": "Exclude ambiguous",
     "regenerate": "Regenerate",
-    "fill": "Fill in"
+    "fill": "Fill in",
+    "hint": "Length 6–64, at least one character class; generated locally, no network",
+    "open": "Generate"
+  },
+  "preset": {
+    "title": "Presets",
+    "hint": "Candidates for username / email / phone dropdowns, stored encrypted; passwords are never preset",
+    "empty": "No presets yet",
+    "add": "Add preset",
+    "edit": "Edit preset",
+    "type": "Type",
+    "label": "Name",
+    "labelPlaceholder": "e.g. Work",
+    "value": "Value",
+    "choose": "Pick a preset",
+    "save": "Save preset",
+    "deleteConfirm": "Delete this preset?",
+    "types": {
+      "username": "Username",
+      "email": "Email",
+      "phone": "Phone"
+    }
   },
   "notes": {
     "edit": "Edit notes",

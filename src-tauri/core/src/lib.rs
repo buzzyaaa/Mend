@@ -7,5 +7,7 @@ pub mod crypto;
 pub mod db;
 pub mod entries;
 pub mod error;
+pub mod generator;
+pub mod presets;
 pub mod session;
 pub mod vault;

@@ -90,7 +90,28 @@
     "symbols": "符号",
     "excludeAmbiguous": "排除易混字符",
     "regenerate": "重新生成",
-    "fill": "填入"
+    "fill": "填入",
+    "hint": "长度 6–64，至少选择一类字符；本地生成，不联网",
+    "open": "生成"
+  },
+  "preset": {
+    "title": "预设值",
+    "hint": "账号 / 邮箱 / 手机号的下拉候选，值加密存储；密码不做预设，用生成器",
+    "empty": "还没有预设值",
+    "add": "新增预设",
+    "edit": "编辑预设",
+    "type": "类型",
+    "label": "名称",
+    "labelPlaceholder": "例如：工作",
+    "value": "值",
+    "choose": "选择预设",
+    "save": "保存预设",
+    "deleteConfirm": "确定删除该预设？",
+    "types": {
+      "username": "账号",
+      "email": "邮箱",
+      "phone": "手机号"
+    }
   },
   "notes": {
     "edit": "编辑备注",

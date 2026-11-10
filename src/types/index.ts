@@ -47,6 +47,13 @@ export interface Preset {
   sortOrder: number
 }
 
+/** 提交给 preset_create / preset_update 的明文入参。 */
+export interface PresetInput {
+  fieldType: PresetFieldType
+  label: string
+  value: string
+}
+
 export interface GeneratorOptions {
   length: number
   uppercase: boolean

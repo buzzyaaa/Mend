@@ -332,6 +332,99 @@ pub fn delete_entry(conn: &Connection, id: &str) -> MendResult<()> {
     Ok(())
 }
 
+// ---------- presets ----------
+
+/// 落盘形态的预设值：`value_enc` 为密文。
+#[derive(Debug, Clone)]
+pub struct PresetRowEnc {
+    pub id: String,
+    pub field_type: String,
+    pub label: String,
+    pub value_enc: String,
+    pub sort_order: i64,
+    pub created_at: i64,
+}
+
+pub fn list_presets(conn: &Connection) -> MendResult<Vec<PresetRowEnc>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, field_type, label, value_enc, sort_order, created_at
+               FROM presets
+              ORDER BY field_type ASC, sort_order ASC, created_at ASC",
+        )
+        .map_err(db_err)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(PresetRowEnc {
+                id: row.get(0)?,
+                field_type: row.get(1)?,
+                label: row.get(2)?,
+                value_enc: row.get(3)?,
+                sort_order: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })
+        .map_err(db_err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(db_err)?;
+    Ok(rows)
+}
+
+pub fn insert_preset(conn: &Connection, row: &PresetRowEnc) -> MendResult<()> {
+    conn.execute(
+        "INSERT INTO presets(id, field_type, label, value_enc, sort_order, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            row.id,
+            row.field_type,
+            row.label,
+            row.value_enc,
+            row.sort_order,
+            row.created_at
+        ],
+    )
+    .map_err(db_err)?;
+    Ok(())
+}
+
+pub fn update_preset(conn: &Connection, row: &PresetRowEnc) -> MendResult<()> {
+    let changed = conn
+        .execute(
+            "UPDATE presets SET field_type = ?2, label = ?3, value_enc = ?4, sort_order = ?5
+              WHERE id = ?1",
+            params![
+                row.id,
+                row.field_type,
+                row.label,
+                row.value_enc,
+                row.sort_order
+            ],
+        )
+        .map_err(db_err)?;
+    if changed == 0 {
+        return Err(MendError::NotFound(format!("预设 {}", row.id)));
+    }
+    Ok(())
+}
+
+pub fn delete_preset(conn: &Connection, id: &str) -> MendResult<()> {
+    let changed = conn
+        .execute("DELETE FROM presets WHERE id = ?1", params![id])
+        .map_err(db_err)?;
+    if changed == 0 {
+        return Err(MendError::NotFound(format!("预设 {id}")));
+    }
+    Ok(())
+}
+
+/// 新建预设时取当前最大排序号 + 1，保证下拉里顺序稳定。
+pub fn next_preset_sort(conn: &Connection) -> MendResult<i64> {
+    let max: Option<i64> = conn
+        .query_row("SELECT MAX(sort_order) FROM presets", [], |row| row.get(0))
+        .map_err(db_err)?;
+    Ok(max.unwrap_or(0) + 1)
+}
+
 fn map_entry_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EntryRowEnc> {
     Ok(EntryRowEnc {
         id: row.get(0)?,

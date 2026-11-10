@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use mend_core::{db, entries, vault};
+use mend_core::{db, entries, presets, vault};
 
 fn temp_db(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("mend-flow-{}-{}", tag, std::process::id()));
@@ -30,6 +30,55 @@ fn sample_input() -> entries::EntryInput {
         notes: "## 登录步骤\n- 先连内网\n- 再输入动态口令".into(),
         favorite: true,
     }
+}
+
+#[test]
+fn preset_crud_is_encrypted_on_disk() {
+    let path = temp_db("preset");
+    let keys = {
+        let conn = db::open_and_migrate(&path).expect("建库");
+        let keys = vault::setup(&conn, "123456").expect("设置主密码");
+        let dek = keys.dek_bytes();
+
+        let input = presets::PresetInput {
+            field_type: "email".into(),
+            label: "工作邮箱".into(),
+            value: "preset-secret@example.com".into(),
+        };
+        let row = presets::encrypt_input(&dek, "preset-1", &input, 1, 1000).expect("加密预设");
+        db::insert_preset(&conn, &row).expect("写入预设");
+
+        let list = db::list_presets(&conn).expect("列出预设");
+        assert_eq!(list.len(), 1);
+        let view = presets::decrypt_row(&dek, &list[0]).expect("解密预设");
+        assert_eq!(view.value, "preset-secret@example.com");
+        assert_eq!(view.field_type, "email");
+        keys
+    };
+
+    // 库文件里不应出现预设值的明文
+    let raw = fs::read(&path).expect("读库文件");
+    assert!(!bytes_contains(&raw, "preset-secret@example.com"));
+
+    {
+        let conn = db::open_and_migrate(&path).expect("重开库");
+        let dek = keys.dek_bytes();
+        let input = presets::PresetInput {
+            field_type: "phone".into(),
+            label: "备用手机".into(),
+            value: "13900139000".into(),
+        };
+        let row = presets::encrypt_input(&dek, "preset-1", &input, 1, 1000).expect("更新加密");
+        db::update_preset(&conn, &row).expect("更新预设");
+        let view = presets::decrypt_row(&dek, &db::list_presets(&conn).unwrap()[0]).unwrap();
+        assert_eq!(view.value, "13900139000");
+        assert_eq!(view.field_type, "phone");
+
+        db::delete_preset(&conn, "preset-1").expect("删除预设");
+        assert!(db::list_presets(&conn).unwrap().is_empty());
+    }
+
+    let _ = fs::remove_dir_all(path.parent().expect("父目录"));
 }
 
 #[test]
