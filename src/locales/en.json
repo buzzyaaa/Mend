@@ -6,6 +6,7 @@
   "nav": {
     "all": "All",
     "uncategorized": "Uncategorized",
+    "trash": "Trash",
     "search": "Search",
     "categories": "Categories",
     "addCategory": "Add category"
@@ -30,7 +31,7 @@
     "empty": "No entries yet. Use “Add entry” to create your first password.",
     "emptyInBucket": "Nothing here yet",
     "listTitle": "Passwords",
-    "searchPlaceholder": "Search title, username, email, phone",
+    "searchPlaceholder": "Search title, username, email, phone, notes",
     "add": "Add entry",
     "dialogCreate": "New entry",
     "dialogEdit": "Edit entry",
@@ -40,7 +41,14 @@
     "show": "Show",
     "hide": "Hide",
     "openUrl": "Open",
-    "deleteConfirm": "Delete this entry? This cannot be undone.",
+    "deleteConfirm": "Delete this entry? It can be restored from the trash.",
+    "sortUpdated": "Recently updated",
+    "sortTitle": "By name",
+    "sortFavorite": "Favorites first",
+    "weakPassword": "Weak password: under 8 characters or too few character classes",
+    "weakShort": "weak",
+    "duplicatePassword": "Same password as another entry",
+    "dupShort": "dup",
     "titleRequired": "Title is required",
     "noNotes": "(no notes)",
     "notesEdit": "Write",
@@ -118,6 +126,18 @@
     "preview": "Preview",
     "write": "Write"
   },
+  "trash": {
+    "empty": "Trash is empty",
+    "deletedAt": "deleted on",
+    "restore": "Restore",
+    "purge": "Delete forever",
+    "purgeConfirm": "Permanently delete \"{title}\"? This cannot be undone.",
+    "purgeAll": "Empty trash",
+    "purgeAllConfirm": "Empty the trash? Those entries will be permanently deleted.",
+    "restored": "Restored",
+    "purged": "Permanently deleted",
+    "purgedMany": "Removed {count} entries"
+  },
   "backup": {
     "title": "Backup & restore",
     "hint": "Exports an encrypted snapshot of the whole vault, protected by the master password. The file name carries no sensitive data. Restore overwrites the current vault and keeps the old file as a backup.",
@@ -126,6 +146,7 @@
     "dataDir": "Data directory",
     "dataDirHint": "Manual backup: lock or quit first, then copy the vault file to a USB drive; unlock with the same master password on another machine.",
     "filePath": "Backup file path",
+    "pickHint": "The button below opens the system file dialog to choose a save location or a backup file.",
     "exportPathPlaceholder": "e.g. D:\\backup\\mend-backup-YYYYMMDD.mendbak",
     "masterPassword": "Master password",
     "passwordPlaceholder": "Verify identity for export/restore",
@@ -139,14 +160,26 @@
   },
   "settings": {
     "language": "Language",
-    "theme": "Theme"
+    "theme": "Theme",
+    "themeSystem": "Follow system",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "autoLock": "Auto-lock when idle",
+    "autoLockHint": "Locks the vault after the chosen period without mouse or keyboard input",
+    "clipboard": "Clear clipboard after copy",
+    "clipboardHint": "Clears the copied password after the chosen delay; skipped if you copied something else in the meantime",
+    "off": "Off",
+    "minutes": "{n} min",
+    "seconds": "{n} s"
   },
   "toast": {
     "copied": "Copied to clipboard",
     "copyFailed": "Copy failed, please select the text manually",
     "saved": "Saved",
     "deleted": "Deleted",
-    "failed": "Action failed: {message}"
+    "failed": "Action failed: {message}",
+    "autoLocked": "Vault locked after inactivity",
+    "clipboardCleared": "Clipboard cleared"
   },
   "common": {
     "save": "Save",

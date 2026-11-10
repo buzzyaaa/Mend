@@ -80,7 +80,7 @@ base64( nonce[24B] || ciphertext || tag[16B] )
 | favorite | INTEGER | 明文 | 收藏标记 0/1 |
 | created_at | INTEGER | 明文 | |
 | updated_at | INTEGER | 明文 | |
-| deleted_at | INTEGER | 明文 | 软删除时间戳，空 = 未删除（回收站后续启用） |
+| deleted_at | INTEGER | 明文 | 软删除时间戳，空 = 未删除（已启用：删除进回收站，可恢复/彻底清除） |
 
 > 说明：标题/分类/时间等明文元信息仅用于列表渲染与筛选；任何身份敏感字段（账号、密码、邮箱、手机号、备注）一律密文。
 
@@ -100,7 +100,7 @@ base64( nonce[24B] || ciphertext || tag[16B] )
 - **首次启动**：生成随机 DEK；用主密码经 Argon2id 派生 KEK，包裹 DEK 落 `meta`；写 schema 版本与默认偏好。
 - **解锁**：读取 salt 与 KDF 参数 → 派生 KEK → 解包 DEK；认证失败即主密码错误。解锁后 DEK 存内存会话，命令层据此加解密。
 - **新增/编辑条目**：前端提交明文 `EntryInput` → Rust 侧逐字段加密 → 事务写入；返回解密后的展示模型供界面刷新。
-- **删除**：MVP 可先物理删除；预留 `deleted_at` 为后续回收站做准备。
+- **删除**：`entry_delete` 只写 `deleted_at`（软删除，进回收站）；`entry_restore` 清空该列；`entry_purge` / `entry_purge_all` 才做物理删除，且仅允许删除回收站里的条目。分类删除仍走"条目归未分类"。
 - **分类删除**：其下条目 `category_id` 置空（未分类），不级联删条目。
 - **迁移**：schema 版本号存 `meta`，启动时按版本顺序执行迁移；每个迁移可重入。
 

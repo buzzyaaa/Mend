@@ -11,8 +11,9 @@ app.use(createPinia())
 app.use(router)
 app.use(i18n)
 
-// 初始化文档语言
+// 初始化文档语言与主题（主题跟随偏好，system 模式监听系统变化）
 const preferences = usePreferencesStore()
 setI18nLocale(preferences.locale)
+preferences.initTheme()
 
 app.mount('#app')

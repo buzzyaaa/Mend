@@ -57,14 +57,14 @@ Mend/
 │   │   ├── ui/               # 基础通用组件（ToastHost 等，纯 Tailwind）
 │   │   ├── layout/           # Sidebar、TopBar、EntryList
 │   │   └── entry/            # EntryDialog：条目表单 + Markdown 备注编辑/预览
-│   ├── composables/          # useClipboard、useToast
+│   ├── composables/          # useClipboard、useToast、useAutoLock
 │   ├── lib/                  # ipc 封装、markdown 安全渲染、cn 工具
 │   ├── locales/              # zh-CN.json、en.json
 │   └── types/
 ├── src-tauri/
 │   ├── Cargo.toml
 │   ├── tauri.conf.json
-│   ├── capabilities/default.json
+│   ├── capabilities/default.json  # 权限：core:default + dialog:default（备份文件选择）
 │   ├── core/                 # 独立 crate mend-core：不依赖 GUI，可独立跑测试
 │   │   └── src/
 │   │       ├── lib.rs
@@ -101,7 +101,11 @@ Mend/
 | `entry_get` | `{ id }` | `EntryView` | 单条详情（已实现） |
 | `entry_create` | `{ input: EntryInput }` | `EntryView` | 敏感字段后端加密后落库（已实现） |
 | `entry_update` | `{ id, input: EntryInput }` | `EntryView` | 已实现 |
-| `entry_delete` | `{ id }` | — | 已实现 |
+| `entry_delete` | `{ id }` | — | 软删除：写 `deleted_at` 进回收站（已实现） |
+| `entry_trash_list` | — | `Vec<EntryView>` | 回收站列表（解密返回，含 `deletedAt`，已实现） |
+| `entry_restore` | `{ id }` | — | 从回收站恢复（已实现） |
+| `entry_purge` | `{ id }` | — | 彻底删除，仅接受回收站条目（已实现） |
+| `entry_purge_all` | — | `number` | 清空回收站，返回删除条数（已实现） |
 | `preset_list` | — | `Vec<PresetView>` | 账号/邮箱/手机号预设值，解锁态解密返回（已实现） |
 | `preset_create` | `{ input: PresetInput }` | `PresetView` | 值加密落库，排序号自动取 max+1（已实现） |
 | `preset_update` | `{ id, input: PresetInput }` | `PresetView` | 保留原排序号与创建时间（已实现） |
@@ -110,8 +114,6 @@ Mend/
 | `app_paths` | — | `{ dataDir, dbPath }` | 设置页展示数据目录，便于手动拷贝库文件（已实现） |
 | `backup_export` | `{ path, masterPassword }` | `{ path, bytes }` | 导出加密 `.mendbak`（整库密文，已实现） |
 | `backup_import` | `{ path, masterPassword }` | `{ entries, categories, previousBackup }` | 校验临时文件后覆盖替换并锁定会话（已实现） |
-| `backup_export` | `{ target_path }` | `{ path }` | 导出加密备份文件 |
-| `backup_import` | `{ source_path, master_password? }` | `{ ok, count }` | 校验后恢复 |
 | `sync_webdav_test`（预留） | `WebdavConfig` | `{ ok }` | 阶段 5 仅定义接口，默认未启用联网 |
 
 ### 3.1 前后端类型对齐

@@ -40,6 +40,8 @@ pub struct EntryView {
     pub favorite: bool,
     pub created_at: i64,
     pub updated_at: i64,
+    /// 回收站时间戳：正常条目为 null，回收站里为删除时间。
+    pub deleted_at: Option<i64>,
 }
 
 fn validate_title(input: &EntryInput) -> MendResult<String> {
@@ -75,6 +77,7 @@ pub fn encrypt_input(
         favorite: input.favorite,
         created_at,
         updated_at,
+        deleted_at: None,
     })
 }
 
@@ -93,6 +96,7 @@ pub fn decrypt_row(dek: &[u8; DEK_LEN], row: &EntryRowEnc) -> MendResult<EntryVi
         favorite: row.favorite,
         created_at: row.created_at,
         updated_at: row.updated_at,
+        deleted_at: row.deleted_at,
     })
 }
 

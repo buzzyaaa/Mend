@@ -54,6 +54,11 @@ export const entryApi = {
   create: (input: unknown) => invoke<EntryView>('entry_create', { input }),
   update: (id: string, input: unknown) => invoke<EntryView>('entry_update', { id, input }),
   remove: (id: string) => invoke<void>('entry_delete', { id }),
+  /** 回收站：列表 / 恢复 / 彻底删除 / 清空。 */
+  listTrash: () => invoke<EntryView[]>('entry_trash_list'),
+  restore: (id: string) => invoke<void>('entry_restore', { id }),
+  purge: (id: string) => invoke<void>('entry_purge', { id }),
+  purgeAll: () => invoke<number>('entry_purge_all'),
 }
 
 /** 预设值：值在 Rust 侧加密落库，前端只见解密后的展示模型。 */

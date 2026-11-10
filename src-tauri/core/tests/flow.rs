@@ -145,6 +145,52 @@ fn backup_rejects_wrong_password_and_tampering() {
     let _ = fs::remove_dir_all(path.parent().unwrap());
 }
 
+/// 回收站用不带分类的条目，避免临时库里补建分类。
+fn trash_input() -> entries::EntryInput {
+    let mut input = sample_input();
+    input.category_id = None;
+    input
+}
+
+#[test]
+fn trash_soft_delete_restore_and_purge() {
+    let path = temp_db("trash");
+    let conn = db::open_and_migrate(&path).expect("建库");
+    let keys = vault::setup(&conn, "123456").expect("设置主密码");
+    let dek = keys.dek_bytes();
+
+    let row = entries::encrypt_input(&dek, "t-1", &trash_input(), 1000, 1000).expect("加密");
+    db::insert_entry(&conn, &row).expect("写条目");
+    let row2 = entries::encrypt_input(&dek, "t-2", &trash_input(), 1000, 1000).expect("加密");
+    db::insert_entry(&conn, &row2).expect("写条目");
+
+    db::delete_entry(&conn, "t-1").expect("软删除");
+    // 正常列表看不到，回收站能看到，且密文仍可解密
+    assert_eq!(db::list_entries(&conn, None, None).unwrap().len(), 1);
+    let trashed = db::list_trashed_entries(&conn).expect("回收站列表");
+    assert_eq!(trashed.len(), 1);
+    assert!(trashed[0].deleted_at.is_some());
+    let view = entries::decrypt_row(&dek, &trashed[0]).expect("解密回收站条目");
+    assert_eq!(view.password, "S3cret-明文");
+
+    db::restore_entry(&conn, "t-1").expect("恢复");
+    assert_eq!(db::list_entries(&conn, None, None).unwrap().len(), 2);
+    assert!(db::list_trashed_entries(&conn).unwrap().is_empty());
+
+    // 彻底删除只接受回收站里的条目：正常条目直接 purge 应失败
+    assert!(db::purge_entry(&conn, "t-2").is_err());
+    db::delete_entry(&conn, "t-2").expect("软删除");
+    db::purge_entry(&conn, "t-2").expect("彻底删除");
+    assert_eq!(db::list_trashed_entries(&conn).unwrap().len(), 0);
+
+    // 清空回收站
+    db::delete_entry(&conn, "t-1").unwrap();
+    assert_eq!(db::purge_all_trashed(&conn).unwrap(), 1);
+    assert_eq!(db::list_entries(&conn, None, None).unwrap().len(), 0);
+
+    let _ = fs::remove_dir_all(path.parent().unwrap());
+}
+
 #[test]
 fn short_master_password_policy_and_three_char_rejected() {
     let path = temp_db("policy");

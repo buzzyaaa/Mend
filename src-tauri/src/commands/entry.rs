@@ -80,3 +80,45 @@ pub fn entry_delete(app: AppHandle, state: State<'_, VaultState>, id: String) ->
     let conn = open_db(&app)?;
     db::delete_entry(&conn, &id)
 }
+
+/// 回收站列表：解锁态解密返回，含删除时间。
+#[tauri::command]
+pub fn entry_trash_list(
+    app: AppHandle,
+    state: State<'_, VaultState>,
+) -> MendResult<Vec<EntryView>> {
+    let conn = open_db(&app)?;
+    let rows = db::list_trashed_entries(&conn)?;
+    state.with_dek(|dek| {
+        rows.iter()
+            .map(|row| decrypt_row(dek, row))
+            .collect::<MendResult<Vec<_>>>()
+    })
+}
+
+#[tauri::command]
+pub fn entry_restore(app: AppHandle, state: State<'_, VaultState>, id: String) -> MendResult<()> {
+    if !state.is_unlocked() {
+        return Err(MendError::Vault("库未解锁".into()));
+    }
+    let conn = open_db(&app)?;
+    db::restore_entry(&conn, &id)
+}
+
+#[tauri::command]
+pub fn entry_purge(app: AppHandle, state: State<'_, VaultState>, id: String) -> MendResult<()> {
+    if !state.is_unlocked() {
+        return Err(MendError::Vault("库未解锁".into()));
+    }
+    let conn = open_db(&app)?;
+    db::purge_entry(&conn, &id)
+}
+
+#[tauri::command]
+pub fn entry_purge_all(app: AppHandle, state: State<'_, VaultState>) -> MendResult<usize> {
+    if !state.is_unlocked() {
+        return Err(MendError::Vault("库未解锁".into()));
+    }
+    let conn = open_db(&app)?;
+    db::purge_all_trashed(&conn)
+}

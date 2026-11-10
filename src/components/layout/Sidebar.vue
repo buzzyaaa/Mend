@@ -109,6 +109,16 @@ function messageOf(err: unknown): string {
         <span class="text-xs text-muted-foreground">{{ entryStore.uncategorizedCount }}</span>
       </button>
 
+      <button
+        type="button"
+        class="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-accent"
+        :class="cn(entryStore.bucket === 'trash' && 'bg-accent font-medium')"
+        @click="select('trash')"
+      >
+        <span>{{ t('nav.trash') }}</span>
+        <span class="text-xs text-muted-foreground">{{ entryStore.trash.length }}</span>
+      </button>
+
       <div
         v-for="cat in entryStore.categories"
         :key="cat.id"

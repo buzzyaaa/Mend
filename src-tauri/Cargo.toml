@@ -1,6 +1,6 @@
 [package]
 name = "mend"
-version = "0.1.0"
+version = "0.2.0"
 description = "Mend — local offline encrypted password manager"
 edition = "2021"
 rust-version = "1.77"
@@ -20,6 +20,9 @@ mend-core = { path = "core" }
 base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
 zeroize = { version = "1", features = ["derive"] }
+
+# 原生文件选择对话框（备份导出/恢复）
+tauri-plugin-dialog = "2"
 
 [profile.release]
 panic = "abort"

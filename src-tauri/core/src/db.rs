@@ -228,6 +228,8 @@ pub struct EntryRowEnc {
     pub favorite: bool,
     pub created_at: i64,
     pub updated_at: i64,
+    /// 回收站时间戳：`None` = 正常条目，`Some(ms)` = 已软删除。
+    pub deleted_at: Option<i64>,
 }
 
 pub fn insert_entry(conn: &Connection, row: &EntryRowEnc) -> MendResult<()> {
@@ -287,7 +289,7 @@ pub fn update_entry(conn: &Connection, row: &EntryRowEnc) -> MendResult<()> {
 pub fn get_entry(conn: &Connection, id: &str) -> MendResult<Option<EntryRowEnc>> {
     conn.query_row(
         "SELECT id, category_id, title, url, username_enc, password_enc, email_enc,
-                phone_enc, notes_enc, favorite, created_at, updated_at
+                phone_enc, notes_enc, favorite, created_at, updated_at, deleted_at
            FROM entries WHERE id = ?1 AND deleted_at IS NULL",
         params![id],
         map_entry_row,
@@ -305,7 +307,7 @@ pub fn list_entries(
     let mut stmt = conn
         .prepare(
             "SELECT id, category_id, title, url, username_enc, password_enc, email_enc,
-                    phone_enc, notes_enc, favorite, created_at, updated_at
+                    phone_enc, notes_enc, favorite, created_at, updated_at, deleted_at
                FROM entries
               WHERE deleted_at IS NULL
                 AND (?1 IS NULL OR category_id = ?1)
@@ -321,15 +323,73 @@ pub fn list_entries(
     Ok(rows)
 }
 
-/// MVP 物理删除；`deleted_at` 为后续回收站预留。
+/// 回收站列表：只返回已软删除的条目，按删除时间倒序（最近删的在最前）。
+pub fn list_trashed_entries(conn: &Connection) -> MendResult<Vec<EntryRowEnc>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, category_id, title, url, username_enc, password_enc, email_enc,
+                    phone_enc, notes_enc, favorite, created_at, updated_at, deleted_at
+               FROM entries
+              WHERE deleted_at IS NOT NULL
+              ORDER BY deleted_at DESC",
+        )
+        .map_err(db_err)?;
+    let rows = stmt
+        .query_map([], map_entry_row)
+        .map_err(db_err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(db_err)?;
+    Ok(rows)
+}
+
+/// 软删除：只打 `deleted_at`，密文原样保留，可在回收站恢复。
 pub fn delete_entry(conn: &Connection, id: &str) -> MendResult<()> {
     let changed = conn
-        .execute("DELETE FROM entries WHERE id = ?1", params![id])
+        .execute(
+            "UPDATE entries SET deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+            params![id, now_ms()],
+        )
         .map_err(db_err)?;
     if changed == 0 {
         return Err(MendError::NotFound(format!("条目 {id}")));
     }
     Ok(())
+}
+
+/// 从回收站恢复：清掉 `deleted_at`。
+pub fn restore_entry(conn: &Connection, id: &str) -> MendResult<()> {
+    let changed = conn
+        .execute(
+            "UPDATE entries SET deleted_at = NULL WHERE id = ?1 AND deleted_at IS NOT NULL",
+            params![id],
+        )
+        .map_err(db_err)?;
+    if changed == 0 {
+        return Err(MendError::NotFound(format!("回收站条目 {id}")));
+    }
+    Ok(())
+}
+
+/// 彻底清除：物理删除，只允许删除回收站里的条目，避免误删正常数据。
+pub fn purge_entry(conn: &Connection, id: &str) -> MendResult<()> {
+    let changed = conn
+        .execute(
+            "DELETE FROM entries WHERE id = ?1 AND deleted_at IS NOT NULL",
+            params![id],
+        )
+        .map_err(db_err)?;
+    if changed == 0 {
+        return Err(MendError::NotFound(format!("回收站条目 {id}")));
+    }
+    Ok(())
+}
+
+/// 清空回收站。
+pub fn purge_all_trashed(conn: &Connection) -> MendResult<usize> {
+    let changed = conn
+        .execute("DELETE FROM entries WHERE deleted_at IS NOT NULL", [])
+        .map_err(db_err)?;
+    Ok(changed)
 }
 
 // ---------- presets ----------
@@ -439,6 +499,7 @@ fn map_entry_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EntryRowEnc> {
         favorite: row.get::<_, i64>(9)? != 0,
         created_at: row.get(10)?,
         updated_at: row.get(11)?,
+        deleted_at: row.get(12)?,
     })
 }
 
@@ -483,6 +544,7 @@ mod tests {
                 favorite: false,
                 created_at: 1,
                 updated_at: 1,
+                deleted_at: None,
             },
         )
         .unwrap();
@@ -519,6 +581,7 @@ mod tests {
             favorite: false,
             created_at: 1,
             updated_at: 1,
+            deleted_at: None,
         }
     }
 }

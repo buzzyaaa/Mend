@@ -7,6 +7,7 @@ pub use mend_core::{backup, crypto, db, entries, error, generator, presets, sess
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(session::VaultState::new())
         .invoke_handler(tauri::generate_handler![
             commands::vault_status,
@@ -22,6 +23,10 @@ pub fn run() {
             commands::entry_create,
             commands::entry_update,
             commands::entry_delete,
+            commands::entry_trash_list,
+            commands::entry_restore,
+            commands::entry_purge,
+            commands::entry_purge_all,
             commands::preset_list,
             commands::preset_create,
             commands::preset_update,

@@ -22,6 +22,8 @@ export interface EntryView {
   favorite: boolean
   createdAt: number
   updatedAt: number
+  /** 回收站条目才有值（删除时间戳）。 */
+  deletedAt?: number | null
 }
 
 /** 提交给 entry_create / entry_update 的明文入参（IPC 传输，不落盘）。 */
@@ -87,3 +89,6 @@ export interface BackupImportResult {
 }
 
 export type Locale = 'zh-CN' | 'en'
+
+/** 主题：跟随系统 / 固定浅色 / 固定深色。 */
+export type ThemeMode = 'system' | 'light' | 'dark'

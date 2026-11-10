@@ -6,6 +6,7 @@
   "nav": {
     "all": "全部",
     "uncategorized": "未分类",
+    "trash": "回收站",
     "search": "搜索",
     "categories": "分类",
     "addCategory": "新增分类"
@@ -30,7 +31,7 @@
     "empty": "暂无条目，点击「新增条目」创建第一条密码",
     "emptyInBucket": "这里还没有条目",
     "listTitle": "密码列表",
-    "searchPlaceholder": "搜索标题、账号、邮箱、手机号",
+    "searchPlaceholder": "搜索标题、账号、邮箱、手机号、备注",
     "add": "新增条目",
     "dialogCreate": "新增条目",
     "dialogEdit": "编辑条目",
@@ -40,7 +41,14 @@
     "show": "显示",
     "hide": "隐藏",
     "openUrl": "打开",
-    "deleteConfirm": "确定删除该条目？删除后无法恢复。",
+    "deleteConfirm": "删除该条目？删除后可在回收站恢复。",
+    "sortUpdated": "最近更新",
+    "sortTitle": "按名称",
+    "sortFavorite": "收藏优先",
+    "weakPassword": "密码较弱：少于 8 位或字符种类太少",
+    "weakShort": "弱",
+    "duplicatePassword": "与其他条目使用了相同密码",
+    "dupShort": "重",
     "titleRequired": "标题不能为空",
     "noNotes": "（无备注）",
     "notesEdit": "编辑",
@@ -118,6 +126,18 @@
     "preview": "预览",
     "write": "编辑"
   },
+  "trash": {
+    "empty": "回收站是空的",
+    "deletedAt": "删除于",
+    "restore": "恢复",
+    "purge": "彻底删除",
+    "purgeConfirm": "彻底删除「{title}」？此操作不可恢复。",
+    "purgeAll": "清空回收站",
+    "purgeAllConfirm": "清空回收站？其中的条目将被永久删除，不可恢复。",
+    "restored": "已恢复",
+    "purged": "已彻底删除",
+    "purgedMany": "已清空 {count} 条"
+  },
   "backup": {
     "title": "备份与恢复",
     "hint": "导出的是整库密文快照，受主密码保护；文件名不含敏感信息。恢复会覆盖当前库，旧库自动留底。",
@@ -126,6 +146,7 @@
     "dataDir": "数据目录",
     "dataDirHint": "手动备份：先锁定或退出，再把库文件拷到 U 盘 / 移动硬盘；换机器后用同一主密码解锁",
     "filePath": "备份文件路径",
+    "pickHint": "点下面的按钮会弹出系统文件选择窗口，选择保存位置或备份文件。",
     "exportPathPlaceholder": "例如 D:\\备份\\mend-backup-YYYYMMDD.mendbak",
     "masterPassword": "主密码",
     "passwordPlaceholder": "导出/恢复时验证身份",
@@ -139,14 +160,26 @@
   },
   "settings": {
     "language": "语言",
-    "theme": "主题"
+    "theme": "主题",
+    "themeSystem": "跟随系统",
+    "themeLight": "浅色",
+    "themeDark": "深色",
+    "autoLock": "空闲自动锁定",
+    "autoLockHint": "超过设定时长无鼠标/键盘操作即锁定",
+    "clipboard": "剪贴板自动清空",
+    "clipboardHint": "复制密码后到点自动清空；内容已被你替换为其他东西时不处理",
+    "off": "关闭",
+    "minutes": "{n} 分钟",
+    "seconds": "{n} 秒"
   },
   "toast": {
     "copied": "已复制到剪贴板",
     "copyFailed": "复制失败，请手动选择文本",
     "saved": "已保存",
     "deleted": "已删除",
-    "failed": "操作失败：{message}"
+    "failed": "操作失败：{message}",
+    "autoLocked": "已因长时间无操作自动锁定",
+    "clipboardCleared": "剪贴板已自动清空"
   },
   "common": {
     "save": "保存",
