@@ -1,0 +1,76 @@
+{
+  "app": {
+    "name": "Mend",
+    "tagline": "Mend the gaps of your memory"
+  },
+  "nav": {
+    "all": "All",
+    "uncategorized": "Uncategorized",
+    "search": "Search",
+    "categories": "Categories",
+    "addCategory": "Add category"
+  },
+  "topbar": {
+    "lock": "Lock",
+    "settings": "Settings",
+    "language": "Language"
+  },
+  "entry": {
+    "title": "Title",
+    "username": "Username",
+    "password": "Password",
+    "email": "Email",
+    "phone": "Phone",
+    "url": "URL",
+    "notes": "Notes",
+    "copy": "Copy",
+    "copied": "Copied",
+    "edit": "Edit",
+    "delete": "Delete",
+    "empty": "No entries yet. Add your first password.",
+    "listTitle": "Passwords"
+  },
+  "sidebar": {
+    "placeholder": "Categories will appear here"
+  },
+  "unlock": {
+    "title": "Unlock Mend",
+    "subtitle": "Enter your master password to access your vault",
+    "password": "Master password",
+    "unlock": "Unlock",
+    "setupTitle": "Create master password",
+    "setupSubtitle": "First time here? Set a master password. It cannot be recovered if lost.",
+    "confirm": "Confirm master password",
+    "create": "Create and enter"
+  },
+  "generator": {
+    "title": "Password generator",
+    "length": "Length",
+    "uppercase": "A-Z",
+    "lowercase": "a-z",
+    "digits": "0-9",
+    "symbols": "Symbols",
+    "excludeAmbiguous": "Exclude ambiguous",
+    "regenerate": "Regenerate",
+    "fill": "Fill in"
+  },
+  "notes": {
+    "edit": "Edit notes",
+    "preview": "Preview",
+    "write": "Write"
+  },
+  "backup": {
+    "export": "Export backup",
+    "import": "Restore backup"
+  },
+  "settings": {
+    "language": "Language",
+    "theme": "Theme"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "deleteConfirm": "Delete this entry?"
+  }
+}

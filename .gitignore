@@ -1,0 +1,39 @@
+# --- Node / Vite / 前端 ---
+node_modules/
+dist/
+dist-ssr/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Rust / Tauri ---
+**/target/
+src-tauri/target/
+src-tauri/gen/
+*.rs.bk
+Cargo.lock.bak
+
+# --- 本地私有目录（开发日志等，不推送到 GitHub） ---
+/local/
+
+# --- 应用数据 / 敏感库文件（切勿提交） ---
+*.db
+*.sqlite
+*.sqlite3
+*.mendbak
+*.vault
+data/
+# 配置中若含 WebDAV 密码等本地私密配置，按需取消注释
+# .env
+# .env.local
+
+# --- 编辑器 / OS ---
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,76 @@
+{
+  "app": {
+    "name": "Mend",
+    "tagline": "修补你的记忆缺口"
+  },
+  "nav": {
+    "all": "全部",
+    "uncategorized": "未分类",
+    "search": "搜索",
+    "categories": "分类",
+    "addCategory": "新增分类"
+  },
+  "topbar": {
+    "lock": "锁定",
+    "settings": "设置",
+    "language": "语言"
+  },
+  "entry": {
+    "title": "标题",
+    "username": "账号",
+    "password": "密码",
+    "email": "邮箱",
+    "phone": "手机号",
+    "url": "网址",
+    "notes": "备注",
+    "copy": "复制",
+    "copied": "已复制",
+    "edit": "编辑",
+    "delete": "删除",
+    "empty": "暂无条目，点击新增创建第一条密码",
+    "listTitle": "密码列表"
+  },
+  "sidebar": {
+    "placeholder": "分类将显示在这里"
+  },
+  "unlock": {
+    "title": "解锁 Mend",
+    "subtitle": "输入主密码以访问你的密码库",
+    "password": "主密码",
+    "unlock": "解锁",
+    "setupTitle": "创建主密码",
+    "setupSubtitle": "首次使用，请设置一个主密码。主密码丢失将无法找回数据。",
+    "confirm": "确认主密码",
+    "create": "创建并进入"
+  },
+  "generator": {
+    "title": "密码生成器",
+    "length": "长度",
+    "uppercase": "大写",
+    "lowercase": "小写",
+    "digits": "数字",
+    "symbols": "符号",
+    "excludeAmbiguous": "排除易混字符",
+    "regenerate": "重新生成",
+    "fill": "填入"
+  },
+  "notes": {
+    "edit": "编辑备注",
+    "preview": "预览",
+    "write": "编辑"
+  },
+  "backup": {
+    "export": "导出备份",
+    "import": "恢复备份"
+  },
+  "settings": {
+    "language": "语言",
+    "theme": "主题"
+  },
+  "common": {
+    "save": "保存",
+    "cancel": "取消",
+    "confirm": "确认",
+    "deleteConfirm": "确定删除该条目？"
+  }
+}

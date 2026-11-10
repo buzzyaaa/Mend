@@ -1,0 +1,63 @@
+# AGENTS.md — 给后续接手的 Agent / 开发者
+
+> 其他 Agent 接手本项目时，**先读本文件**，再按 `docs/README.md` 的索引阅读对应文档。
+> 决策、架构、数据模型、加密方案、接口约定等设计/规则文档沉淀在 `docs/`（提交到 GitHub）；开发日志在本地私有目录 `local/DEVLOG.md`（已被 `.gitignore` 忽略，**不推送到 GitHub**）。不要凭印象改架构，改动后必须回写对应 `docs/` 文档，并在 `local/DEVLOG.md` 追加日志。
+
+## 1. 项目一句话定位
+
+**Mend**：本地离线、存盘加密的个人密码管理器（Tauri 2 + Vue 3 + TypeScript + TailwindCSS + SQLite）。
+所有数据默认只保存在本机；UI 解锁后可明文查看（自用场景），但数据库落盘的敏感字段必须加密。
+
+## 2. 当前状态（截至最近一次更新）
+
+- 阶段：**阶段 1（脚手架与界面骨架）已完成**，阶段 2（数据层、加密与主密码）尚未开始。前端骨架 + i18n 通过 `npm run build`；Rust 侧 `cargo check`/`cargo build` 通过，`npm run tauri dev` 已端到端启动（Vite :1420 + `mend.exe` + WebView）。
+- 仓库现状：前端 `src/`、`src-tauri/`、`scripts/dev-env.ps1`、`docs/`；`node_modules/`、`dist/`、`target/`、`local/` 已忽略。
+- 工具链：Node 22.23.2 / npm 10.9.8；Rust 1.99.1（GNU 目标）；MinGW-w64 gcc 16.2.0；git 2.55；gh CLI。安装位置、初始化与取舍见 `docs/09-env-setup.md`。
+- **每个新 PowerShell 会话先执行 `.\scripts\dev-env.ps1`**，把 cargo/MinGW/git/gh 加入会话 PATH（默认不在系统 PATH）。
+- 阶段 1 遗留：ESLint/Prettier 未配；占位图标；rusqlite 留待阶段 2 启用。
+- 最新进度与未完成项以本地私有 `local/DEVLOG.md` 顶部条目为准（该目录不入库、不推送）。
+
+## 3. 必读文档（按顺序）
+
+| 顺序 | 文档 | 作用 |
+| --- | --- | --- |
+| 1 | `docs/README.md` | 文档索引与阅读路径 |
+| 2 | `docs/01-requirements.md` | 需求清单、范围边界、MVP 与后续路线对照 |
+| 3 | `docs/02-tech-decision-ui.md` | 技术栈定型 + Shadcn/UI 与 Element Plus 评估结论 |
+| 4 | `docs/03-architecture.md` | 分层架构、目录结构、前后端 IPC 约定 |
+| 5 | `docs/04-data-model-encryption.md` | 数据库表结构、字段加密方案、密钥派生 |
+| 6 | `docs/05-mvp-spec.md` | MVP 功能规格：左右布局、分类、列表、Markdown 备注、弹窗编辑、预设字段、复制、强密码生成 |
+| 7 | `docs/06-backup-webdav.md` | 本地备份/拷贝/恢复方案 + WebDAV 接入预留设计 |
+| 8 | `docs/07-i18n.md` | 中英文切换方案与目录约定 |
+| 9 | `docs/08-roadmap.md` | 分阶段开发计划、里程碑、验收标准 |
+| — | `local/DEVLOG.md` | 开发日志（本地私有，被 `.gitignore` 忽略，不推送；每次实质性改动后追加） |
+
+## 4. 硬性约束（不可违背）
+
+1. **落盘即加密**：账号、密码、邮箱、手机号、备注等敏感字段，在写入 SQLite 前必须在 Rust 侧加密；数据库文件里不允许出现这些字段的明文。
+2. **前端不直连数据库**：所有读写经 Tauri Command（Rust 侧）完成；前端只通过类型化的 IPC 接口拿数据。
+3. **密钥不落盘**：主密码本身不存储；会话密钥仅驻留内存，锁定/退出时清零。
+4. **离线优先**：默认零网络请求；WebDAV 是可选增强，且只上传密文。
+5. **i18n 先行**：所有界面文案走 i18n 词条，不在组件里硬编码中/英文字符串。
+6. **改动回写文档**：架构、数据模型、接口、约定发生变化时，先改对应 `docs/` 文档，再在本地 `local/DEVLOG.md` 追加条目。
+7. **公开仓库只放规则**：`docs/` 与 `AGENTS.md` 只收录开发规则、设计约定与验收标准；开发日志、技术调研、参考项目分析等过程性材料一律放本地私有 `local/`（已被 `.gitignore` 忽略），不写入公开文档、不入库、不推送。
+8. **不公开个人与本机信息**：代码、注释、文档、配置、提交信息中不得出现真实姓名、个人账号、邮箱、手机号、住址/城市、内网地址、绝对路径、SSH 密钥或公钥指纹、网络受限情况、关掉安全校验的临时做法等；这类内容只能写进本地 `local/`。每次提交前自查 `git status` 与 `git diff`，只提交与项目相关的内容；提交身份使用 GitHub noreply 邮箱。
+
+## 5. 工作约定
+
+- 分支：`main` 保护；功能开发走 `feat/xxx`，修复走 `fix/xxx`。
+- 提交信息：Conventional Commits（`feat:` / `fix:` / `docs:` / `chore:` …）。
+- 类型：前端严格 TypeScript；Rust 侧对外命令的入参/出参都要有明确结构体与错误类型。
+- 日志：禁止在日志中打印密码、密钥、备注明文；安全事件可记录不含敏感数据的元信息。
+
+## 6. 如何更新开发日志
+
+每次完成一个可验证的小里程碑后，在本地私有 `local/DEVLOG.md` 顶部（最新在上）追加：
+
+```
+## YYYY-MM-DD — <一句话标题>
+- 改动：做了什么 / 涉及哪些文件
+- 决策：关键取舍与原因
+- 验证：如何验证（命令、手动步骤、测试结果）
+- 遗留：未完成项或已知风险
+```
