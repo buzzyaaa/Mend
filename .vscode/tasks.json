@@ -1,0 +1,214 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "环境准备：注入 cargo / git / MinGW 的 PATH",
+      "detail": "新开的终端默认找不到 cargo、git、gcc，先跑 scripts/dev-env.ps1 把工具链加进当前会话 PATH。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; .\\scripts\\dev-env.ps1; Write-Host '环境就绪，可以继续跑其它任务了' -ForegroundColor Green"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "开发：启动桌面应用（Tauri + 前端热更新）",
+      "detail": "等价于 npm run tauri dev：起 Vite(:1420) + 编译 Rust + 打开 Mend 窗口。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; .\\scripts\\dev-env.ps1; npm run tauri dev"
+      ],
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "开发：只开前端预览（浏览器里看界面）",
+      "detail": "等价于 npm run dev，只起 Vite，不编译 Rust；解锁/读写会提示需要桌面应用。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; npm run dev"
+      ],
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "检查：前端 TypeScript 类型检查",
+      "detail": "npm run typecheck（vue-tsc --noEmit），不产出文件。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; npm run typecheck"
+      ],
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "构建：前端产物到 dist",
+      "detail": "npm run build：类型检查 + Vite 打包，输出 dist/。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; npm run build"
+      ],
+      "group": "build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "检查：Rust 编译检查（cargo check）",
+      "detail": "cargo check --manifest-path src-tauri\\Cargo.toml，比 build 快，只查错误。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; .\\scripts\\dev-env.ps1; cargo check --manifest-path src-tauri\\Cargo.toml"
+      ],
+      "group": "build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "构建：Rust 调试版可执行文件（cargo build）",
+      "detail": "cargo build --manifest-path src-tauri\\Cargo.toml，产物在 src-tauri/target/debug/mend.exe。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; .\\scripts\\dev-env.ps1; cargo build --manifest-path src-tauri\\Cargo.toml"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "测试：后端单元测试（mend-core，17+ 项）",
+      "detail": "cargo test --manifest-path src-tauri\\core\\Cargo.toml。注意：不要在 src-tauri 主 crate 上跑 cargo test，本机会 STATUS_ENTRYPOINT_NOT_FOUND 崩溃。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; .\\scripts\\dev-env.ps1; cargo test --manifest-path src-tauri\\core\\Cargo.toml"
+      ],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "打包：生成桌面安装包（Tauri build）",
+      "detail": "npm run tauri build：先构建前端，再出 release 版与安装包（耗时较长）。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; .\\scripts\\dev-env.ps1; npm run tauri build"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "一键体检：类型检查 + 前端构建 + 后端测试",
+      "detail": "依次跑「检查：前端 TypeScript 类型检查」「构建：前端产物到 dist」「测试：后端单元测试（mend-core，17+ 项）」，全部通过等于可以提交。",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "检查：前端 TypeScript 类型检查",
+        "构建：前端产物到 dist",
+        "测试：后端单元测试（mend-core，17+ 项）"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    }
+  ]
+}

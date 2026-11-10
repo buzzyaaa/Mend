@@ -132,3 +132,4 @@ Mend/
 - 工具链默认不在系统 PATH：每个新 PowerShell 会话先在仓库根目录执行 `.\scripts\dev-env.ps1`（脚本按 `%USERPROFILE%` 推导路径，仅注入会话 PATH，不改系统环境变量）。
 - 版本、安装取舍与已知遗留见 `09-env-setup.md`。
 - 开发：`npm run tauri dev`（Vite + Rust 二进制 + WebView）；前端单独调试：`npm run dev`；类型检查：`npm run typecheck`；构建：`npm run build` / `npm run tauri build`。
+- VS Code：`.vscode/tasks.json` 已把上述命令配成中文任务（`运行任务` 或 `Ctrl+Shift+B` 唤起），每条都先执行 `scripts/dev-env.ps1` 再跑目标命令，无需手动准备 PATH。
