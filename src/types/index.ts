@@ -68,4 +68,22 @@ export interface VaultStatus {
   unlocked: boolean
 }
 
+/** 应用数据目录：设置页展示，便于手动拷贝库文件。 */
+export interface AppPaths {
+  dataDir: string
+  dbPath: string
+}
+
+export interface BackupExportResult {
+  path: string
+  bytes: number
+}
+
+/** 恢复结果：条目/分类数用于提示确认，previousBackup 为旧库留底文件名。 */
+export interface BackupImportResult {
+  entries: number
+  categories: number
+  previousBackup?: string | null
+}
+
 export type Locale = 'zh-CN' | 'en'

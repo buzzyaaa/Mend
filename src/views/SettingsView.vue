@@ -4,14 +4,17 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { usePreferencesStore } from '@/stores/preferences'
 import { usePresetStore } from '@/stores/preset'
+import { useVaultStore } from '@/stores/vault'
 import { useToast } from '@/composables/useToast'
+import { backupApi, isTauri } from '@/lib/ipc'
 import { setI18nLocale } from '@/i18n'
-import type { Locale, Preset, PresetFieldType } from '@/types'
+import type { AppPaths, Locale, Preset, PresetFieldType } from '@/types'
 
 const { t } = useI18n()
 const router = useRouter()
 const preferences = usePreferencesStore()
 const presetStore = usePresetStore()
+const vaultStore = useVaultStore()
 const toast = useToast()
 
 const locales: { value: Locale; label: string }[] = [
@@ -32,10 +35,87 @@ const busy = ref(false)
 
 const headingOfForm = computed(() => (editId.value ? t('preset.edit') : t('preset.add')))
 
+// —— 备份与恢复 ——
+const paths = ref<AppPaths | null>(null)
+const exportPath = ref('')
+const exportPassword = ref('')
+const importPath = ref('')
+const importPassword = ref('')
+const backupBusy = ref(false)
+const backupError = ref('')
+
+/** 默认导出路径：数据目录 + 带日期的文件名，用户可改成任意位置。 */
+function defaultExportPath(dir: string): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`
+  const sep = dir.endsWith('\\') || dir.endsWith('/') ? '' : '\\'
+  return `${dir}${sep}mend-backup-${stamp}.mendbak`
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+async function exportBackup() {
+  backupError.value = ''
+  if (!exportPath.value.trim()) {
+    backupError.value = t('backup.filePath')
+    return
+  }
+  if (!exportPassword.value) {
+    backupError.value = t('backup.masterPassword')
+    return
+  }
+  backupBusy.value = true
+  try {
+    const result = await backupApi.export(exportPath.value.trim(), exportPassword.value)
+    toast.success(t('backup.exported', { path: result.path, size: formatSize(result.bytes) }))
+    exportPassword.value = ''
+  } catch (err) {
+    backupError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    backupBusy.value = false
+  }
+}
+
+async function importBackup() {
+  backupError.value = ''
+  if (!importPath.value.trim() || !importPassword.value) {
+    backupError.value = t('backup.filePath')
+    return
+  }
+  if (!window.confirm(t('backup.importConfirm'))) return
+  backupBusy.value = true
+  try {
+    const result = await backupApi.import(importPath.value.trim(), importPassword.value)
+    // 后端恢复后会锁定会话，前端同步状态并回到解锁页
+    vaultStore.setStatus({ initialized: true, unlocked: false })
+    window.alert(t('backup.imported', { entries: result.entries, categories: result.categories }))
+    router.push('/unlock')
+  } catch (err) {
+    backupError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    backupBusy.value = false
+  }
+}
+
 onMounted(() => {
   presetStore.refresh().catch(() => {
     // 未解锁或浏览器预览：静默
   })
+  if (!isTauri()) return
+  backupApi
+    .paths()
+    .then((p) => {
+      paths.value = p
+      if (!exportPath.value) exportPath.value = defaultExportPath(p.dataDir)
+    })
+    .catch(() => {
+      // 拿不到路径只影响默认值，不阻塞页面
+    })
 })
 
 function onLocaleChange(event: Event) {
@@ -206,9 +286,86 @@ async function remove(preset: Preset) {
         </div>
       </section>
 
-      <!-- 阶段 5 接入备份/恢复；阶段 6 接入主题 -->
-      <div class="flex items-center justify-between rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-        {{ t('backup.export') }} / {{ t('backup.import') }}
+      <!-- 备份与恢复 -->
+      <section class="rounded-lg border border-border bg-card p-4">
+        <div class="mb-1 flex items-center justify-between">
+          <h2 class="text-sm font-medium">{{ t('backup.title') }}</h2>
+          <span class="text-xs text-muted-foreground">{{ t('backup.hint') }}</span>
+        </div>
+
+        <div class="mt-3 space-y-1">
+          <div class="flex items-center gap-2 text-xs">
+            <span class="w-24 shrink-0 text-muted-foreground">{{ t('backup.dataDir') }}</span>
+            <input
+              :value="paths?.dataDir ?? ''"
+              readonly
+              class="min-w-0 flex-1 rounded-md border border-border bg-muted px-2 py-1 font-mono text-xs"
+            />
+          </div>
+          <p class="text-xs text-muted-foreground">{{ t('backup.dataDirHint') }}</p>
+        </div>
+
+        <div class="mt-4 grid gap-4 sm:grid-cols-2">
+          <!-- 导出 -->
+          <div class="space-y-2 rounded-md border border-dashed border-border p-3">
+            <div class="text-xs font-medium">{{ t('backup.export') }}</div>
+            <input
+              v-model="exportPath"
+              :placeholder="t('backup.exportPathPlaceholder')"
+              class="w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs outline-none"
+            />
+            <input
+              v-model="exportPassword"
+              type="password"
+              :placeholder="t('backup.passwordPlaceholder')"
+              autocomplete="off"
+              class="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none"
+            />
+            <button
+              type="button"
+              class="w-full rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:opacity-60"
+              :disabled="backupBusy"
+              @click="exportBackup"
+            >
+              {{ t('backup.exportAction') }}
+            </button>
+          </div>
+
+          <!-- 恢复 -->
+          <div class="space-y-2 rounded-md border border-dashed border-border p-3">
+            <div class="text-xs font-medium">{{ t('backup.import') }}</div>
+            <input
+              v-model="importPath"
+              :placeholder="t('backup.exportPathPlaceholder')"
+              class="w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs outline-none"
+            />
+            <input
+              v-model="importPassword"
+              type="password"
+              :placeholder="t('backup.passwordPlaceholder')"
+              autocomplete="off"
+              class="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none"
+            />
+            <button
+              type="button"
+              class="w-full rounded-md border border-destructive px-3 py-1.5 text-sm text-destructive hover:bg-accent disabled:opacity-60"
+              :disabled="backupBusy"
+              @click="importBackup"
+            >
+              {{ t('backup.importAction') }}
+            </button>
+          </div>
+        </div>
+
+        <p v-if="backupError" class="mt-2 text-xs text-destructive">{{ backupError }}</p>
+      </section>
+
+      <!-- WebDAV：只放占位，不联网 -->
+      <div
+        class="flex items-center justify-between rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground"
+      >
+        <span>{{ t('backup.webdav') }}</span>
+        <span class="text-xs">{{ t('backup.webdavDisabled') }}</span>
       </div>
     </main>
   </div>

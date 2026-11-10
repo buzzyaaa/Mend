@@ -1,6 +1,6 @@
 mod commands;
 
-pub use mend_core::{crypto, db, entries, error, generator, presets, session};
+pub use mend_core::{backup, crypto, db, entries, error, generator, presets, session, sync, vault};
 
 /// 应用入口：注册命令与会话状态。
 /// 会话密钥只存在于 `VaultState` 内存中，锁定即销毁；数据库读写全部经命令层。
@@ -27,6 +27,9 @@ pub fn run() {
             commands::preset_update,
             commands::preset_delete,
             commands::generator_generate,
+            commands::app_paths,
+            commands::backup_export,
+            commands::backup_import,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Mend")

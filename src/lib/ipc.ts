@@ -1,7 +1,17 @@
 // Tauri IPC 封装：命令契约见 docs/03-architecture.md §3。
 // 浏览器（纯 Vite 开发）环境下不调用 invoke，避免报错。
 
-import type { Category, EntryView, GeneratorOptions, Preset, PresetInput, VaultStatus } from '@/types'
+import type {
+  AppPaths,
+  BackupExportResult,
+  BackupImportResult,
+  Category,
+  EntryView,
+  GeneratorOptions,
+  Preset,
+  PresetInput,
+  VaultStatus,
+} from '@/types'
 
 type InvokeArgs = Record<string, unknown>
 
@@ -57,4 +67,13 @@ export const presetApi = {
 /** 密码生成器：纯本地 CSPRNG，结果不落库。 */
 export const generatorApi = {
   generate: (options: GeneratorOptions) => invoke<string>('generator_generate', { options }),
+}
+
+/** 备份与恢复：文件读写全部在 Rust 侧完成，前端只传路径与主密码。 */
+export const backupApi = {
+  paths: () => invoke<AppPaths>('app_paths'),
+  export: (path: string, masterPassword: string) =>
+    invoke<BackupExportResult>('backup_export', { path, masterPassword }),
+  import: (path: string, masterPassword: string) =>
+    invoke<BackupImportResult>('backup_import', { path, masterPassword }),
 }

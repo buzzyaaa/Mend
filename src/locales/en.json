@@ -119,8 +119,23 @@
     "write": "Write"
   },
   "backup": {
+    "title": "Backup & restore",
+    "hint": "Exports an encrypted snapshot of the whole vault, protected by the master password. The file name carries no sensitive data. Restore overwrites the current vault and keeps the old file as a backup.",
     "export": "Export backup",
-    "import": "Restore backup"
+    "import": "Restore backup",
+    "dataDir": "Data directory",
+    "dataDirHint": "Manual backup: lock or quit first, then copy the vault file to a USB drive; unlock with the same master password on another machine.",
+    "filePath": "Backup file path",
+    "exportPathPlaceholder": "e.g. D:\\backup\\mend-backup-YYYYMMDD.mendbak",
+    "masterPassword": "Master password",
+    "passwordPlaceholder": "Verify identity for export/restore",
+    "exportAction": "Export",
+    "importAction": "Restore & overwrite",
+    "exported": "Backup written: {path} ({size})",
+    "importConfirm": "Restore will overwrite the current vault; the existing file is kept as a backup. Continue?",
+    "imported": "Restored {entries} entries and {categories} categories. Unlock again with the backup's master password.",
+    "webdav": "WebDAV sync",
+    "webdavDisabled": "Disabled (interface reserved; this version makes no network requests)"
   },
   "settings": {
     "language": "Language",

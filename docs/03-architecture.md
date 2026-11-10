@@ -19,7 +19,7 @@
 │  db/        ：SQLite 连接、迁移、仓储（repository）          │
 │  entries/   ：条目加解密编排（写前逐字段加密、读后解密）      │
 │  error/     ：统一错误类型 MendError                        │
-│  backup/    ：备份导出/导入、文件拷贝校验（待实现）          │
+│  backup/    ：备份加密导出/导入校验（`.mendbak` 容器）          │
 │  sync/      ：WebDAV 接口预留（trait + 配置，阶段 5 不联网）│
 └───────────────▲─────────────────────────────────────────┘
                 │ rusqlite
@@ -107,6 +107,9 @@ Mend/
 | `preset_update` | `{ id, input: PresetInput }` | `PresetView` | 保留原排序号与创建时间（已实现） |
 | `preset_delete` | `{ id }` | — | 已实现 |
 | `generator_generate` | `{ options: GeneratorOptions }` | `String` | 纯本地 CSPRNG，结果不入库（已实现） |
+| `app_paths` | — | `{ dataDir, dbPath }` | 设置页展示数据目录，便于手动拷贝库文件（已实现） |
+| `backup_export` | `{ path, masterPassword }` | `{ path, bytes }` | 导出加密 `.mendbak`（整库密文，已实现） |
+| `backup_import` | `{ path, masterPassword }` | `{ entries, categories, previousBackup }` | 校验临时文件后覆盖替换并锁定会话（已实现） |
 | `backup_export` | `{ target_path }` | `{ path }` | 导出加密备份文件 |
 | `backup_import` | `{ source_path, master_password? }` | `{ ok, count }` | 校验后恢复 |
 | `sync_webdav_test`（预留） | `WebdavConfig` | `{ ok }` | 阶段 5 仅定义接口，默认未启用联网 |

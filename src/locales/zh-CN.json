@@ -119,8 +119,23 @@
     "write": "编辑"
   },
   "backup": {
+    "title": "备份与恢复",
+    "hint": "导出的是整库密文快照，受主密码保护；文件名不含敏感信息。恢复会覆盖当前库，旧库自动留底。",
     "export": "导出备份",
-    "import": "恢复备份"
+    "import": "恢复备份",
+    "dataDir": "数据目录",
+    "dataDirHint": "手动备份：先锁定或退出，再把库文件拷到 U 盘 / 移动硬盘；换机器后用同一主密码解锁",
+    "filePath": "备份文件路径",
+    "exportPathPlaceholder": "例如 D:\\备份\\mend-backup-YYYYMMDD.mendbak",
+    "masterPassword": "主密码",
+    "passwordPlaceholder": "导出/恢复时验证身份",
+    "exportAction": "导出",
+    "importAction": "恢复并覆盖",
+    "exported": "已导出备份：{path}（{size}）",
+    "importConfirm": "恢复将用备份覆盖当前库，现有库会改名留底。继续？",
+    "imported": "恢复完成：{entries} 条条目、{categories} 个分类。请用该备份的主密码重新解锁。",
+    "webdav": "WebDAV 同步",
+    "webdavDisabled": "未启用（预留接口，当前版本不发起任何网络请求）"
   },
   "settings": {
     "language": "语言",

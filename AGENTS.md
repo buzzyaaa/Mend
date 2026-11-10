@@ -10,7 +10,7 @@
 
 ## 2. 当前状态（截至最近一次更新）
 
-- 阶段：**阶段 1–4 已完成**（脚手架、数据层与加密、主界面与条目交互、预设值、强密码生成器）。备份/恢复与 WebDAV 预留（阶段 5）未开始。前端通过 `npm run build`；Rust 侧 `cargo check`/`cargo build` 通过，`npm run tauri dev` 已端到端启动。核心逻辑（加密、SQLite 仓储、条目/预设加解密编排、金库生命周期、密码生成）在独立 crate `src-tauri/core`（包名 `mend-core`），测试可独立运行。
+- 阶段：**阶段 1–5 已完成**（脚手架、数据层与加密、主界面与条目交互、预设值、强密码生成器、加密备份导出/恢复与 WebDAV 预留）。阶段 6（加固、打磨与打包）未开始。前端通过 `npm run build`；Rust 侧 `cargo check`/`cargo build` 通过，`npm run tauri dev` 已端到端启动。核心逻辑（加密、SQLite 仓储、条目/预设加解密编排、金库生命周期、密码生成、备份容器）在独立 crate `src-tauri/core`（包名 `mend-core`），测试可独立运行。
 - 后端结构：主 crate `mend` 只保留 IPC 命令层（`commands/`）与会话状态（`vault/`）；`mend-core` 不依赖 Tauri/WebView。新增业务逻辑优先落在 `mend-core`，命令层只做参数搬运与状态守卫。
 - 主密码策略：最短 4 位（`mend-core` 的 `MIN_PASSWORD_LEN`，前端同值校验）。开发期允许弱口令便于本地调试，具体测试口令只在本地 `local/` 记录，不写入仓库。
 - 测试：`cargo test --manifest-path src-tauri\core\Cargo.toml`（单元测试 + `tests/flow.rs` 数据链路测试）。**不要在 `src-tauri` 主 crate 上跑 `cargo test`**——测试二进制链接 WebView 依赖，本机会以 `STATUS_ENTRYPOINT_NOT_FOUND` 崩溃（应用本身正常）。

@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use mend_core::{db, entries, presets, vault};
+use mend_core::{backup, crypto, db, entries, presets, vault};
 
 fn temp_db(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("mend-flow-{}-{}", tag, std::process::id()));
@@ -79,6 +79,70 @@ fn preset_crud_is_encrypted_on_disk() {
     }
 
     let _ = fs::remove_dir_all(path.parent().expect("父目录"));
+}
+
+#[test]
+fn backup_export_import_roundtrip_restores_same_vault() {
+    let path = temp_db("backup");
+    let (blob, expected_counts) = {
+        let conn = db::open_and_migrate(&path).expect("建库");
+        let keys = vault::setup(&conn, "123456").expect("设置主密码");
+        db::create_category(&conn, "cat-work", "工作").expect("建分类");
+        let entry =
+            entries::encrypt_input(&keys.dek_bytes(), "e-1", &sample_input(), 2000, 2000).expect("加密条目");
+        db::insert_entry(&conn, &entry).expect("写条目");
+
+        let (salt, kdf) = vault::read_salt_and_kdf(&conn).expect("读 salt/kdf");
+        let kek = crypto::derive_kek("123456", &salt, kdf).expect("派生 KEK");
+        let db_bytes = fs::read(&path).expect("读库文件");
+        let blob = backup::export(&db_bytes, &kek, &salt, kdf).expect("导出备份");
+        let counts = (
+            db::list_entries(&conn, None, None).unwrap().len(),
+            db::list_categories(&conn).unwrap().len(),
+        );
+        (blob, counts)
+    };
+
+    // 备份文件是密文：不含库里的账号/密码明文
+    assert!(backup::is_backup(&blob));
+    assert!(!bytes_contains(&blob, "S3cret-明文"));
+    assert!(!bytes_contains(&blob, "alice-user"));
+
+    // 解密到临时位置并校验，等同应用内导入流程
+    let payload = backup::import(&blob, "123456").expect("解密备份");
+    let restored_path = path.parent().unwrap().join("restored.db");
+    fs::write(&restored_path, &payload).expect("写恢复文件");
+
+    let conn = db::open_and_migrate(&restored_path).expect("打开恢复库");
+    let keys = vault::unlock(&conn, "123456").expect("用同一主密码解锁恢复库");
+    let restored = db::list_entries(&conn, None, None).expect("读条目");
+    assert_eq!(restored.len(), expected_counts.0);
+    assert_eq!(db::list_categories(&conn).unwrap().len(), expected_counts.1);
+    let entry = entries::decrypt_row(&keys.dek_bytes(), &restored[0]).expect("解密条目");
+    assert_eq!(entry.password, "S3cret-明文");
+    assert_eq!(entry.title, "公司 VPN");
+
+    let _ = fs::remove_dir_all(path.parent().unwrap());
+}
+
+#[test]
+fn backup_rejects_wrong_password_and_tampering() {
+    let path = temp_db("backup-bad");
+    let blob = {
+        let conn = db::open_and_migrate(&path).expect("建库");
+        vault::setup(&conn, "123456").expect("设置主密码");
+        let (salt, kdf) = vault::read_salt_and_kdf(&conn).unwrap();
+        let kek = crypto::derive_kek("123456", &salt, kdf).unwrap();
+        backup::export(&fs::read(&path).unwrap(), &kek, &salt, kdf).unwrap()
+    };
+
+    assert!(backup::import(&blob, "wrong-pass").is_err());
+    let mut tampered = blob.clone();
+    let last = tampered.len() - 1;
+    tampered[last] ^= 0x01;
+    assert!(backup::import(&tampered, "123456").is_err());
+
+    let _ = fs::remove_dir_all(path.parent().unwrap());
 }
 
 #[test]

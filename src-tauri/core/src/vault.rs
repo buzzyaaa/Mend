@@ -87,6 +87,42 @@ pub fn unlock(conn: &Connection, master_password: &str) -> MendResult<VaultKeys>
     Ok(VaultKeys { dek, kdf: params })
 }
 
+/// 读取库内 salt 与 KDF 参数：导出备份时写进 `.mendbak` 头部，导入端据此派生密钥。
+pub fn read_salt_and_kdf(conn: &Connection) -> MendResult<([u8; crypto::SALT_LEN], KdfParams)> {
+    let salt_b64 = db::meta_get(conn, META_SALT)?
+        .ok_or_else(|| MendError::Db("缺少 salt".into()))?;
+    let raw = B64
+        .decode(salt_b64)
+        .map_err(|_| MendError::Db("salt 数据损坏".into()))?;
+    if raw.len() != crypto::SALT_LEN {
+        return Err(MendError::Db("salt 长度非法".into()));
+    }
+    let mut salt = [0u8; crypto::SALT_LEN];
+    salt.copy_from_slice(&raw);
+
+    let params = db::meta_get(conn, META_KDF)?
+        .ok_or_else(|| MendError::Db("缺少 KDF 参数".into()))
+        .and_then(|value| KdfParams::from_meta_value(&value))?;
+    Ok((salt, params))
+}
+
+/// 导出备份用：由主密码派生 KEK 并解包 DEK，同时给出头部要写入的 salt 与 KDF 参数。
+/// 调用方拿返回的 KEK 加密整库快照；DEK 用于校验密码是否与当前会话一致。
+pub fn derive_kek_and_unwrap(
+    conn: &Connection,
+    master_password: &str,
+) -> MendResult<(Zeroizing<[u8; DEK_LEN]>, Zeroizing<[u8; DEK_LEN]>, [u8; crypto::SALT_LEN], KdfParams)> {
+    if master_password.is_empty() {
+        return Err(MendError::Vault("主密码不能为空".into()));
+    }
+    let (salt, params) = read_salt_and_kdf(conn)?;
+    let wrapped = db::meta_get(conn, META_DEK)?
+        .ok_or_else(|| MendError::Db("缺少 DEK".into()))?;
+    let kek = crypto::derive_kek(master_password, &salt, params)?;
+    let dek = crypto::unwrap_dek(&kek, &wrapped)?;
+    Ok((kek, dek, salt, params))
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
