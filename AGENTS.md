@@ -10,8 +10,10 @@
 
 ## 2. 当前状态（截至最近一次更新）
 
-- 阶段：**阶段 1（脚手架与界面骨架）已完成**，阶段 2（数据层、加密与主密码）尚未开始。前端骨架 + i18n 通过 `npm run build`；Rust 侧 `cargo check`/`cargo build` 通过，`npm run tauri dev` 已端到端启动（Vite :1420 + `mend.exe` + WebView）。
-- 仓库现状：前端 `src/`、`src-tauri/`、`scripts/dev-env.ps1`、`docs/`；`node_modules/`、`dist/`、`target/`、`local/` 已忽略。
+- 阶段：**阶段 1（脚手架与界面骨架）、阶段 2（数据层、加密与主密码）已完成**；阶段 3（主界面与条目交互）待开始。前端骨架 + i18n 通过 `npm run build`；Rust 侧 `cargo check`/`cargo build` 通过，`npm run tauri dev` 已端到端启动。核心逻辑（加密、SQLite 仓储、条目加解密编排、金库生命周期）在独立 crate `src-tauri/core`（包名 `mend-core`），测试可独立运行。
+- 后端结构：主 crate `mend` 只保留 IPC 命令层（`commands/`）与会话状态（`vault/`）；`mend-core` 不依赖 Tauri/WebView。新增业务逻辑优先落在 `mend-core`，命令层只做参数搬运与状态守卫。
+- 测试：`cargo test --manifest-path src-tauri\core\Cargo.toml`。**不要在 `src-tauri` 主 crate 上跑 `cargo test`**——测试二进制链接 WebView 依赖，本机会以 `STATUS_ENTRYPOINT_NOT_FOUND` 崩溃（应用本身正常）。
+- 仓库现状：前端 `src/`、`src-tauri/`（含 `core/`）、`scripts/dev-env.ps1`、`docs/`；`node_modules/`、`dist/`、`target/`、`local/` 已忽略。
 - 工具链：Node 22.23.2 / npm 10.9.8；Rust 1.99.1（GNU 目标）；MinGW-w64 gcc 16.2.0；git 2.55；gh CLI。安装位置、初始化与取舍见 `docs/09-env-setup.md`。
 - **每个新 PowerShell 会话先执行 `.\scripts\dev-env.ps1`**，把 cargo/MinGW/git/gh 加入会话 PATH（默认不在系统 PATH）。
 - 阶段 1 遗留：ESLint/Prettier 未配；占位图标；rusqlite 留待阶段 2 启用。

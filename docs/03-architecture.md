@@ -10,12 +10,16 @@
 └───────────────▲─────────────────────────────────────────┘
                 │ Tauri IPC（invoke，类型化请求/响应，serde）
 ┌───────────────┴─────────────────────────────────────────┐
-│ Rust 后端（src-tauri）                                     │
+│ Rust 后端（src-tauri，主 crate `mend`）                     │
 │  commands/  ：IPC 命令层（参数校验、权限/会话检查、错误转换）│
+│  vault/     ：解锁会话状态（DEK 仅驻留内存，锁定即清零）     │
+├─────────────────────────────────────────────────────────┤
+│ 核心逻辑（src-tauri/core，独立 crate `mend-core`）          │
 │  crypto/    ：密钥派生、AEAD 加解密、安全随机、内存清零      │
-│  vault/     ：条目/分类/预设值领域模型与业务规则             │
 │  db/        ：SQLite 连接、迁移、仓储（repository）          │
-│  backup/    ：备份导出/导入、文件拷贝校验                    │
+│  entries/   ：条目加解密编排（写前逐字段加密、读后解密）      │
+│  error/     ：统一错误类型 MendError                        │
+│  backup/    ：备份导出/导入、文件拷贝校验（待实现）          │
 │  sync/      ：WebDAV 接口预留（trait + 配置，阶段 5 不联网）│
 └───────────────▲─────────────────────────────────────────┘
                 │ rusqlite
@@ -28,6 +32,7 @@
 
 - **前端不直连数据库**，所有数据经 Rust Command；前端拿到的是解密后的展示模型（解锁态）或密文（锁定态不返回敏感字段）。
 - **加密与仓储在 Rust 侧**：前端无法绕过加密直接写库。
+- **核心逻辑与 GUI 解耦**：`mend-core` 不依赖 Tauri/WebView，单元测试在无 GUI 环境下可直接运行（主 crate 的测试二进制会链接 WebView 依赖，见 `09-env-setup.md` 已知遗留）。
 - **领域逻辑下沉**：分类删除时条目归属、预设值校验、生成器规则等放在 Rust `vault/`，前端只做交互。
 
 ## 2. 建议目录结构（阶段 1 初始化时落地）
@@ -60,15 +65,21 @@ Mend/
 │   ├── Cargo.toml
 │   ├── tauri.conf.json
 │   ├── capabilities/default.json
+│   ├── core/                 # 独立 crate mend-core：不依赖 GUI，可独立跑测试
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── crypto.rs     # Argon2id 派生、XChaCha20-Poly1305 包裹/字段加解密
+│   │       ├── db.rs         # 连接、schema 迁移、仓储函数
+│   │       ├── entries.rs    # 条目加解密编排 + 落盘无明文测试
+│   │       ├── vault.rs      # 建库 / 解锁（密钥编排）
+│   │       ├── session.rs    # VaultState 会话状态（锁定即丢弃 DEK）
+│   │       └── error.rs      # MendError
 │   └── src/
 │       ├── main.rs
-│       ├── error.rs
-│       ├── commands/         # vault.rs、category.rs、entry.rs、preset.rs、generator.rs、backup.rs、sync.rs
-│       ├── crypto/
-│       ├── vault/
-│       ├── db/
-│       ├── backup/
-│       └── sync/
+│       ├── lib.rs
+│       ├── commands/         # vault.rs、category.rs、entry.rs（其余待实现）
+│       ├── backup/           # 待实现
+│       └── sync/             # 待实现
 └── .gitignore
 ```
 
@@ -78,15 +89,19 @@ Mend/
 
 | 命令 | 入参 | 出参 | 说明 |
 | --- | --- | --- | --- |
-| `vault_setup` | `{ master_password }` | `{ ok }` | 首次启动创建库、派生并包裹 DEK |
-| `vault_unlock` | `{ master_password }` | `{ unlocked: bool }` | 校验密钥、装载会话 DEK 到内存 |
-| `vault_lock` | — | `{ ok }` | 销毁会话密钥、清空敏感内存 |
-| `vault_status` | — | `{ initialized, unlocked }` | 启动时判断走解锁页还是主界面 |
-| `category_list` | — | `Vec<Category>` | 分类列表（含条目数，可由后端聚合） |
-| `category_create/update/delete` | 结构体 | `Category` | 删除时条目移入"未分类" |
-| `entry_list` | `{ category_id?, keyword? }` | `Vec<EntryView>` | 解锁态返回解密后的展示模型 |
-| `entry_get` | `{ id }` | `EntryView` | 单条详情（弹窗编辑时取） |
-| `entry_create/update/delete` | `EntryInput` | `EntryView` | 敏感字段后端加密后落库 |
+| `vault_setup` | `{ masterPassword }` | `{ unlocked: bool }` | 首次启动建库、派生 KEK 并包裹 DEK（已实现） |
+| `vault_unlock` | `{ masterPassword }` | `{ unlocked: bool }` | 校验密钥、装载会话 DEK 到内存（已实现） |
+| `vault_lock` | — | — | 销毁会话密钥、清空敏感内存（已实现） |
+| `vault_status` | — | `{ initialized, unlocked }` | 启动时判断走解锁页还是主界面（已实现） |
+| `category_list` | — | `Vec<Category>` | 分类列表（含 entryCount 聚合，已实现） |
+| `category_create` | `{ input: { name } }` | `Category` | 已实现 |
+| `category_rename` | `{ id, input: { name } }` | — | 已实现 |
+| `category_delete` | `{ id }` | — | 删除时条目移入"未分类"（已实现） |
+| `entry_list` | `{ categoryId?, keyword? }` | `Vec<EntryView>` | 解锁态返回解密后的展示模型（已实现） |
+| `entry_get` | `{ id }` | `EntryView` | 单条详情（已实现） |
+| `entry_create` | `{ input: EntryInput }` | `EntryView` | 敏感字段后端加密后落库（已实现） |
+| `entry_update` | `{ id, input: EntryInput }` | `EntryView` | 已实现 |
+| `entry_delete` | `{ id }` | — | 已实现 |
 | `preset_list` | `{ field_type }` | `Vec<Preset>` | 账号/邮箱/手机号预设值 |
 | `preset_create/update/delete` | 结构体 | `Preset` |
 | `generator_generate` | `GeneratorOptions` | `{ password }` | 纯本地 CSPRNG，不入库 |

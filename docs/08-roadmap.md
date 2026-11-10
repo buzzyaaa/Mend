@@ -33,15 +33,18 @@
 
 **验收**：`npm run tauri dev` 启动窗口；左右布局与顶栏可见；中/英切换生效；typecheck 通过；提交 feat 提交并推送到 `origin`。（工具链见 `09-env-setup.md`。）
 
-## 阶段 2 — 数据层、加密与主密码（当前）
+## 阶段 2 — 数据层、加密与主密码（已完成）
 
 **目标**：库能创建/解锁/锁定，条目与分类加密落库。
 
-- Rust `db/`：SQLite 连接、迁移 v1（表结构见 `04`）、仓储层。
-- Rust `crypto/`：Argon2id 派生、DEK 生成与包裹、XChaCha20-Poly1305 加解密、OsRng、`zeroize`。
-- 命令：`vault_setup / unlock / lock / status`；分类与条目 CRUD 命令。
-- 前端解锁页：首次设置主密码（强度提示、二次确认）、解锁、锁定回退；未解锁不请求条目数据。
-- 写路径：前端提交明文 → Rust 加密 → 事务落库；读路径：解锁后解密返回展示模型。
+> 进度：后端与解锁页已完成，`mend-core` 19 项单元测试通过（含"落盘无明文""错误主密码失败""锁定后 DEK 不可用""主密码不落盘"）；GUI 端到端手工验收结论见 `local/DEVLOG.md`。
+
+- [x] Rust `db/`：SQLite 连接、迁移 v1（表结构见 `04`）、仓储层（代码在 `src-tauri/core/src/db.rs`）。
+- [x] Rust `crypto/`：Argon2id 派生、DEK 生成与包裹、XChaCha20-Poly1305 加解密、OsRng、`zeroize`。
+- [x] 核心逻辑抽成独立 crate `mend-core`（不依赖 Tauri/WebView），`cargo test` 可独立运行；主 crate 只保留命令层与会话状态。
+- [x] 命令：`vault_setup / unlock / lock / status`；分类与条目 CRUD 命令。
+- [x] 前端解锁页：首次设置主密码（强度提示、二次确认）、解锁、锁定回退；路由守卫保证未解锁不进入主界面。
+- [x] 写路径：前端提交明文 → Rust 加密 → 事务落库；读路径：解锁后解密返回展示模型。
 
 **验收**：首次启动设主密码；重开需解锁；直接打开 SQLite 文件检查不到账号/密码/邮箱/手机/备注明文；错误主密码解锁失败；锁定后会话密钥销毁。
 

@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useVaultStore } from '@/stores/vault'
+import { isTauri } from '@/lib/ipc'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -22,5 +24,24 @@ const router = createRouter({
   ],
 })
 
-// 阶段 2 接入真实解锁状态后，在此做路由守卫：未解锁重定向到 /unlock。
+// 路由守卫：未解锁只能停在解锁页；已解锁不再停留在解锁页。
+// 浏览器预览（非 Tauri）下保持骨架可浏览，不做跳转。
+router.beforeEach(async (to) => {
+  if (!isTauri()) return true
+
+  const vault = useVaultStore()
+  try {
+    await vault.refresh()
+  } catch {
+    // 状态读取失败时不阻断路由，交由页面自行提示
+    return true
+  }
+
+  if (!vault.status.unlocked) {
+    return to.name === 'unlock' ? true : { name: 'unlock' }
+  }
+  if (to.name === 'unlock') return { name: 'main' }
+  return true
+})
+
 export default router

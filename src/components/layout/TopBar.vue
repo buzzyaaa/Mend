@@ -2,6 +2,7 @@
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { usePreferencesStore } from '@/stores/preferences'
+import { useVaultStore } from '@/stores/vault'
 import { setI18nLocale } from '@/i18n'
 import type { Locale } from '@/types'
 import { cn } from '@/lib/utils'
@@ -9,6 +10,7 @@ import { cn } from '@/lib/utils'
 const { t } = useI18n()
 const router = useRouter()
 const preferences = usePreferencesStore()
+const vault = useVaultStore()
 
 const locales: { value: Locale; label: string }[] = [
   { value: 'zh-CN', label: '中文' },
@@ -20,15 +22,24 @@ function onLocaleChange(event: Event) {
   preferences.setLocale(next)
   setI18nLocale(next)
 }
+
+/** 锁定：Rust 侧销毁会话密钥，前端回到解锁页。 */
+async function onLock() {
+  try {
+    await vault.lock()
+  } finally {
+    await router.replace({ name: 'unlock' })
+  }
+}
 </script>
 
 <template>
-  <header
-    class="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-4"
-  >
+  <header class="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-4">
     <!-- 左侧：Logo + 软件名，右侧紧邻语言切换（需求 R12） -->
     <div class="flex items-center gap-2">
-      <span class="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+      <span
+        class="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground"
+      >
         <!-- 占位图标，阶段 6 替换为正式 Logo -->
         <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="4" y="10" width="16" height="10" rx="2" />
@@ -61,7 +72,7 @@ function onLocaleChange(event: Event) {
       <button
         type="button"
         class="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        :class="cn('')"
+        @click="onLock"
       >
         {{ t('topbar.lock') }}
       </button>

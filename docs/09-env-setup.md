@@ -42,11 +42,13 @@ cargo build        # Rust debug 构建
 - **Rust 自带的 self-contained gcc 只能作链接器、不能编译 C**（见工具链内的 `GCC-WARNING.txt`）；编译 SQLite 等 C 源码必须依赖独立安装的 MinGW-w64（gcc + binutils + 头文件 + CRT + winpthreads）。
 - **Cargo 镜像**：`%USERPROFILE%\.cargo\config.toml` 配 rsproxy sparse 源加速 crates.io，并设 `git-fetch-with-cli = true`。
 - **MSYS2 镜像**：`msys64\etc\pacman.d\mirrorlist.mingw` / `mirrorlist.msys` 首选清华 tuna，官方源兜底。
-- **rusqlite 尚未启用**：阶段 1 的 `Cargo.toml` 中 `rusqlite`（bundled，会编译 SQLite C 源码）处于注释状态。阶段 2 启用时确保 MinGW gcc 在 PATH，cc-rs 会调用 `gcc` 编译 C。
+- **rusqlite 已启用**（阶段 2）：`src-tauri/core/Cargo.toml` 中 `rusqlite` 用 `bundled` 特性，由 MinGW gcc 编译 SQLite C 源码，首次编译约 30–40s。
+- **测试命令**：核心逻辑在独立 crate `mend-core`，跑 `cargo test --manifest-path src-tauri\core\Cargo.toml`。主 crate `mend` 的 `cargo test` 在本机会因测试二进制链接 WebView 依赖而以 `STATUS_ENTRYPOINT_NOT_FOUND` 崩溃（应用本身运行正常），这是已知环境问题，不要在主 crate 上跑测试。
 - **图标**：`src-tauri/icons/` 由 `npx tauri icon source.png` 生成；当前为占位图标，正式打包前替换设计稿。
 
 ## 4. 已知遗留
 
 - 未配置 ESLint / Prettier（路线图阶段 1 待补，不阻塞构建）。
+- 主 crate 的 `cargo test` 不可用（见 §3），单元测试统一放在 `mend-core`。
 - Rust 工具链与 MSYS2 未做开机持久 PATH，依赖 `dev-env.ps1` 会话级初始化。
 - debug 构建产物 `mend.exe` 约 216MB（未优化 + 调试信息），属正常；release 构建会显著缩小。
