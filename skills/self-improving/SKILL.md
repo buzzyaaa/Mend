@@ -1,50 +1,54 @@
 ---
 name: self-improving
-description: "把失败、纠正与新发现沉淀成可复用的本地学习记录，避免同一坑重复踩。当以下情况出现时使用：(1) 命令、构建、打包、工具调用意外失败；(2) 用户纠正了你的假设或项目约定；(3) 发现了更省事的重复流程；(4) 外部 API/工具不可用或行为异常；(5) 用户要求当前不具备的能力；(6) 开工前需要回顾某一领域以前踩过的坑。记录含结构化的学习、错误、能力请求三类条目。"
+description: "Captures learnings, errors, and corrections to enable continuous improvement. Use when: (1) A command or operation fails unexpectedly, (2) User corrects Claude ('No, that's wrong...', 'Actually...'), (3) User requests a capability that doesn't exist, (4) An external API or tool fails, (5) Claude realizes its knowledge is outdated or incorrect, (6) A better approach is discovered for a recurring task. Also review learnings before major tasks."
+permissions:
+  - file_write: "Appends learning, error, and feature-request notes inside the project-private local/learnings directory."
 ---
 
-# Self-Improving
+# Self-Improvement Skill
 
-把非显而易见的学习、失败与能力请求记进一个小的本地知识库，让同类错误不再重复。
+Capture non-obvious lessons, failures, and feature requests in a small local knowledge base so the same mistakes are less likely to repeat.
 
-## 何时记录
+## When to Use
 
-- 命令、工具、集成以值得记住的方式失败
-- 用户纠正了假设，或教会了项目特定约定
-- 发现更好的可复用流程
-- 用户要求了尚不存在的能力，需要登记
-- 在一个熟悉的领域开工前，需要回顾旧记录
+- A command, tool, or integration fails in a way worth remembering
+- The user corrects an assumption or teaches a project-specific convention
+- You discover a better repeatable workflow
+- The user asks for a missing capability that should be tracked
+- You are starting work in an area with known prior learnings
 
-## 存放位置
+## Storage
 
-写入本地私有目录（不同项目可自定义，本项目约定为 `local/learnings/`）：
+Keep entries in the project-private `local/learnings/` directory (ignored by git, never pushed):
 
 - `local/learnings/LEARNINGS.md`
 - `local/learnings/ERRORS.md`
 - `local/learnings/FEATURE_REQUESTS.md`
 
-首次使用时创建目录。这些文件属于过程材料，**不得**进入公开仓库。
+Create the directory on first use if it does not exist.
 
-## 条目格式
+## Record Types
 
-### Learning（纠正、约定、更好的做法）
+### Learning
+
+Use for corrections, conventions, and better practices.
 
 ```markdown
 ## [LRN-YYYYMMDD-XXX] category
 
-**Logged**: ISO-8601 时间
+**Logged**: ISO-8601 timestamp
 **Priority**: low | medium | high | critical
 **Status**: pending
 **Area**: frontend | backend | infra | tests | docs | config
 
 ### Summary
-一句话结论
+One-line learning
 
 ### Details
-发生了什么，现在确认正确的做法是什么
+What happened and what is now known to be correct
 
 ### Suggested Action
-具体后续动作或应当固化的规则
+Specific follow-up or rule
 
 ### Metadata
 - Source: conversation | error | user_feedback
@@ -53,70 +57,74 @@ description: "把失败、纠正与新发现沉淀成可复用的本地学习记
 - See Also: LRN-20250110-001
 ```
 
-### Error（可复现的失败或时好时坏的流程）
+### Error
+
+Use for reproducible failures or flaky workflows.
 
 ```markdown
 ## [ERR-YYYYMMDD-XXX] tool_or_workflow
 
-**Logged**: ISO-8601 时间
+**Logged**: ISO-8601 timestamp
 **Priority**: high
 **Status**: pending
 **Area**: frontend | backend | infra | tests | docs | config
 
 ### Summary
-失败的一句话描述
+Short failure description
 
 ### Error
-原始报错文本或症状
+Exact error text or symptoms
 
 ### Context
-- 尝试了什么操作
-- 输入或环境细节（不含机密）
+- Operation attempted
+- Inputs or environment details
 
 ### Suggested Fix
-最可能的下一步
+Likely next step
 ```
 
-### Feature Request（缺失的能力）
+### Feature Request
+
+Use for missing capabilities the user wants tracked.
 
 ```markdown
 ## [FEAT-YYYYMMDD-XXX] capability_name
 
-**Logged**: ISO-8601 时间
+**Logged**: ISO-8601 timestamp
 **Priority**: medium
 **Status**: pending
 **Area**: frontend | backend | infra | tests | docs | config
 
 ### Requested Capability
-用户想要什么
+What the user wanted
 
 ### User Context
-为什么重要
+Why it matters
 
 ### Suggested Implementation
-可能的扩展点与实现方向
+Likely extension point or implementation direction
 ```
 
-## 流程
+## Workflow
 
-1. 上下文一清楚就立刻记，别攒到最后。
-2. 重复出现的模式用 `See Also` 互链。
-3. 解决、否决或已固化为规则时，更新 `Status`。
-4. 在熟悉的问题领域做大事之前，先翻一遍已有记录。
+1. Log the learning as soon as the context is clear.
+2. Link related entries with `See Also` when patterns repeat.
+3. Update status when the issue is resolved, rejected, or turned into a reusable rule.
+4. Review `local/learnings/` before major work in a familiar problem area.
 
-## 升级规则
+## Promotion Rules
 
-学习成果若要变成长久规则：
+If a learning becomes broadly reusable:
 
-- 先蒸馏成一两句可执行的话；
-- 只有用户明确要求，才写进仓库里的共享规则文档；
-- 写回后在条目里注明规则现在落在哪里。
+- distill it into a concise rule
+- move it into the repo's shared guidance only if the user explicitly wants that promotion
+- update the learning entry to note where the rule now lives
 
-验证过、可移植、不再只属于某个项目的模式，适合抽成独立 Skill。
+Recurring patterns are good candidates for extraction into a dedicated skill when the solution is verified, portable, and no longer project-specific.
 
-## 安全边界
+## Safety Boundaries
 
-- 未经用户明确要求，不改动用户拥有的规则/规范文件。
-- 绝不记录密码、访问令牌、私钥、个人隐私数据。
-- 不是每个失败都值得记，优先记耐久教训。
-- 没有实际验证修复前，不要把条目标成已解决。
+- Do not modify user-owned policy or guidance files unless the user explicitly asked for that promotion.
+- Do not log secrets, access tokens, private keys, or sensitive personal data in `.learnings/`.
+- Do not treat every failure as worth logging; prefer durable lessons over noise.
+- Do not mark an entry resolved unless the fix was actually verified.

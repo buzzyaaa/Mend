@@ -93,7 +93,7 @@
 - [x] 备注全文检索：调用 `entry_list` 拉全量后在内存里按标题/账号/邮箱/手机/网址/备注匹配。
 - [ ] 标签（`tags` 字段/多标签）未做，列入后续。
 - [x] 空状态与错误提示：各列表空状态、操作失败走 Toast；回收站空态单独文案。
-- [ ] Tauri 打包：`tauri.conf.json` 已配 NSIS（`installMode: currentUser`）+ 图标 + 版本 0.2.0，`npm run tauri build` 可产出 `target/release/mend.exe`；NSIS 安装包因下载 `nsis_tauri_utils.dll` 网络超时未生成，需能访问 GitHub release 的环境再打包。
+- [x] Tauri 打包：`tauri.conf.json` 已配 NSIS（`installMode: currentUser`）+ 图标 + 版本 0.2.0；`npm run tauri build` 在可访问 GitHub release 的环境下产出 `target/release/bundle/nsis/Mend_0.2.0_x64-setup.exe`（约 1.8 MB），网络受限时退化为 release `mend.exe`（便携分发）。
 - [x] README 使用说明（首次使用、回收站、备份/恢复、手动迁移、安全习惯）。
 
 ## 后续路线（非 MVP，按需排期）

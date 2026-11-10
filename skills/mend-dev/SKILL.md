@@ -95,7 +95,7 @@ npm run tauri build                                     # 产物 src-tauri/targe
 
 路径：`../impeccable/SKILL.md`。触发：新增/重做页面与组件、空态、设置页、表单、主题与配色、间距与层级、动效、UX 文案、可访问性、界面性能、响应式、"看起来太平/太吵"的调整。
 
-Mend 属于 **product register**（用户在执行任务，设计服务于任务），先读 `../impeccable/reference/product.md`；`../impeccable/reference/{brand,craft}.md` 供建站式页面或端到端 craft 流程参考。上游 25 个文件在本仓库只随带了上面几份，**缺的 `reference/<command>.md` 不要凭记忆编造规则**，改用 SKILL.md 里的共享设计法则 + `references/frontend-quality.md` 的 Mend 专用口径兜底。
+Mend 属于 **product register**（用户在执行任务，设计服务于任务），先读 `../impeccable/reference/product.md`；`../impeccable/reference/{brand,craft}.md` 供建站式页面或端到端 craft 流程参考。上游 25 个文件（`command` 对应 reference、`reference/*.md`、`scripts/*.mjs`）已随仓库完整安装，命令表里点名的 reference 都能直接读。
 
 执行要点（与 Mend 现状对齐）：
 
@@ -109,7 +109,7 @@ Mend 属于 **product register**（用户在执行任务，设计服务于任务
 
 路径：`../awesome-design-md/SKILL.md`。触发：用户点名某个产品的视觉风格（如"像 Linear 那种"）、要给项目落一份设计基线条目 `DESIGN.md`、或需要对标某品牌 token/排版。
 
-语料库（上游 50+ 份 `DESIGN.md`）**未随本仓库分发**（体积与授权原因）。可用路径：用 `web_fetch` 取上游对应文件；或按 `references/frontend-quality.md` 的口径自己写 Mend 的 `DESIGN.md`（色板、字号阶梯、间距、组件规格、动效），再交给 impeccable 做评审。引用上游内容只作设计参考，不复制其 logo、字体授权与商标表述。
+语料库（上游 84 份 `design-md/<slug>/DESIGN.md`）已随仓库安装，索引见 `../awesome-design-md/CATALOG.txt`（slug、名称、一句话描述），按需只读选中的一份，不要整库加载。引用上游内容只作设计参考，不复制其 logo、字体授权与商标表述。
 
 组合顺序：选语言（awesome-design-md）→ 落基线（Mend `DESIGN.md`）→ 评审与打磨（impeccable）→ 记录教训（self-improving）。
 
