@@ -38,7 +38,7 @@ export const categoryApi = {
 }
 
 export const entryApi = {
-  list: (categoryId?: string | null, keyword?: string) =>
+  list: (categoryId?: string | null, keyword?: string | null) =>
     invoke<EntryView[]>('entry_list', { categoryId: categoryId ?? null, keyword: keyword ?? null }),
   get: (id: string) => invoke<EntryView>('entry_get', { id }),
   create: (input: unknown) => invoke<EntryView>('entry_create', { input }),

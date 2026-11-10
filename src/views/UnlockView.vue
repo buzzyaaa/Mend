@@ -46,7 +46,7 @@ async function submit() {
     return
   }
   if (setupMode.value) {
-    if (password.value.length < 8) {
+    if (password.value.length < 4) {
       error.value = t('unlock.errors.tooShort')
       return
     }

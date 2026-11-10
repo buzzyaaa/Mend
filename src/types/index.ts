@@ -24,6 +24,19 @@ export interface EntryView {
   updatedAt: number
 }
 
+/** 提交给 entry_create / entry_update 的明文入参（IPC 传输，不落盘）。 */
+export interface EntryInput {
+  categoryId: string | null
+  title: string
+  url: string | null
+  username: string
+  password: string
+  email: string
+  phone: string
+  notes: string
+  favorite: boolean
+}
+
 export type PresetFieldType = 'username' | 'email' | 'phone'
 
 export interface Preset {

@@ -54,11 +54,11 @@ Mend/
 │   ├── stores/               # Pinia：vault、ui、preferences
 │   ├── views/                # UnlockView、MainView、SettingsView
 │   ├── components/
-│   │   ├── ui/               # shadcn-vue 拷贝进来的基础组件
-│   │   ├── layout/          # Sidebar、TopBar、EntryList、EntryCard
-│   │   └── notes/            # Markdown 编辑/预览/弹窗
-│   ├── composables/          # useClipboard、useI18n、useGenerator…
-│   ├── lib/                  # IPC 封装、类型、工具
+│   │   ├── ui/               # 基础通用组件（ToastHost 等，纯 Tailwind）
+│   │   ├── layout/           # Sidebar、TopBar、EntryList
+│   │   └── entry/            # EntryDialog：条目表单 + Markdown 备注编辑/预览
+│   ├── composables/          # useClipboard、useToast
+│   ├── lib/                  # ipc 封装、markdown 安全渲染、cn 工具
 │   ├── locales/              # zh-CN.json、en.json
 │   └── types/
 ├── src-tauri/

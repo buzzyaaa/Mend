@@ -14,6 +14,9 @@ const META_SALT: &str = "salt";
 const META_KDF: &str = "kdf_params";
 const META_DEK: &str = "dek_wrapped";
 
+/// 主密码最短长度：自用工具，只挡住"1 位"这类误设，强度提示交给前端。
+pub const MIN_PASSWORD_LEN: usize = 4;
+
 /// 解锁后可用的密钥材料：DEK 与其派生参数。DEK 用 Zeroizing，离开作用域即清零。
 pub struct VaultKeys {
     pub dek: Zeroizing<[u8; DEK_LEN]>,
@@ -31,6 +34,11 @@ impl VaultKeys {
 pub fn setup(conn: &Connection, master_password: &str) -> MendResult<VaultKeys> {
     if master_password.trim().is_empty() {
         return Err(MendError::Vault("主密码不能为空".into()));
+    }
+    if master_password.chars().count() < MIN_PASSWORD_LEN {
+        return Err(MendError::Vault(format!(
+            "主密码至少 {MIN_PASSWORD_LEN} 位"
+        )));
     }
     if db::is_initialized(conn)? {
         return Err(MendError::Vault("库已初始化".into()));
@@ -133,6 +141,16 @@ mod tests {
         let path = temp_db("empty");
         let conn = db::open_and_migrate(&path).expect("建库");
         assert!(setup(&conn, "   ").is_err());
+
+        let _ = fs::remove_dir_all(path.parent().expect("父目录"));
+    }
+
+    #[test]
+    fn too_short_password_is_rejected() {
+        let path = temp_db("short");
+        let conn = db::open_and_migrate(&path).expect("建库");
+        assert!(setup(&conn, "123").is_err(), "3 位应被拒绝");
+        assert!(setup(&conn, "1234").is_ok(), "4 位应被接受");
 
         let _ = fs::remove_dir_all(path.parent().expect("父目录"));
     }
