@@ -104,13 +104,16 @@ async function chooseImportPath(): Promise<string | null> {
 
 async function exportBackup() {
   backupError.value = ''
-  // 先校验口令，避免白弹一次系统文件对话框
   if (!exportPassword.value) {
     backupError.value = t('backup.passwordPlaceholder')
     return
   }
-  const path = await chooseExportPath()
-  if (!path) return
+  let path = exportPath.value
+  if (!path) {
+    const picked = await chooseExportPath()
+    if (!picked) return
+    path = picked
+  }
   backupBusy.value = true
   try {
     const result = await backupApi.export(path, exportPassword.value)
@@ -135,8 +138,12 @@ function importBackup() {
     positiveText: t('backup.importAction'),
     negativeText: t('common.cancel'),
     onPositiveClick: async () => {
-      const path = await chooseImportPath()
-      if (!path) return
+      let path = importPath.value
+      if (!path) {
+        const picked = await chooseImportPath()
+        if (!picked) return
+        path = picked
+      }
       backupBusy.value = true
       try {
         const result = await backupApi.import(path, importPassword.value)
@@ -308,13 +315,13 @@ async function changePassword() {
           <div class="rounded-lg border border-border p-3">
             <NText strong class="mb-2 block text-sm">{{ t('backup.export') }}</NText>
             <div class="grid gap-2">
-              <NInput
-                :value="exportPath"
-                readonly
-                size="small"
-                class="font-mono"
-                :placeholder="t('backup.exportPathPlaceholder')"
-              />
+              <div class="flex items-center gap-2">
+                <NButton size="small" :disabled="backupBusy" @click="chooseExportPath">
+                  <template #icon><NIcon :component="FolderOpen" :size="14" /></template>
+                  {{ t('backup.chooseExport') }}
+                </NButton>
+                <NText :depth="3" class="min-w-0 flex-1 truncate font-mono text-xs">{{ exportPath || t('backup.noLocation') }}</NText>
+              </div>
               <NInput
                 v-model:value="exportPassword"
                 type="password"
@@ -333,13 +340,13 @@ async function changePassword() {
           <div class="rounded-lg border border-border p-3">
             <NText strong class="mb-2 block text-sm">{{ t('backup.import') }}</NText>
             <div class="grid gap-2">
-              <NInput
-                :value="importPath"
-                readonly
-                size="small"
-                class="font-mono"
-                :placeholder="t('backup.exportPathPlaceholder')"
-              />
+              <div class="flex items-center gap-2">
+                <NButton size="small" :disabled="backupBusy" @click="chooseImportPath">
+                  <template #icon><NIcon :component="FolderOpen" :size="14" /></template>
+                  {{ t('backup.chooseImport') }}
+                </NButton>
+                <NText :depth="3" class="min-w-0 flex-1 truncate font-mono text-xs">{{ importPath || t('backup.noLocation') }}</NText>
+              </div>
               <NInput
                 v-model:value="importPassword"
                 type="password"
