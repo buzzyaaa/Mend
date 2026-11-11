@@ -1,63 +1,57 @@
-# 02 · 技术栈定型与 UI 框架评估
+# 02 · 技术栈定型与 UI 框架决策
 
-## 1. 已确定的核心技术栈
+> 本文只记录**当前生效**的选型与约定。早期 shadcn-vue / Element Plus 的对比评估已作废（2026-11-11 起统一迁移到 naive-ui），过程性材料不写入公开文档。
+
+## 1. 当前核心技术栈
 
 | 层 | 选型 | 说明 |
 | --- | --- | --- |
-| 桌面壳 | **Tauri 2.x** | 轻量、Rust 后端、WebView 渲染；跨 Windows/macOS/Linux |
-| 前端框架 | **Vue 3**（`<script setup>` + Composition API） | 与项目既定技术栈一致 |
-| 语言 | **TypeScript**（严格模式） | 前后端接口类型对齐 |
-| 构建 | **Vite 5/6** | Tauri 官方前端构建方案 |
-| 样式 | **TailwindCSS** | 原子化样式，主题/暗色模式基础 |
-| 数据库 | **SQLite**（Rust 侧 `rusqlite`） | 嵌入式单文件，便于整库拷贝备份 |
-| 状态管理 | **Pinia** | Vue 官方推荐，与 Composition API / `<script setup>` 天然契合 |
-| 路由 | **Vue Router** | 主界面 / 解锁页 / 设置页 |
-| 国际化 | **vue-i18n** | 见 `07-i18n.md` |
-| Markdown | **markdown-it**（渲染）+ **highlight.js**（可选代码高亮）；编辑器用 textarea + 工具栏，或轻量 Markdown 编辑器组件 | 备注编辑与预览 |
-| 加密 | **Rust 侧**：Argon2id 派生密钥 + XChaCha20-Poly1305 认证加密 | 见 `04-data-model-encryption.md` |
+| 桌面壳 | Tauri 2.x | Rust 后端 + WebView 渲染，离线优先 |
+| 前端框架 | Vue 3（`<script setup>` + Composition API） | 严格 TypeScript |
+| 构建 | Vite 6 | `npm run build` = `vue-tsc --noEmit` + `vite build` |
+| UI 组件库 | **naive-ui 2.x** | 所有交互控件（按钮、输入、选择、表格、标签、弹窗、确认、消息、菜单、布局）统一使用 |
+| 布局样式 | TailwindCSS 3 | **只用于布局与尺寸**（flex/grid/gap/padding/截断等），不用于造控件、不用于写死颜色 |
+| 视觉令牌 | `src/assets/main.css` 的 CSS 变量 | `:root` / `.dark` 两套 HSL；Tailwind 与 naive-ui 共用同一套变量，是唯一色彩来源 |
+| 主题装配 | `src/lib/theme.ts` + `src/App.vue` | `NConfigProvider` 按 `preferences.isDark` 切 `darkTheme`，`themeOverrides` 把 naive-ui 变量指向 CSS 变量 |
+| 图标 | `lucide-vue-next` | 唯一图标来源，按需引入单个图标，不使用 emoji 当图标 |
+| 状态管理 | Pinia | vault / entry / preset / preferences |
+| 路由 | Vue Router | `/unlock` 独立；`/main` `/presets` `/settings` 共用 `AppShell` |
+| 国际化 | vue-i18n | `src/locales/{zh-CN,en}.json`；naive-ui 内置文案由 `NConfigProvider` 的 `locale` / `dateLocale` 同步 |
+| Markdown | 自研白名单渲染器 `src/lib/markdown.ts` | 先转义再生成固定标签，只放行 http/https 链接；无第三方 Markdown 依赖 |
+| 数据库 | SQLite（Rust 侧 `rusqlite`） | 字段级加密，见 `04` |
+| 加密 | Rust 侧 Argon2id + XChaCha20-Poly1305 | 见 `04` |
 
-> 说明：SQLite 本身不做整库透明加密（MVP 采用应用层字段加密，见 `04`）；如后续需要整库加密，可再评估 SQLCipher。
+## 2. UI 统一约定（不可违背）
 
-## 2. UI 框架评估：Shadcn/UI vs Element Plus
+1. **单一组件词汇**：按钮 `NButton`、输入 `NInput` / `NInputNumber`、下拉 `NSelect`、表格 `NDataTable`、标签 `NTag`、弹窗 `NModal`、确认 `useDialog`、反馈 `useToast`（`NMessageProvider`）、菜单 `NMenu`、布局 `NLayout` / `NLayoutSider` / `NCard`。不得再写原生 `<button>` / `<input>` / `<select>` / `<textarea>` / `window.confirm` / `window.alert` 充当界面控件。
+2. **单一色彩来源**：颜色、圆角、字号、语义色（success/warning/error/info）一律来自 CSS 变量；组件里不写 `#hex`、不写 `text-red-500` 之类的字面色。危险态用 `type="error"` / `NAlert`，不用自定义色。
+3. **主题联动**：`.dark` 与 naive-ui `darkTheme` 由同一个 `preferences.isDark` 驱动，深浅两套都要过对比度；新增组件不得只做浅色。
+4. **浮层挂载点**：需要 teleport 的浮层统一挂到 `OVERLAY_TARGET`（`#mend-overlays`），确保继承 `NConfigProvider` 的主题变量。`NMessageProvider` / `NDialogProvider` 已在 `App.vue` 装配，`NModal` 必须显式传 `:to`。
+5. **状态齐全**：交互组件覆盖 default / hover / focus / active / disabled / loading / error；列表必须有空态，危险操作必须二次确认并写清后果。
+6. **i18n 先行**：所有界面文案（含 aria-label、tooltip、确认弹窗文案）走词条，中英两份同步，组件里不硬编码中英文。
+7. **不引入第二套组件库 / 图标库**：radix-vue、shadcn-vue 及其配套工具（`class-variance-authority` / `clsx` / `tailwind-merge` / `cn()`）已全部移除，不再恢复。
 
-> 注意：官方 shadcn/ui 是 React 版本；Vue 生态对应的实现是 **shadcn-vue**（基于 Radix Vue 原语 + TailwindCSS，组件源码拷贝进项目、可直接改）。本项目栈是 Vue，因此对比对象为 **shadcn-vue** 与 **Element Plus**。
+## 3. 组件落点
 
-### 2.1 对比维度
-
-| 维度 | shadcn-vue（Radix Vue + Tailwind） | Element Plus |
-| --- | --- | --- |
-| 视觉美观度 | 现代、克制、留白精致，贴近 Linear / Vercel 类桌面工具审美；样式完全由 Tailwind 主题令牌控制，易做出统一高级感 | 默认偏中后台企业风，组件密度高；要达到"精致美观"需要覆盖大量默认样式与主题变量 |
-| 与 Tailwind 契合度 | 原生契合，组件类名即 Tailwind，主题色/暗色模式直接走 CSS 变量 | 自带一套样式体系，与 Tailwind 并存时容易出现样式优先级冲突，需要额外归一化 |
-| 定制自由度 | 组件源码在项目内，可任意改结构与样式；不受组件库升级绑架 | 通过主题变量 + 覆盖样式定制，深层结构改动受限 |
-| 组件交付方式 | 拷贝组件到 `src/components/ui/`，按需引入，不打包一整个黑盒库 | 全量/按需引入，封装度高 |
-| 开发速度 | 基础组件需自行拼装（对话框、下拉、表单、Tooltip 等），初期略慢 | 组件开箱即用（Dialog/Select/Form/Message/MessageBox 齐全），起步快 |
-| 生态与成熟度 | shadcn-vue 生态年轻于 React 版，个别复杂组件可能缺；Radix Vue 可访问性较好 | Vue 3 生态最成熟的组件库之一，文档与案例丰富，踩坑资料多 |
-| 包体积 | 按需拷贝，体积可控 | 组件较多，全量体积偏大（可按需引入缓解） |
-| 暗色模式 | Tailwind CSS 变量方案，落地直接 | 自带暗色变量，但与自有主题叠加需调试 |
-| 可访问性 | Radix Vue 提供键盘/焦点/ARIA 原语 | 组件自带一定 a11y 支持 |
-
-### 2.2 结论：**采用 shadcn-vue**
-
-理由：
-
-1. **美观是硬需求**：shadcn-vue + Tailwind 的视觉上限和统一度更高，符合个人密码工具想要的精致桌面感；Element Plus 默认中后台观感需要较多返工。
-2. **技术栈天然对齐**：本项目已确定 TailwindCSS，shadcn-vue 是 Tailwind 原生方案，不存在两套样式体系打架。
-3. **可定制与长期维护**：组件源码在仓内，后续改字段卡片、备注弹窗、预设下拉、生成器面板都不受库版本限制。
-
-### 2.3 风险与缓解
-
-| 风险 | 缓解 |
+| 位置 | 使用的 naive-ui 能力 |
 | --- | --- |
-| shadcn-vue 个别组件缺失或 API 不稳 | 优先选用 Dialog、Select、DropdownMenu、Tooltip、Input、Button、Tabs、Switch、Badge、ScrollArea 等成熟原语；缺的组件用 Radix Vue 自行封装并记录在本地 `local/DEVLOG.md` |
-| 初期拼装慢于 Element Plus | MVP 只引入实际用到的组件；表单/弹窗模式在阶段 1 沉淀成项目内通用封装，后续复用 |
-| 团队若更熟悉 Element Plus | 保留回退可能：样式层用 Tailwind 令牌隔离，业务组件不直接依赖某库的深层 API；若阶段 1 评估 shadcn-vue 阻塞严重，可切换 Element Plus，但需先更新本文档决策 |
+| `src/App.vue` | `NConfigProvider` + `NGlobalStyle` + `NMessageProvider` + `NDialogProvider` |
+| `src/components/layout/AppShell.vue` / `NavRail.vue` | `NLayout` / `NLayoutSider` / `NMenu` / `NTooltip` / `NButton` |
+| `src/components/layout/Sidebar.vue` | `NButton` / `NIcon` / `NModal` / `NInput` / `useDialog` |
+| `src/components/layout/EntryList.vue` | `NInput` / `NSelect` / `NCard` / `NEmpty` / `NTag` / `NTooltip` / `useDialog` |
+| `src/components/entry/EntryDialog.vue` | `NModal` + `NCard` / `NSelect` / `NInputNumber` / `NCheckbox` / `NTabs` |
+| `src/views/PresetsView.vue` | `NTabs` / `NDataTable`（普通滚动）/ `NTag` / `useDialog` |
+| `src/views/SettingsView.vue` | `NCard` / `NSelect` / `NInput` / `NAlert` / `useDialog` |
+| `src/views/UnlockView.vue` | `NCard` / `NInput` / `NTag` / `NAlert` |
 
-### 2.4 推荐引入的首批组件（阶段 1/3）
+## 4. 当前前端依赖
 
-`Button`、`Input`、`Textarea`、`Dialog`（备注/条目独立弹窗）、`Select`（分类、预设字段、密码字符集）、`DropdownMenu`（行内更多操作/复制菜单）、`Tooltip`（复制按钮提示）、`Tabs`（备注 编辑/预览）、`Switch`（生成器选项）、`Badge`（分类标签）、`ScrollArea`（侧栏与列表滚动）、`Separator`、`Toast`（操作反馈）。
+`vue`、`vue-router`、`pinia`、`vue-i18n`、`naive-ui`、`lucide-vue-next`、`@tauri-apps/plugin-dialog`。
+开发期：`tailwindcss` / `postcss` / `autoprefixer`、`vite`、`typescript` / `vue-tsc`、`eslint` / `prettier`。
+Tailwind 只作为布局工具保留；`src/lib/utils.ts`（`cn()`）与 `src/components/ui/ToastHost.vue` 已删除。
 
-## 3. 关键依赖建议（阶段 1 落地时复核版本）
+## 5. 验收口径
 
-- 前端：`vue`、`vue-router`、`pinia`、`vue-i18n`、`tailwindcss`、`radix-vue`（shadcn-vue 的底层原语）、`markdown-it`、`@vueuse/core`（剪贴板、空闲监听等）。
-- 图标：`lucide-vue-next`（ISC，按需 tree-shake 引入单个图标组件）。仅在导航栏等确实需要图标的少量位置使用；其余装饰仍用纯 Tailwind / 简单 SVG，不额外引入第二套图标库。
-- Rust：`tauri`（2.x）、`rusqlite`（bundled）、`argon2`、`chacha20poly1305`、`hkdf`、`rand`（OsRng）、`serde`/`serde_json`、`thiserror`、`zeroize`。
+- `npm run typecheck`、`npm run lint`、`npm run build` 全绿。
+- 浅色 / 深色两套主题下逐页走查：控件颜色一致、浮层（消息、确认、弹窗）继承主题、无原生控件残留、无硬编码中文或色值。
+- 中英切换后所有控件文案（含 naive-ui 内置文案）同步刷新。

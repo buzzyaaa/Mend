@@ -1,13 +1,30 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch, h } from 'vue'
+// 条目编辑弹窗：字段录入、四类预设回填、强密码生成器、Markdown 备注编辑/预览。
+import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import {
+  NAlert,
+  NButton,
+  NCard,
+  NCheckbox,
+  NDivider,
+  NInput,
+  NInputNumber,
+  NModal,
+  NSelect,
+  NTabPane,
+  NTabs,
+  NText,
+  useDialog,
+  useMessage,
+  type SelectOption,
+} from 'naive-ui'
 import { useEntryStore } from '@/stores/entry'
 import { usePresetStore } from '@/stores/preset'
-import { useMessage } from 'naive-ui'
 import { generatorApi } from '@/lib/ipc'
+import { OVERLAY_TARGET } from '@/lib/theme'
 import { renderMarkdown } from '@/lib/markdown'
-import type { EntryInput, EntryView, GeneratorOptions, PresetFieldType } from '@/types'
-import { NButton, NInput, NSelect, NCheckbox, NDivider, NRadioGroup, NRadio, NText, NTag } from 'naive-ui'
+import type { EntryInput, EntryView, GeneratorOptions, Preset, PresetFieldType } from '@/types'
 
 const props = defineProps<{
   open: boolean
@@ -18,9 +35,9 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 
 const { t } = useI18n()
 const store = useEntryStore()
-const generatorLength = computed(() => generatorOptions.length.toString())
 const presetStore = usePresetStore()
 const message = useMessage()
+const dialog = useDialog()
 
 const busy = ref(false)
 const formError = ref('')
@@ -40,7 +57,7 @@ const generatorOptions = reactive<GeneratorOptions>({
 })
 
 const form = reactive<EntryInput>({
-  categoryId: null,
+  categoryId: '',
   title: '',
   url: null,
   username: '',
@@ -57,9 +74,17 @@ const tagsText = ref('')
 
 const heading = computed(() => (props.entry ? t('entry.dialogEdit') : t('entry.dialogCreate')))
 const previewHtml = computed(() => renderMarkdown(form.notes))
+const categoryOptions = computed<SelectOption[]>(() => [
+  { label: t('entry.uncategorized'), value: '' },
+  ...store.categories.map((cat) => ({ label: cat.name, value: cat.id })),
+])
+
+function presetOptions(list: Preset[]): SelectOption[] {
+  return list.map((preset) => ({ label: preset.label, value: preset.id }))
+}
 
 function fillFrom(entry: EntryView | null) {
-  form.categoryId = entry?.categoryId ?? null
+  form.categoryId = entry?.categoryId ?? ''
   form.title = entry?.title ?? ''
   form.url = entry?.url ?? null
   form.username = entry?.username ?? ''
@@ -88,20 +113,15 @@ watch(
   { immediate: true },
 )
 
-/** 从预设下拉选中后按类型填入对应字段（密码类填入密码框）。 */
-function applyPresetById(field: PresetFieldType, id: string) {
+/** 选中预设后按类型把「值」回填到对应字段；下拉本身不受控，选完回到占位文案。 */
+function applyPresetById(field: PresetFieldType, id: string | null) {
+  if (!id) return
   const preset = presetStore.presets.find((item) => item.id === id)
   if (!preset) return
   if (field === 'username') form.username = preset.value
   else if (field === 'email') form.email = preset.value
   else if (field === 'phone') form.phone = preset.value
   else form.password = preset.value
-}
-
-function applyPreset(field: PresetFieldType, event: Event) {
-  const select = event.target as HTMLSelectElement
-  applyPresetById(field, select.value)
-  select.value = ''
 }
 
 async function generate() {
@@ -117,6 +137,11 @@ function fillGenerated() {
   if (!generated.value) return
   form.password = generated.value
   showGenerator.value = false
+}
+
+function onLengthChange(value: number | null) {
+  if (value === null) return
+  generatorOptions.length = Math.min(64, Math.max(6, Math.round(value)))
 }
 
 async function save() {
@@ -159,19 +184,26 @@ async function save() {
   }
 }
 
-async function remove() {
+function remove() {
   if (!props.entry) return
-  if (!window.confirm(t('entry.deleteConfirm'))) return
-  busy.value = true
-  try {
-    await store.deleteEntry(props.entry.id)
-    message.success(t('toast.deleted'))
-    emit('close')
-  } catch (err) {
-    formError.value = messageOf(err)
-  } finally {
-    busy.value = false
-  }
+  dialog.warning({
+    title: t('common.delete'),
+    content: t('entry.deleteConfirm'),
+    positiveText: t('common.delete'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: async () => {
+      busy.value = true
+      try {
+        await store.deleteEntry(props.entry!.id)
+        message.success(t('toast.deleted'))
+        emit('close')
+      } catch (err) {
+        formError.value = messageOf(err)
+      } finally {
+        busy.value = false
+      }
+    },
+  })
 }
 
 function messageOf(err: unknown): string {
@@ -180,137 +212,105 @@ function messageOf(err: unknown): string {
 </script>
 
 <template>
-  <div
-    v-if="open"
-    class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4 sm:items-center"
-    @click.self="emit('close')"
+  <NModal
+    :show="open"
+    :to="OVERLAY_TARGET"
+    :mask-closable="false"
+    @update:show="(show: boolean) => { if (!show) emit('close') }"
   >
-    <div class="w-full max-w-2xl rounded-xl border border-border bg-card p-5 shadow-lg">
-      <h3 class="mb-4 text-lg font-semibold">{{ heading }}</h3>
-
-      <div class="space-y-3">
-        <NInput
-          v-model:value="form.title"
-          :placeholder="t('entry.title')"
-          :maxlength="120"
-          show-count
-        />
+    <NCard
+      :title="heading"
+      :bordered="false"
+      size="large"
+      style="width: min(760px, calc(100vw - 32px))"
+      :content-style="{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }"
+    >
+      <div class="grid gap-3 pr-1">
+        <NInput v-model:value="form.title" :placeholder="t('entry.title')" :maxlength="120" show-count />
 
         <div class="grid grid-cols-2 gap-3">
           <NSelect
-            v-model:value="form.categoryId"
-            :options="[{ label: t('entry.uncategorized'), value: null as any }].concat(
-              store.categories.map((cat) => ({
-                label: cat.name,
-                value: cat.id,
-              }))
-            )"
+            :value="form.categoryId"
+            :options="categoryOptions"
             :placeholder="t('entry.category')"
+            @update:value="(value: string) => (form.categoryId = value)"
           />
-          <NInput
-            v-model:value="form.url"
-            :placeholder="t('entry.url')"
-          />
+          <NInput v-model:value="form.url" :placeholder="t('entry.url')" />
         </div>
 
         <div class="grid grid-cols-2 gap-3">
+          <!-- 账号 + 账号预设 -->
           <div>
-            <span class="mb-1 block text-xs text-muted-foreground">{{ t('entry.username') }}</span>
+            <NText :depth="3" class="mb-1 block text-xs">{{ t('entry.username') }}</NText>
             <div class="flex gap-1">
-              <NInput
-                v-model:value="form.username"
-                class="min-w-0 flex-1"
-              />
+              <NInput v-model:value="form.username" class="min-w-0 flex-1" />
               <NSelect
                 v-if="presetStore.grouped.username.length"
-                v-model:value="form.username"
-                :options="[{ label: t('preset.choose'), value: '' as any }].concat(
-                  presetStore.grouped.username.map((p) => ({
-                    label: p.label,
-                    value: p.id,
-                  }))
-                )"
-                class="shrink-0 w-24"
+                :value="null"
+                :options="presetOptions(presetStore.grouped.username)"
+                :placeholder="t('preset.choose')"
+                class="w-28 shrink-0"
+                @update:value="(id: string | null) => applyPresetById('username', id)"
               />
             </div>
           </div>
 
+          <!-- 密码 + 常用密码预设 + 生成器 -->
           <div>
-            <span class="mb-1 block text-xs text-muted-foreground">{{ t('entry.password') }}</span>
+            <NText :depth="3" class="mb-1 block text-xs">{{ t('entry.password') }}</NText>
             <div class="flex gap-1">
-              <NInput
-                v-model:value="form.password"
-                type="text"
-                autocomplete="off"
-                class="min-w-0 flex-1"
-              />
+              <NInput v-model:value="form.password" type="text" autocomplete="off" class="min-w-0 flex-1" />
               <NSelect
                 v-if="presetStore.grouped.password.length"
                 :value="null"
-                :options="presetStore.grouped.password.map((p) => ({ label: p.label, value: p.id }))"
+                :options="presetOptions(presetStore.grouped.password)"
                 :placeholder="t('preset.choose')"
-                class="shrink-0 w-28"
-                @update:value="(id: string) => applyPresetById('password', id)"
+                class="w-28 shrink-0"
+                @update:value="(id: string | null) => applyPresetById('password', id)"
               />
-              <NButton
-                size="small"
-                @click="showGenerator = !showGenerator"
-              >
+              <NButton size="small" class="shrink-0" @click="showGenerator = !showGenerator">
                 {{ t('generator.open') }}
               </NButton>
             </div>
 
-            <!-- 生成器面板 -->
-            <div
-              v-if="showGenerator"
-              class="mt-2 space-y-2 rounded-md border border-dashed border-border p-2"
-            >
-              <div class="flex items-center gap-2 text-xs">
-                <span class="text-muted-foreground">{{ t('generator.length') }}</span>
-                <NInput
-                  v-model:value="generatorLength"
-                  type="text"
+            <div v-if="showGenerator" class="mt-2 grid gap-2 rounded-lg border border-border p-2.5">
+              <div class="flex items-center gap-2">
+                <NText :depth="3" class="shrink-0 text-xs">{{ t('generator.length') }}</NText>
+                <NInputNumber
+                  :value="generatorOptions.length"
                   :min="6"
                   :max="64"
-                  class="w-16"
+                  size="small"
+                  style="width: 92px"
+                  @update:value="onLengthChange"
                 />
-                <span class="flex-1 text-muted-foreground">{{ t('generator.hint') }}</span>
+                <NText :depth="3" class="min-w-0 flex-1 text-xs">{{ t('generator.hint') }}</NText>
               </div>
 
-              <div class="flex flex-wrap items-center gap-3 text-xs">
-                <NCheckbox v-model:checked="generatorOptions.uppercase">
+              <div class="flex flex-wrap gap-x-3 gap-y-1">
+                <NCheckbox v-model:checked="generatorOptions.uppercase" size="small">
                   {{ t('generator.uppercase') }}
                 </NCheckbox>
-                <NCheckbox v-model:checked="generatorOptions.lowercase">
+                <NCheckbox v-model:checked="generatorOptions.lowercase" size="small">
                   {{ t('generator.lowercase') }}
                 </NCheckbox>
-                <NCheckbox v-model:checked="generatorOptions.digits">
+                <NCheckbox v-model:checked="generatorOptions.digits" size="small">
                   {{ t('generator.digits') }}
                 </NCheckbox>
-                <NCheckbox v-model:checked="generatorOptions.symbols">
+                <NCheckbox v-model:checked="generatorOptions.symbols" size="small">
                   {{ t('generator.symbols') }}
                 </NCheckbox>
-                <NCheckbox v-model:checked="generatorOptions.excludeAmbiguous">
+                <NCheckbox v-model:checked="generatorOptions.excludeAmbiguous" size="small">
                   {{ t('generator.excludeAmbiguous') }}
                 </NCheckbox>
               </div>
 
-              <div class="rounded bg-muted px-2 py-1 font-mono text-xs break-all">
-                {{ generated || '—' }}
-              </div>
+              <NInput :value="generated" readonly size="small" class="font-mono" placeholder="—" />
+              <NAlert v-if="generatorError" type="error" :show-icon="false">{{ generatorError }}</NAlert>
 
-              <p v-if="generatorError" class="text-xs text-red-500">{{ generatorError }}</p>
-
-              <div class="flex justify-end gap-2 text-xs">
-                <NButton size="small" @click="generate">
-                  {{ t('generator.regenerate') }}
-                </NButton>
-                <NButton
-                  size="small"
-                  type="primary"
-                  :disabled="!generated"
-                  @click="fillGenerated"
-                >
+              <div class="flex justify-end gap-2">
+                <NButton size="small" @click="generate">{{ t('generator.regenerate') }}</NButton>
+                <NButton size="small" type="primary" :disabled="!generated" @click="fillGenerated">
                   {{ t('generator.fill') }}
                 </NButton>
               </div>
@@ -320,140 +320,83 @@ function messageOf(err: unknown): string {
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <span class="mb-1 block text-xs text-muted-foreground">{{ t('entry.email') }}</span>
+            <NText :depth="3" class="mb-1 block text-xs">{{ t('entry.email') }}</NText>
             <div class="flex gap-1">
-              <NInput
-                v-model:value="form.email"
-                class="min-w-0 flex-1"
-              />
+              <NInput v-model:value="form.email" class="min-w-0 flex-1" />
               <NSelect
                 v-if="presetStore.grouped.email.length"
-                v-model:value="form.email"
-                :options="[{ label: t('preset.choose'), value: '' as any }].concat(
-                  presetStore.grouped.email.map((p) => ({
-                    label: p.label,
-                    value: p.id,
-                  }))
-                )"
-                class="shrink-0 w-24"
+                :value="null"
+                :options="presetOptions(presetStore.grouped.email)"
+                :placeholder="t('preset.choose')"
+                class="w-28 shrink-0"
+                @update:value="(id: string | null) => applyPresetById('email', id)"
               />
             </div>
           </div>
 
           <div>
-            <span class="mb-1 block text-xs text-muted-foreground">{{ t('entry.phone') }}</span>
+            <NText :depth="3" class="mb-1 block text-xs">{{ t('entry.phone') }}</NText>
             <div class="flex gap-1">
-              <NInput
-                v-model:value="form.phone"
-                class="min-w-0 flex-1"
-              />
+              <NInput v-model:value="form.phone" class="min-w-0 flex-1" />
               <NSelect
                 v-if="presetStore.grouped.phone.length"
-                v-model:value="form.phone"
-                :options="[{ label: t('preset.choose'), value: '' as any }].concat(
-                  presetStore.grouped.phone.map((p) => ({
-                    label: p.label,
-                    value: p.id,
-                  }))
-                )"
-                class="shrink-0 w-24"
+                :value="null"
+                :options="presetOptions(presetStore.grouped.phone)"
+                :placeholder="t('preset.choose')"
+                class="w-28 shrink-0"
+                @update:value="(id: string | null) => applyPresetById('phone', id)"
               />
             </div>
           </div>
         </div>
 
-        <NDivider />
+        <NDivider class="!my-1" />
 
         <div class="flex items-center gap-2">
           <NCheckbox v-model:checked="form.favorite" />
-          <span class="text-sm">{{ t('entry.favorite') }}</span>
+          <NText class="text-sm">{{ t('entry.favorite') }}</NText>
         </div>
 
-        <NInput
-          v-model:value="tagsText"
-          :placeholder="t('entry.tagsPlaceholder')"
-          show-count
-        />
+        <NInput v-model:value="tagsText" :placeholder="t('entry.tagsPlaceholder')" />
 
         <div>
-          <div class="mb-2 flex items-center justify-between">
-            <span class="text-xs text-muted-foreground">{{ t('entry.notes') }}</span>
-            <div class="flex gap-1 rounded-md bg-muted p-0.5 text-xs">
-              <button
-                type="button"
-                class="rounded px-2 py-0.5"
-                :class="
-                  notesTab === 'edit' ? 'bg-card font-medium shadow-sm' : 'text-muted-foreground'
-                "
-                @click="notesTab = 'edit'"
-              >
-                {{ t('entry.notesEdit') }}
-              </button>
-              <button
-                type="button"
-                class="rounded px-2 py-0.5"
-                :class="
-                  notesTab === 'preview' ? 'bg-card font-medium shadow-sm' : 'text-muted-foreground'
-                "
-                @click="notesTab = 'preview'"
-              >
-                {{ t('entry.notesPreview') }}
-              </button>
-            </div>
-          </div>
-
-          <textarea
+          <NTabs v-model:value="notesTab" type="segment" size="small" class="mb-2">
+            <NTabPane name="edit" :tab="t('entry.notesEdit')" />
+            <NTabPane name="preview" :tab="t('entry.notesPreview')" />
+          </NTabs>
+          <NInput
             v-if="notesTab === 'edit'"
-            v-model="form.notes"
-            rows="7"
-            class="w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-relaxed outline-none focus:ring-2 focus:ring-ring"
+            v-model:value="form.notes"
+            type="textarea"
+            :rows="7"
             :placeholder="t('entry.notesPlaceholder')"
+            class="font-mono"
           />
+          <!-- 渲染结果是白名单标签，原始 HTML 已被转义 -->
           <div
             v-else
-            class="min-h-[10rem] overflow-x-auto rounded-md border border-border bg-background px-3 py-2 text-sm leading-relaxed"
+            class="min-h-40 overflow-x-auto rounded-lg border border-border px-3 py-2 text-sm leading-relaxed"
           >
-            <template v-if="form.notes.trim()">
-              <!-- 渲染结果是白名单标签，原始 HTML 已被转义 -->
-              <div v-html="previewHtml"></div>
-            </template>
-            <p v-else class="text-xs text-muted-foreground">{{ t('entry.noNotes') }}</p>
+            <div v-if="form.notes.trim()" v-html="previewHtml"></div>
+            <NText v-else :depth="3" class="text-xs">{{ t('entry.noNotes') }}</NText>
           </div>
         </div>
       </div>
 
-      <p v-if="formError" class="mt-3 text-xs text-red-500">{{ formError }}</p>
+      <NAlert v-if="formError" type="error" :show-icon="false" class="mt-3">{{ formError }}</NAlert>
 
-      <div class="mt-4 flex items-center justify-between">
-        <button
-          v-if="entry"
-          type="button"
-          class="rounded-md px-3 py-1.5 text-sm text-destructive hover:bg-accent disabled:opacity-60"
-          :disabled="busy"
-          @click="remove"
-        >
-          {{ t('common.delete') }}
-        </button>
-        <span v-else></span>
-
-        <div class="flex gap-2">
-          <button
-            type="button"
-            class="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent"
-            @click="emit('close')"
-          >
-            {{ t('common.cancel') }}
-          </button>
-          <button
-            type="button"
-            class="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-60"
-            :disabled="busy"
-            @click="save"
-          >
-            {{ t('common.save') }}
-          </button>
+      <template #footer>
+        <div class="flex items-center justify-between">
+          <NButton v-if="entry" type="error" quaternary :disabled="busy" @click="remove">
+            {{ t('common.delete') }}
+          </NButton>
+          <span v-else></span>
+          <div class="flex gap-2">
+            <NButton @click="emit('close')">{{ t('common.cancel') }}</NButton>
+            <NButton type="primary" :loading="busy" @click="save">{{ t('common.save') }}</NButton>
+          </div>
         </div>
-      </div>
-    </div>
-  </div>
+      </template>
+    </NCard>
+  </NModal>
 </template>

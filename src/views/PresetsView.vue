@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // 预设值页面：账号 / 邮箱 / 手机号 / 常用密码四类分组，均用 Data Table 展示。
 // 值落盘加密，仅在解锁态内存中明文显示（密码类同样明文展示，不做遮挡）。
-import { computed, h, onMounted, reactive, ref } from 'vue'
+import { computed, h, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
+  NAlert,
   NButton,
   NDataTable,
   NDivider,
@@ -15,24 +16,28 @@ import {
   NTabs,
   NTag,
   NText,
+  useDialog,
+  type DataTableColumns,
+  type SelectOption,
 } from 'naive-ui'
 import { usePresetStore } from '@/stores/preset'
 import { useToast } from '@/composables/useToast'
-import type { DataTableColumns } from 'naive-ui'
 import type { Preset, PresetFieldType } from '@/types'
 
 const { t } = useI18n()
 const presetStore = usePresetStore()
 const toast = useToast()
+const dialog = useDialog()
 
 const fieldTypes: PresetFieldType[] = ['username', 'email', 'phone', 'password']
 const activeTab = ref<PresetFieldType>('username')
 
-const TYPE_META: Record<PresetFieldType, { color: string }> = {
-  username: { color: '#18a058' },
-  email: { color: '#2080f0' },
-  phone: { color: '#f0a020' },
-  password: { color: '#d03050' },
+/** 类型徽标走语义色，深浅主题都由 NConfigProvider 决定。 */
+const TYPE_TAG: Record<PresetFieldType, 'success' | 'info' | 'warning' | 'error'> = {
+  username: 'success',
+  email: 'info',
+  phone: 'warning',
+  password: 'error',
 }
 
 const form = reactive<{ fieldType: PresetFieldType; label: string; value: string }>({
@@ -45,12 +50,19 @@ const formError = ref('')
 const busy = ref(false)
 
 const headingOfForm = computed(() => (editId.value ? t('preset.edit') : t('preset.add')))
-const rowsOfActive = computed(() => presetStore.byType(activeTab.value))
+const typeOptions = computed<SelectOption[]>(() =>
+  fieldTypes.map((type) => ({ label: t(`preset.types.${type}`), value: type })),
+)
 
 onMounted(() => {
   presetStore.refresh().catch(() => {
     // 未解锁或浏览器预览：静默
   })
+})
+
+// 新增态下表单类型跟随当前 Tab，编辑态保持原类型
+watch(activeTab, (type) => {
+  if (!editId.value) form.fieldType = type
 })
 
 function startEdit(preset: Preset) {
@@ -90,15 +102,22 @@ async function submit() {
   }
 }
 
-async function remove(preset: Preset) {
-  if (!window.confirm(t('preset.deleteConfirm'))) return
-  try {
-    await presetStore.remove(preset.id)
-    toast.success(t('toast.deleted'))
-    if (editId.value === preset.id) resetForm()
-  } catch (err) {
-    toast.error(t('toast.failed', { message: err instanceof Error ? err.message : String(err) }))
-  }
+function remove(preset: Preset) {
+  dialog.warning({
+    title: t('common.delete'),
+    content: t('preset.deleteConfirm'),
+    positiveText: t('common.delete'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: async () => {
+      try {
+        await presetStore.remove(preset.id)
+        toast.success(t('toast.deleted'))
+        if (editId.value === preset.id) resetForm()
+      } catch (err) {
+        toast.error(t('toast.failed', { message: err instanceof Error ? err.message : String(err) }))
+      }
+    },
+  })
 }
 
 const columns = computed<DataTableColumns<Preset>>(() => [
@@ -116,7 +135,7 @@ const columns = computed<DataTableColumns<Preset>>(() => [
       h(
         NText,
         { code: true, class: row.fieldType === 'password' ? 'whitespace-pre-wrap' : '' },
-        () => row.value
+        () => row.value,
       ),
   },
   {
@@ -126,11 +145,8 @@ const columns = computed<DataTableColumns<Preset>>(() => [
     render: (row) =>
       h(
         NTag,
-        {
-          bordered: false,
-          color: { color: TYPE_META[row.fieldType].color, textColor: '#fff' },
-        },
-        { default: () => t(`preset.types.${row.fieldType}`) }
+        { bordered: false, round: true, type: TYPE_TAG[row.fieldType] },
+        { default: () => t(`preset.types.${row.fieldType}`) },
       ),
   },
   {
@@ -143,7 +159,7 @@ const columns = computed<DataTableColumns<Preset>>(() => [
         h(
           NButton,
           { size: 'small', type: 'error', ghost: true, onClick: () => remove(row) },
-          () => t('common.delete')
+          () => t('common.delete'),
         ),
       ]),
   },
@@ -151,11 +167,11 @@ const columns = computed<DataTableColumns<Preset>>(() => [
 </script>
 
 <template>
-  <main class="flex h-full flex-col overflow-hidden p-6">
-    <section class="flex min-h-0 flex-1 flex-col rounded-lg border border-border bg-card p-4">
+  <main class="flex h-screen flex-col overflow-hidden p-5">
+    <section class="flex min-h-0 flex-1 flex-col rounded-xl border border-border bg-card p-4">
       <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h1 class="text-lg font-medium">{{ t('preset.title') }}</h1>
-        <span class="text-xs text-muted-foreground">{{ t('preset.hint') }}</span>
+        <NText strong class="text-lg">{{ t('preset.title') }}</NText>
+        <NText :depth="3" class="text-xs">{{ t('preset.hint') }}</NText>
       </div>
 
       <NTabs v-model:value="activeTab" type="line" animated class="min-h-0 flex-1">
@@ -168,12 +184,11 @@ const columns = computed<DataTableColumns<Preset>>(() => [
           <div class="pt-2">
             <NDataTable
               :columns="columns"
-              :data="rowsOfActive"
+              :data="presetStore.byType(type)"
               :bordered="false"
               :single-line="false"
               :row-key="(row: Preset) => row.id"
               :max-height="420"
-              virtual-scroll
               size="small"
             >
               <template #empty>
@@ -184,16 +199,12 @@ const columns = computed<DataTableColumns<Preset>>(() => [
         </NTabPane>
       </NTabs>
 
-      <NDivider />
+      <NDivider class="my-3" />
 
-      <div class="mb-2 text-sm font-medium">{{ headingOfForm }}</div>
+      <NText strong class="mb-2 block text-sm">{{ headingOfForm }}</NText>
 
       <div class="flex flex-wrap items-center gap-2">
-        <NSelect
-          v-model:value="form.fieldType"
-          :options="fieldTypes.map((type) => ({ label: t(`preset.types.${type}`), value: type }))"
-          style="width: 140px"
-        />
+        <NSelect v-model:value="form.fieldType" :options="typeOptions" style="width: 140px" />
         <NInput
           v-model:value="form.label"
           :placeholder="t('preset.labelPlaceholder')"
@@ -208,11 +219,11 @@ const columns = computed<DataTableColumns<Preset>>(() => [
         <NButton type="primary" :loading="busy" @click="submit">
           {{ editId ? t('common.save') : t('preset.add') }}
         </NButton>
-        <NButton v-if="editId" @click="resetForm">
-          {{ t('common.cancel') }}
-        </NButton>
+        <NButton v-if="editId" @click="resetForm">{{ t('common.cancel') }}</NButton>
       </div>
-      <p v-if="formError" class="mt-1 text-xs text-red-500">{{ formError }}</p>
+      <NAlert v-if="formError" type="error" :show-icon="false" class="mt-2">
+        {{ formError }}
+      </NAlert>
     </section>
   </main>
 </template>

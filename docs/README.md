@@ -7,7 +7,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [01-requirements.md](./01-requirements.md) | 需求拆解、范围边界、MVP 与后续功能对照、非目标 |
-| [02-tech-decision-ui.md](./02-tech-decision-ui.md) | 技术栈定型；Shadcn/UI（shadcn-vue）vs Element Plus 评估与结论 |
+| [02-tech-decision-ui.md](./02-tech-decision-ui.md) | 技术栈定型；当前 UI 框架决策（naive-ui）、主题装配与组件约定 |
 | [03-architecture.md](./03-architecture.md) | 分层架构、目录结构、Tauri IPC 命令约定、状态管理 |
 | [04-data-model-encryption.md](./04-data-model-encryption.md) | SQLite 表结构、字段加密格式、密钥派生与内存安全 |
 | [05-mvp-spec.md](./05-mvp-spec.md) | MVP 功能规格：布局、分类、列表、Markdown 备注弹窗、预设字段、复制、密码生成器 |

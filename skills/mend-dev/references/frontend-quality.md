@@ -4,10 +4,10 @@ Mend 是 product register（用户在执行任务，界面服务于任务）。�
 
 ## 技术基线
 
-- Vue 3 `<script setup>` + TypeScript 严格模式 + TailwindCSS（`tailwind.config.ts`，`darkMode: 'class'`）。
-- 颜色与圆角全部走 `src/assets/main.css` 的 CSS 变量（`:root` 与 `.dark` 两套 HSL），不写死 `#hex`、不新造色板。
-- 组件类名用 `cn()` 组合；不引入新的样式库、组件库；图标只用已装的 `lucide-vue-next`（按需引入单个图标），不再引入第二套图标库，也不堆 emoji。
-- 深浅两套必须同时成立：新组件要检查 `.dark` 下的对比度与层级。
+- Vue 3 `<script setup>` + TypeScript 严格模式 + naive-ui 组件库 + TailwindCSS（只做布局与尺寸，`darkMode: 'class'`）。
+- 颜色与圆角全部走 `src/assets/main.css` 的 CSS 变量（`:root` 与 `.dark` 两套 HSL），由 `src/lib/theme.ts` 注入 naive-ui；不写死 `#hex`、不新造色板、不写 `text-red-500` 这类字面色。
+- 交互控件只用 naive-ui（`NButton` / `NInput` / `NSelect` / `NModal` / `useDialog` / `useToast` …），不写原生表单控件与 `window.confirm`；浮层统一挂 `OVERLAY_TARGET`。图标只用 `lucide-vue-next` 按需引入，不堆 emoji；`cn()` 已移除。
+- 深浅两套必须同时成立：新组件要检查 `.dark` 下的对比度与层级，且浮层（消息 / 确认 / 弹窗）继承主题。
 
 ## 文案
 
@@ -20,7 +20,7 @@ Mend 是 product register（用户在执行任务，界面服务于任务）。�
 
 每个交互组件都要考虑：default / hover / focus / active / disabled / loading / error。
 
-- 按钮：`focus-visible` 必须有可见环（`ring-*`），禁用态降透明度并阻止点击。
+- 按钮：用 naive-ui 的 `type` / `quaternary` / `loading` / `disabled` 组合出各状态，不手写 Tailwind 按钮类；焦点环由组件提供。
 - 输入：错误态给边框 + 辅助文案，不只靠颜色区分。
 - 列表：空态给"为什么空 + 怎么开始"（例如"暂无条目，点击新增条目创建第一条"），而不是"暂无数据"。
 - 异步操作：提交中禁用按钮并保持宽度，失败回滚 UI 并 toast。

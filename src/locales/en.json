@@ -161,6 +161,7 @@
     "imported": "Restored {entries} entries and {categories} categories. Unlock again with the backup's master password."
   },
   "settings": {
+    "appearance": "Appearance & behavior",
     "theme": "Theme",
     "themeSystem": "Follow system",
     "themeLight": "Light",
@@ -197,6 +198,7 @@
     "delete": "Delete",
     "rename": "Rename",
     "close": "Close",
-    "deleteConfirm": "Delete this entry?"
+    "deleteConfirm": "Delete this entry?",
+    "actions": "Actions"
   }
 }

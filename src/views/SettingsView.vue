@@ -1,7 +1,19 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+// 设置页：外观与行为、修改主密码、加密备份与恢复。
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { Download, FolderOpen, KeyRound, LockKeyhole, Palette, Upload } from 'lucide-vue-next'
+import {
+  NAlert,
+  NButton,
+  NCard,
+  NIcon,
+  NInput,
+  NSelect,
+  NText,
+  useDialog,
+} from 'naive-ui'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useVaultStore } from '@/stores/vault'
 import { useToast } from '@/composables/useToast'
@@ -14,9 +26,24 @@ const router = useRouter()
 const preferences = usePreferencesStore()
 const vaultStore = useVaultStore()
 const toast = useToast()
+const dialog = useDialog()
 
-const autoLockOptions = [1, 5, 10, 15, 30, 60]
-const clipboardOptions = [15, 30, 60, 120]
+const autoLockValues = [1, 5, 10, 15, 30, 60]
+const clipboardValues = [15, 30, 60, 120]
+
+const themeOptions = computed(() => [
+  { label: t('settings.themeSystem'), value: 'system' },
+  { label: t('settings.themeLight'), value: 'light' },
+  { label: t('settings.themeDark'), value: 'dark' },
+])
+const autoLockOptions = computed(() => [
+  { label: t('settings.off'), value: 0 },
+  ...autoLockValues.map((n) => ({ label: t('settings.minutes', { n }), value: n })),
+])
+const clipboardOptions = computed(() => [
+  { label: t('settings.off'), value: 0 },
+  ...clipboardValues.map((n) => ({ label: t('settings.seconds', { n }), value: n })),
+])
 
 // —— 备份与恢复 ——
 const paths = ref<AppPaths | null>(null)
@@ -44,43 +71,51 @@ function formatSize(bytes: number): string {
 
 /** 用系统文件管理器选导出位置（取消返回 null）。 */
 async function chooseExportPath(): Promise<string | null> {
-  const picked = await saveDialog({
-    title: t('backup.export'),
-    defaultPath: exportPath.value || defaultExportPath(paths.value?.dataDir ?? ''),
-    filters: [{ name: 'Mend backup', extensions: ['mendbak'] }],
-  })
-  if (typeof picked === 'string' && picked) {
-    // 用户没写扩展名时补上，避免产出无后缀文件
-    const path = picked.toLowerCase().endsWith('.mendbak') ? picked : `${picked}.mendbak`
-    exportPath.value = path
-    return path
+  try {
+    const picked = await saveDialog({
+      title: t('backup.export'),
+      defaultPath: exportPath.value || defaultExportPath(paths.value?.dataDir ?? ''),
+      filters: [{ name: 'Mend backup', extensions: ['mendbak'] }],
+    })
+    if (typeof picked === 'string' && picked) {
+      const path = picked.toLowerCase().endsWith('.mendbak') ? picked : `${picked}.mendbak`
+      exportPath.value = path
+      return path
+    }
+  } catch (err) {
+    backupError.value = err instanceof Error ? err.message : String(err)
   }
   return null
 }
 
 /** 用系统文件管理器挑备份文件（取消返回 null）。 */
 async function chooseImportPath(): Promise<string | null> {
-  const picked = await openDialog({
-    title: t('backup.import'),
-    multiple: false,
-    directory: false,
-    filters: [{ name: 'Mend backup', extensions: ['mendbak'] }],
-  })
-  if (typeof picked === 'string' && picked) {
-    importPath.value = picked
-    return picked
+  try {
+    const picked = await openDialog({
+      title: t('backup.import'),
+      multiple: false,
+      directory: false,
+      filters: [{ name: 'Mend backup', extensions: ['mendbak'] }],
+    })
+    if (typeof picked === 'string' && picked) {
+      importPath.value = picked
+      return picked
+    }
+  } catch (err) {
+    backupError.value = err instanceof Error ? err.message : String(err)
   }
   return null
 }
 
 async function exportBackup() {
   backupError.value = ''
-  const path = await chooseExportPath()
-  if (!path) return
+  // 先校验口令，避免白弹一次系统文件对话框
   if (!exportPassword.value) {
-    backupError.value = t('backup.masterPassword')
+    backupError.value = t('backup.passwordPlaceholder')
     return
   }
+  const path = await chooseExportPath()
+  if (!path) return
   backupBusy.value = true
   try {
     const result = await backupApi.export(path, exportPassword.value)
@@ -93,27 +128,36 @@ async function exportBackup() {
   }
 }
 
-async function importBackup() {
+function importBackup() {
   backupError.value = ''
-  const path = await chooseImportPath()
-  if (!path) return
   if (!importPassword.value) {
-    backupError.value = t('backup.masterPassword')
+    backupError.value = t('backup.passwordPlaceholder')
     return
   }
-  if (!window.confirm(t('backup.importConfirm'))) return
-  backupBusy.value = true
-  try {
-    const result = await backupApi.import(path, importPassword.value)
-    // 后端恢复后会锁定会话，前端同步状态并回到解锁页
-    vaultStore.setStatus({ initialized: true, unlocked: false })
-    window.alert(t('backup.imported', { entries: result.entries, categories: result.categories }))
-    router.push('/unlock')
-  } catch (err) {
-    backupError.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    backupBusy.value = false
-  }
+  dialog.warning({
+    title: t('backup.import'),
+    content: t('backup.importConfirm'),
+    positiveText: t('backup.importAction'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: async () => {
+      const path = await chooseImportPath()
+      if (!path) return
+      backupBusy.value = true
+      try {
+        const result = await backupApi.import(path, importPassword.value)
+        // 后端恢复后会锁定会话，前端同步状态并回到解锁页
+        vaultStore.setStatus({ initialized: true, unlocked: false })
+        toast.success(
+          t('backup.imported', { entries: result.entries, categories: result.categories }),
+        )
+        await router.push('/unlock')
+      } catch (err) {
+        backupError.value = err instanceof Error ? err.message : String(err)
+      } finally {
+        backupBusy.value = false
+      }
+    },
+  })
 }
 
 onMounted(() => {
@@ -128,18 +172,6 @@ onMounted(() => {
       // 拿不到路径只影响默认值，不阻塞页面
     })
 })
-
-function onThemeChange(event: Event) {
-  preferences.setTheme((event.target as HTMLSelectElement).value as ThemeMode)
-}
-
-function onAutoLockChange(event: Event) {
-  preferences.setAutoLockMinutes(Number((event.target as HTMLSelectElement).value))
-}
-
-function onClipboardChange(event: Event) {
-  preferences.setClipboardClearSeconds(Number((event.target as HTMLSelectElement).value))
-}
 
 // —— 修改主密码 ——
 const pwForm = reactive({ old: '', next: '', confirm: '' })
@@ -172,179 +204,179 @@ async function changePassword() {
 </script>
 
 <template>
-  <main class="flex-1 space-y-4 overflow-y-auto p-6">
-    <h1 class="text-sm font-medium">{{ t('nav.settings') }}</h1>
+  <main class="h-screen overflow-y-auto p-5">
+    <div class="mx-auto max-w-3xl">
+      <NText strong class="mb-4 block text-lg">{{ t('nav.settings') }}</NText>
 
-    <!-- 外观与行为 -->
-    <section class="divide-y divide-border rounded-lg border border-border bg-card">
-      <div class="flex items-center justify-between p-4">
-        <span class="text-sm">{{ t('settings.theme') }}</span>
-        <select
-          :value="preferences.theme"
-          class="rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-          @change="onThemeChange"
-        >
-          <option value="system">{{ t('settings.themeSystem') }}</option>
-          <option value="light">{{ t('settings.themeLight') }}</option>
-          <option value="dark">{{ t('settings.themeDark') }}</option>
-        </select>
-      </div>
+      <!-- 外观与行为 -->
+      <NCard size="small" class="mb-4">
+        <template #header>
+          <div class="flex items-center gap-2">
+            <NIcon :component="Palette" :size="17" />
+            <NText strong>{{ t('settings.appearance') }}</NText>
+          </div>
+        </template>
 
-      <div class="flex items-center justify-between gap-4 p-4">
-        <div>
-          <div class="text-sm">{{ t('settings.autoLock') }}</div>
-          <div class="text-xs text-muted-foreground">{{ t('settings.autoLockHint') }}</div>
+        <div class="divide-y divide-border">
+          <div class="flex items-center justify-between gap-4 py-2.5">
+            <NText class="text-sm">{{ t('settings.theme') }}</NText>
+            <NSelect
+              :value="preferences.theme"
+              :options="themeOptions"
+              style="width: 160px"
+              @update:value="(value: string) => preferences.setTheme(value as ThemeMode)"
+            />
+          </div>
+          <div class="flex items-center justify-between gap-4 py-2.5">
+            <div class="min-w-0">
+              <NText class="block text-sm">{{ t('settings.autoLock') }}</NText>
+              <NText :depth="3" class="block text-xs">{{ t('settings.autoLockHint') }}</NText>
+            </div>
+            <NSelect
+              :value="preferences.autoLockMinutes"
+              :options="autoLockOptions"
+              style="width: 160px"
+              @update:value="(value: number) => preferences.setAutoLockMinutes(value)"
+            />
+          </div>
+          <div class="flex items-center justify-between gap-4 py-2.5">
+            <div class="min-w-0">
+              <NText class="block text-sm">{{ t('settings.clipboard') }}</NText>
+              <NText :depth="3" class="block text-xs">{{ t('settings.clipboardHint') }}</NText>
+            </div>
+            <NSelect
+              :value="preferences.clipboardClearSeconds"
+              :options="clipboardOptions"
+              style="width: 160px"
+              @update:value="(value: number) => preferences.setClipboardClearSeconds(value)"
+            />
+          </div>
         </div>
-        <select
-          :value="preferences.autoLockMinutes"
-          class="shrink-0 rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-          @change="onAutoLockChange"
-        >
-          <option :value="0">{{ t('settings.off') }}</option>
-          <option v-for="m in autoLockOptions" :key="m" :value="m">
-            {{ t('settings.minutes', { n: m }) }}
-          </option>
-        </select>
-      </div>
+      </NCard>
 
-      <div class="flex items-center justify-between gap-4 p-4">
-        <div>
-          <div class="text-sm">{{ t('settings.clipboard') }}</div>
-          <div class="text-xs text-muted-foreground">{{ t('settings.clipboardHint') }}</div>
-        </div>
-        <select
-          :value="preferences.clipboardClearSeconds"
-          class="shrink-0 rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-          @change="onClipboardChange"
-        >
-          <option :value="0">{{ t('settings.off') }}</option>
-          <option v-for="s in clipboardOptions" :key="s" :value="s">
-            {{ t('settings.seconds', { n: s }) }}
-          </option>
-        </select>
-      </div>
-    </section>
+      <!-- 修改主密码 -->
+      <NCard size="small" class="mb-4">
+        <template #header>
+          <div class="flex items-center gap-2">
+            <NIcon :component="LockKeyhole" :size="17" />
+            <NText strong>{{ t('settings.changePassword') }}</NText>
+          </div>
+        </template>
+        <NText :depth="3" class="mb-3 block text-xs">{{ t('settings.changePasswordHint') }}</NText>
 
-    <!-- 修改主密码 -->
-    <section class="rounded-lg border border-border bg-card p-4">
-      <h2 class="text-sm font-medium">{{ t('settings.changePassword') }}</h2>
-      <p class="mb-3 mt-0.5 text-xs text-muted-foreground">
-        {{ t('settings.changePasswordHint') }}
-      </p>
-
-      <div class="grid max-w-md grid-cols-1 gap-2">
-        <input
-          v-model="pwForm.old"
-          type="password"
-          autocomplete="current-password"
-          class="rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-          :placeholder="t('settings.oldPassword')"
-        />
-        <input
-          v-model="pwForm.next"
-          type="password"
-          autocomplete="new-password"
-          class="rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-          :placeholder="t('settings.newPassword')"
-        />
-        <input
-          v-model="pwForm.confirm"
-          type="password"
-          autocomplete="new-password"
-          class="rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-          :placeholder="t('settings.confirmPassword')"
-        />
-
-        <p v-if="pwError" class="text-xs text-destructive">{{ pwError }}</p>
-
-        <div class="flex justify-end">
-          <button
-            type="button"
-            class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
-            :disabled="pwBusy || !pwForm.old || !pwForm.next"
-            @click="changePassword"
-          >
-            {{ t('common.confirm') }}
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <!-- 备份与恢复 -->
-    <section class="rounded-lg border border-border bg-card p-4">
-      <div class="mb-1 flex items-center justify-between">
-        <h2 class="text-sm font-medium">{{ t('backup.title') }}</h2>
-        <span class="text-xs text-muted-foreground">{{ t('backup.hint') }}</span>
-      </div>
-
-      <div class="mt-3 space-y-1">
-        <div class="flex items-center gap-2 text-xs">
-          <span class="w-24 shrink-0 text-muted-foreground">{{ t('backup.dataDir') }}</span>
-          <input
-            :value="paths?.dataDir ?? ''"
-            readonly
-            class="min-w-0 flex-1 rounded-md border border-border bg-muted px-2 py-1 font-mono text-xs"
-          />
-        </div>
-        <p class="text-xs text-muted-foreground">{{ t('backup.dataDirHint') }}</p>
-        <p class="text-xs text-muted-foreground">{{ t('backup.pickHint') }}</p>
-      </div>
-
-      <div class="mt-4 grid gap-4 sm:grid-cols-2">
-        <!-- 导出 -->
-        <div class="space-y-2 rounded-md border border-dashed border-border p-3">
-          <div class="text-xs font-medium">{{ t('backup.export') }}</div>
-          <input
-            :value="exportPath"
-            readonly
-            :placeholder="t('backup.exportPathPlaceholder')"
-            class="w-full rounded-md border border-border bg-muted px-2 py-1.5 font-mono text-xs outline-none"
-          />
-          <input
-            v-model="exportPassword"
+        <div class="grid max-w-md gap-2">
+          <NInput
+            v-model:value="pwForm.old"
             type="password"
-            :placeholder="t('backup.passwordPlaceholder')"
-            autocomplete="off"
-            class="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none"
-          />
-          <button
-            type="button"
-            class="w-full rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:opacity-60"
-            :disabled="backupBusy"
-            @click="exportBackup"
+            show-password-on="click"
+            autocomplete="current-password"
+            :placeholder="t('settings.oldPassword')"
           >
-            {{ t('backup.exportAction') }}
-          </button>
-        </div>
-
-        <!-- 恢复 -->
-        <div class="space-y-2 rounded-md border border-dashed border-border p-3">
-          <div class="text-xs font-medium">{{ t('backup.import') }}</div>
-          <input
-            :value="importPath"
-            readonly
-            :placeholder="t('backup.exportPathPlaceholder')"
-            class="w-full rounded-md border border-border bg-muted px-2 py-1.5 font-mono text-xs outline-none"
-          />
-          <input
-            v-model="importPassword"
+            <template #prefix><NIcon :component="KeyRound" :size="15" /></template>
+          </NInput>
+          <NInput
+            v-model:value="pwForm.next"
             type="password"
-            :placeholder="t('backup.passwordPlaceholder')"
-            autocomplete="off"
-            class="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none"
+            show-password-on="click"
+            autocomplete="new-password"
+            :placeholder="t('settings.newPassword')"
           />
-          <button
-            type="button"
-            class="w-full rounded-md border border-destructive px-3 py-1.5 text-sm text-destructive hover:bg-accent disabled:opacity-60"
-            :disabled="backupBusy"
-            @click="importBackup"
-          >
-            {{ t('backup.importAction') }}
-          </button>
+          <NInput
+            v-model:value="pwForm.confirm"
+            type="password"
+            show-password-on="click"
+            autocomplete="new-password"
+            :placeholder="t('settings.confirmPassword')"
+          />
+          <NAlert v-if="pwError" type="error" :show-icon="false" class="mt-1">{{ pwError }}</NAlert>
+          <div class="flex justify-end">
+            <NButton
+              type="primary"
+              :loading="pwBusy"
+              :disabled="!pwForm.old || !pwForm.next"
+              @click="changePassword"
+            >
+              {{ t('common.confirm') }}
+            </NButton>
+          </div>
         </div>
-      </div>
+      </NCard>
 
-      <p v-if="backupError" class="mt-2 text-xs text-destructive">{{ backupError }}</p>
-    </section>
+      <!-- 备份与恢复 -->
+      <NCard size="small">
+        <template #header>
+          <div class="flex items-center gap-2">
+            <NIcon :component="FolderOpen" :size="17" />
+            <NText strong>{{ t('backup.title') }}</NText>
+          </div>
+        </template>
+        <NText :depth="3" class="mb-3 block text-xs">{{ t('backup.hint') }}</NText>
+
+        <div class="mb-4 grid gap-2">
+          <div class="flex items-center gap-2">
+            <NText :depth="3" class="w-20 shrink-0 text-xs">{{ t('backup.dataDir') }}</NText>
+            <NInput :value="paths?.dataDir ?? ''" readonly size="small" class="font-mono" />
+          </div>
+          <NText :depth="3" class="block text-xs">{{ t('backup.dataDirHint') }}</NText>
+          <NText :depth="3" class="block text-xs">{{ t('backup.pickHint') }}</NText>
+        </div>
+
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div class="rounded-lg border border-border p-3">
+            <NText strong class="mb-2 block text-sm">{{ t('backup.export') }}</NText>
+            <div class="grid gap-2">
+              <NInput
+                :value="exportPath"
+                readonly
+                size="small"
+                class="font-mono"
+                :placeholder="t('backup.exportPathPlaceholder')"
+              />
+              <NInput
+                v-model:value="exportPassword"
+                type="password"
+                show-password-on="click"
+                autocomplete="off"
+                size="small"
+                :placeholder="t('backup.passwordPlaceholder')"
+              />
+              <NButton block type="primary" :loading="backupBusy" @click="exportBackup">
+                <template #icon><NIcon :component="Download" :size="15" /></template>
+                {{ t('backup.exportAction') }}
+              </NButton>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-border p-3">
+            <NText strong class="mb-2 block text-sm">{{ t('backup.import') }}</NText>
+            <div class="grid gap-2">
+              <NInput
+                :value="importPath"
+                readonly
+                size="small"
+                class="font-mono"
+                :placeholder="t('backup.exportPathPlaceholder')"
+              />
+              <NInput
+                v-model:value="importPassword"
+                type="password"
+                show-password-on="click"
+                autocomplete="off"
+                size="small"
+                :placeholder="t('backup.passwordPlaceholder')"
+              />
+              <NButton block type="error" secondary :loading="backupBusy" @click="importBackup">
+                <template #icon><NIcon :component="Upload" :size="15" /></template>
+                {{ t('backup.importAction') }}
+              </NButton>
+            </div>
+          </div>
+        </div>
+
+        <NAlert v-if="backupError" type="error" :show-icon="false" class="mt-3">
+          {{ backupError }}
+        </NAlert>
+      </NCard>
+    </div>
   </main>
 </template>

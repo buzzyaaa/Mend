@@ -1,14 +1,26 @@
 <script setup lang="ts">
+// 分类侧栏：固定桶（全部/未分类/回收站）+ 自定义分类，支持新增、重命名、删除。
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Plus, Pencil, Trash2, Inbox, Layers, Trash, Folder } from 'lucide-vue-next'
+import {
+  NButton,
+  NIcon,
+  NInput,
+  NModal,
+  NText,
+  NTooltip,
+  useDialog,
+} from 'naive-ui'
 import { useEntryStore, type Bucket } from '@/stores/entry'
 import { useToast } from '@/composables/useToast'
-import { cn } from '@/lib/utils'
+import { OVERLAY_TARGET } from '@/lib/theme'
 import type { Category } from '@/types'
 
 const { t } = useI18n()
 const entryStore = useEntryStore()
 const toast = useToast()
+const dialog = useDialog()
 
 const editing = ref<{ mode: 'create' | 'rename'; category?: Category } | null>(null)
 const nameInput = ref('')
@@ -63,6 +75,17 @@ async function submitCategory() {
   }
 }
 
+function askDelete(category: Category) {
+  deleting.value = category
+  dialog.warning({
+    title: t('sidebar.delete'),
+    content: t('sidebar.deleteConfirm'),
+    positiveText: t('common.delete'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: confirmDelete,
+  })
+}
+
 async function confirmDelete() {
   if (!deleting.value) return
   busy.value = true
@@ -80,164 +103,147 @@ async function confirmDelete() {
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
+
+/** 桶行的统一渲染数据，避免三段重复模板。 */
+const fixedBuckets = [
+  { key: 'all' as const, label: 'nav.all', icon: Layers },
+  { key: 'uncategorized' as const, label: 'nav.uncategorized', icon: Inbox },
+  { key: 'trash' as const, label: 'nav.trash', icon: Trash },
+]
+
+function bucketCount(key: (typeof fixedBuckets)[number]['key']): number {
+  if (key === 'all') return entryStore.entries.length
+  if (key === 'uncategorized') return entryStore.uncategorizedCount
+  return entryStore.trash.length
+}
 </script>
 
 <template>
-  <aside class="flex w-60 shrink-0 flex-col border-r border-border bg-card">
-    <div class="px-3 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-      {{ t('nav.categories') }}
+  <aside class="flex w-60 shrink-0 flex-col border-r border-border bg-surface">
+    <div class="px-4 pb-2 pt-4">
+      <NText :depth="3" class="text-xs font-medium uppercase tracking-wide">
+        {{ t('nav.categories') }}
+      </NText>
     </div>
 
-    <nav class="flex-1 space-y-1 overflow-y-auto px-2">
-      <button
-        type="button"
-        class="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-accent"
-        :class="cn(entryStore.bucket === 'all' && 'bg-accent font-medium')"
-        @click="select('all')"
+    <nav class="flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
+      <!-- 固定桶 -->
+      <NButton
+        v-for="bucket in fixedBuckets"
+        :key="bucket.key"
+        block
+        class="!justify-start h-9"
+        :type="entryStore.bucket === bucket.key ? 'primary' : 'default'"
+        :quaternary="entryStore.bucket === bucket.key"
+        :text="entryStore.bucket !== bucket.key"
+        @click="select(bucket.key)"
       >
-        <span>{{ t('nav.all') }}</span>
-        <span class="text-xs text-muted-foreground">{{ entryStore.entries.length }}</span>
-      </button>
+        <template #icon>
+          <NIcon :component="bucket.icon" :size="16" />
+        </template>
+        <span class="flex-1 text-left">{{ t(bucket.label) }}</span>
+        <NText :depth="3" class="text-xs tabular-nums">{{ bucketCount(bucket.key) }}</NText>
+      </NButton>
 
-      <button
-        type="button"
-        class="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-accent"
-        :class="cn(entryStore.bucket === 'uncategorized' && 'bg-accent font-medium')"
-        @click="select('uncategorized')"
-      >
-        <span>{{ t('nav.uncategorized') }}</span>
-        <span class="text-xs text-muted-foreground">{{ entryStore.uncategorizedCount }}</span>
-      </button>
+      <div class="px-2 pb-1 pt-3">
+        <NText :depth="3" class="text-[11px] uppercase tracking-wide">
+          {{ t('nav.addCategory') }}
+        </NText>
+      </div>
 
-      <button
-        type="button"
-        class="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-accent"
-        :class="cn(entryStore.bucket === 'trash' && 'bg-accent font-medium')"
-        @click="select('trash')"
-      >
-        <span>{{ t('nav.trash') }}</span>
-        <span class="text-xs text-muted-foreground">{{ entryStore.trash.length }}</span>
-      </button>
-
+      <!-- 自定义分类 -->
       <div
         v-for="cat in entryStore.categories"
         :key="cat.id"
-        class="group flex items-center gap-1 rounded-md transition-colors hover:bg-accent"
-        :class="cn(entryStore.bucket === cat.id && 'bg-accent')"
+        class="group flex h-9 items-center rounded-md transition-colors hover:bg-accent"
+        :class="entryStore.bucket === cat.id ? 'bg-accent' : ''"
       >
-        <button
-          type="button"
-          class="flex min-w-0 flex-1 items-center justify-between px-2.5 py-2 text-sm"
-          :class="cn(entryStore.bucket === cat.id && 'font-medium')"
+        <NButton
+          block
+          class="!justify-start min-w-0 flex-1 border-0 bg-transparent shadow-none"
+          :type="entryStore.bucket === cat.id ? 'primary' : 'default'"
+          text
           @click="select(cat.id)"
         >
-          <span class="truncate">{{ cat.name }}</span>
-          <span class="shrink-0 text-xs text-muted-foreground">{{ cat.entryCount ?? 0 }}</span>
-        </button>
-        <div class="flex shrink-0 items-center gap-0.5 pr-1 opacity-0 group-hover:opacity-100">
-          <button
-            type="button"
-            class="rounded p-1 text-xs text-muted-foreground hover:text-foreground"
-            :title="t('sidebar.rename')"
-            @click.stop="openRename(cat)"
-          >
-            ✎
-          </button>
-          <button
-            type="button"
-            class="rounded p-1 text-xs text-muted-foreground hover:text-destructive"
-            :title="t('sidebar.delete')"
-            @click.stop="deleting = cat"
-          >
-            ✕
-          </button>
+          <template #icon>
+            <NIcon :component="Folder" :size="16" />
+          </template>
+          <span class="min-w-0 flex-1 truncate text-left">{{ cat.name }}</span>
+          <NText :depth="3" class="shrink-0 text-xs tabular-nums">
+            {{ cat.entryCount ?? 0 }}
+          </NText>
+        </NButton>
+        <div class="flex shrink-0 items-center pr-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          <NTooltip :show-arrow="false">
+            <template #trigger>
+              <NButton
+                quaternary
+                circle
+                size="tiny"
+                :aria-label="t('sidebar.rename')"
+                @click.stop="openRename(cat)"
+              >
+                <template #icon><NIcon :component="Pencil" :size="14" /></template>
+              </NButton>
+            </template>
+            {{ t('sidebar.rename') }}
+          </NTooltip>
+          <NTooltip :show-arrow="false">
+            <template #trigger>
+              <NButton
+                quaternary
+                circle
+                size="tiny"
+                :aria-label="t('sidebar.delete')"
+                @click.stop="askDelete(cat)"
+              >
+                <template #icon><NIcon :component="Trash2" :size="14" /></template>
+              </NButton>
+            </template>
+            {{ t('sidebar.delete') }}
+          </NTooltip>
         </div>
       </div>
 
-      <p
-        v-if="entryStore.categories.length === 0"
-        class="px-2.5 py-2 text-xs text-muted-foreground"
-      >
+      <NText v-if="entryStore.categories.length === 0" :depth="3" class="block px-3 py-2 text-xs">
         {{ t('sidebar.placeholder') }}
-      </p>
+      </NText>
     </nav>
 
     <div class="border-t border-border p-2">
-      <button
-        type="button"
-        class="w-full rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        @click="openCreate"
-      >
-        ＋ {{ t('sidebar.new') }}
-      </button>
+      <NButton block dashed @click="openCreate">
+        <template #icon><NIcon :component="Plus" :size="16" /></template>
+        {{ t('sidebar.new') }}
+      </NButton>
     </div>
 
     <!-- 新增 / 重命名分类 -->
-    <div
-      v-if="editing"
-      class="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4"
-      @click.self="editing = null"
+    <NModal
+      :show="Boolean(editing)"
+      :to="OVERLAY_TARGET"
+      preset="card"
+      :title="editing?.mode === 'create' ? t('sidebar.new') : t('sidebar.rename')"
+      style="width: min(420px, calc(100vw - 32px))"
+      :bordered="false"
+      @update:show="(show: boolean) => { if (!show) editing = null }"
     >
-      <div class="w-full max-w-sm rounded-xl border border-border bg-card p-5 shadow-lg">
-        <h3 class="mb-3 text-sm font-semibold">
-          {{ editing.mode === 'create' ? t('sidebar.new') : t('sidebar.rename') }}
-        </h3>
-        <label class="mb-1 block text-xs text-muted-foreground">{{ t('sidebar.nameLabel') }}</label>
-        <input
-          v-model="nameInput"
-          class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-          :placeholder="t('sidebar.namePlaceholder')"
-          maxlength="40"
-          @keyup.enter="submitCategory"
-        />
-        <p v-if="formError" class="mt-2 text-xs text-destructive">{{ formError }}</p>
-        <div class="mt-4 flex justify-end gap-2">
-          <button
-            type="button"
-            class="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent"
-            @click="editing = null"
-          >
-            {{ t('common.cancel') }}
-          </button>
-          <button
-            type="button"
-            class="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-60"
-            :disabled="busy"
-            @click="submitCategory"
-          >
+      <NText :depth="3" class="mb-1 block text-xs">{{ t('sidebar.nameLabel') }}</NText>
+      <NInput
+        v-model:value="nameInput"
+        :placeholder="t('sidebar.namePlaceholder')"
+        :maxlength="40"
+        :status="formError ? 'error' : undefined"
+        @keydown.enter="submitCategory"
+      />
+      <NText v-if="formError" type="error" class="mt-2 block text-xs">{{ formError }}</NText>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <NButton @click="editing = null">{{ t('common.cancel') }}</NButton>
+          <NButton type="primary" :loading="busy" @click="submitCategory">
             {{ t('common.save') }}
-          </button>
+          </NButton>
         </div>
-      </div>
-    </div>
-
-    <!-- 删除分类确认 -->
-    <div
-      v-if="deleting"
-      class="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4"
-      @click.self="deleting = null"
-    >
-      <div class="w-full max-w-sm rounded-xl border border-border bg-card p-5 shadow-lg">
-        <h3 class="mb-2 text-sm font-semibold">{{ t('sidebar.delete') }}：{{ deleting.name }}</h3>
-        <p class="text-xs text-muted-foreground">{{ t('sidebar.deleteConfirm') }}</p>
-        <div class="mt-4 flex justify-end gap-2">
-          <button
-            type="button"
-            class="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent"
-            @click="deleting = null"
-          >
-            {{ t('common.cancel') }}
-          </button>
-          <button
-            type="button"
-            class="rounded-md bg-destructive px-3 py-1.5 text-sm text-destructive-foreground hover:opacity-90 disabled:opacity-60"
-            :disabled="busy"
-            @click="confirmDelete"
-          >
-            {{ t('common.delete') }}
-          </button>
-        </div>
-      </div>
-    </div>
+      </template>
+    </NModal>
   </aside>
 </template>

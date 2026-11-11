@@ -1,7 +1,10 @@
 <script setup lang="ts">
+// 解锁页：首次使用进入"设置主密码"，之后为普通解锁。独立于主外壳，不带导航栏。
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { KeyRound, ShieldCheck } from 'lucide-vue-next'
+import { NAlert, NButton, NCard, NIcon, NInput, NTag, NText } from 'naive-ui'
 import { useVaultStore } from '@/stores/vault'
 import { isTauri } from '@/lib/ipc'
 
@@ -37,6 +40,12 @@ const strength = computed<'weak' | 'medium' | 'strong' | null>(() => {
   if (score <= 1) return 'weak'
   if (score <= 3) return 'medium'
   return 'strong'
+})
+
+const strengthType = computed(() => {
+  if (strength.value === 'weak') return 'error' as const
+  if (strength.value === 'medium') return 'warning' as const
+  return 'success' as const
 })
 
 async function submit() {
@@ -80,58 +89,77 @@ function messageOf(err: unknown): string {
 
 <template>
   <div class="flex h-screen items-center justify-center bg-background p-4">
-    <div class="w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-sm">
-      <div class="mb-1 text-center text-xl font-semibold">{{ t('app.name') }}</div>
-      <p class="mb-6 text-center text-sm text-muted-foreground">
-        {{ setupMode ? t('unlock.setupSubtitle') : t('unlock.subtitle') }}
-      </p>
-
-      <form @submit.prevent="submit">
-        <label class="mb-1 block text-sm text-muted-foreground">{{ t('unlock.password') }}</label>
-        <input
-          v-model="password"
-          type="password"
-          autocomplete="off"
-          class="mb-4 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-          :placeholder="t('unlock.password')"
-        />
-
-        <template v-if="setupMode">
-          <label class="mb-1 block text-sm text-muted-foreground">{{ t('unlock.confirm') }}</label>
-          <input
-            v-model="confirmPassword"
-            type="password"
-            autocomplete="off"
-            class="mb-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-            :placeholder="t('unlock.confirm')"
-          />
-          <p
-            v-if="strength"
-            class="mb-4 text-xs"
-            :class="{
-              'text-destructive': strength === 'weak',
-              'text-muted-foreground': strength !== 'weak',
-            }"
+    <div class="w-full max-w-sm">
+      <NCard :bordered="true" size="large" class="shadow-sm">
+        <div class="mb-5 text-center">
+          <div
+            class="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground"
           >
-            {{ t('unlock.strengthLabel') }}: {{ t(`unlock.strength.${strength}`) }}
-          </p>
-        </template>
+            <NIcon :component="ShieldCheck" :size="24" />
+          </div>
+          <NText strong class="block text-xl">{{ t('app.name') }}</NText>
+          <NText :depth="3" class="mt-1 block text-sm">
+            {{ setupMode ? t('unlock.setupSubtitle') : t('unlock.subtitle') }}
+          </NText>
+        </div>
 
-        <p v-if="error" class="mb-3 text-xs text-destructive">{{ error }}</p>
+        <form class="grid gap-3" @submit.prevent="submit">
+          <div>
+            <NText :depth="2" class="mb-1 block text-xs">{{ t('unlock.password') }}</NText>
+            <NInput
+              v-model:value="password"
+              type="password"
+              show-password-on="click"
+              autocomplete="off"
+              :placeholder="t('unlock.password')"
+              :status="error ? 'error' : undefined"
+              @keydown.enter.prevent="submit"
+            >
+              <template #prefix><NIcon :component="KeyRound" :size="16" /></template>
+            </NInput>
+          </div>
 
-        <button
-          type="submit"
-          :disabled="vault.busy"
-          class="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
-        >
-          {{ setupMode ? t('unlock.create') : t('unlock.unlock') }}
-        </button>
-      </form>
+          <template v-if="setupMode">
+            <div>
+              <NText :depth="2" class="mb-1 block text-xs">{{ t('unlock.confirm') }}</NText>
+              <NInput
+                v-model:value="confirmPassword"
+                type="password"
+                show-password-on="click"
+                autocomplete="off"
+                :placeholder="t('unlock.confirm')"
+                :status="error ? 'error' : undefined"
+                @keydown.enter.prevent="submit"
+              />
+            </div>
+            <div v-if="strength" class="flex items-center gap-2">
+              <NText :depth="3" class="text-xs">{{ t('unlock.strengthLabel') }}</NText>
+              <NTag size="small" :bordered="false" round :type="strengthType">
+                {{ t(`unlock.strength.${strength}`) }}
+              </NTag>
+            </div>
+          </template>
 
-      <p v-if="preview" class="mt-4 text-center text-xs text-muted-foreground">
-        {{ t('unlock.errors.preview') }}
-      </p>
-      <p class="mt-4 text-center text-xs text-muted-foreground">{{ t('unlock.cannotRecover') }}</p>
+          <NAlert v-if="error" type="error" :show-icon="false">{{ error }}</NAlert>
+
+          <NButton
+            type="primary"
+            block
+            attr-type="submit"
+            :loading="vault.busy"
+            class="mt-1"
+          >
+            {{ setupMode ? t('unlock.create') : t('unlock.unlock') }}
+          </NButton>
+        </form>
+
+        <NAlert v-if="preview" type="info" :show-icon="false" class="mt-4">
+          {{ t('unlock.errors.preview') }}
+        </NAlert>
+        <NText :depth="3" class="mt-4 block text-center text-xs">
+          {{ t('unlock.cannotRecover') }}
+        </NText>
+      </NCard>
     </div>
   </div>
 </template>

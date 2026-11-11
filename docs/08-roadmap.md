@@ -18,12 +18,12 @@
 
 ## 阶段 1 — 工程脚手架与界面骨架（已完成）
 
-**目标**：跑通 Tauri + Vue 3 + TS + Vite + Tailwind + shadcn-vue + vue-i18n 空壳。
+**目标**：跑通 Tauri + Vue 3 + TS + Vite + Tailwind + vue-i18n 空壳（当时使用 shadcn-vue，2026-11-11 起已全量迁移到 naive-ui，见 `02`）。
 
 > 进度：前端与 Rust 侧均已完成，`npm run tauri dev` 端到端启动通过；仅 lint/format 配置未补（不阻塞后续阶段）。
 
 - [x] 初始化前端工程（Vue + TS + Vite），配置目录结构（见 `03-architecture.md`）。
-- [x] 接入 TailwindCSS、基础主题令牌（浅色/暗色变量预留）；shadcn-vue 基础工具 `cn()` 就位，首批业务组件随阶段 3 引入。
+- [x] 接入 TailwindCSS、基础主题令牌（浅色/暗色变量预留）；早期 `cn()` 工具与 shadcn-vue 原语已随 naive-ui 迁移移除。
 - [x] 接入 vue-i18n：`zh-CN`/`en` 词条骨架、顶部栏语言切换（软件名右侧）、偏好持久化。
 - [x] 路由与页面骨架：解锁页占位、主界面左右布局占位、设置页占位。
 - [x] Pinia store 骨架（vault / entry / preferences）。
@@ -98,6 +98,11 @@
 - [x] 空状态与错误提示：各列表空状态、操作失败走 Toast；回收站空态单独文案。
 - [x] Tauri 打包：`tauri.conf.json` 已配 NSIS（`installMode: currentUser`）+ 图标 + 版本 0.2.0；`npm run tauri build` 在可访问 GitHub release 的环境下产出 `target/release/bundle/nsis/Mend_0.2.0_x64-setup.exe`（约 1.8 MB），网络受限时退化为 release `mend.exe`（便携分发）。
 - [x] README 使用说明（首次使用、回收站、备份/恢复、手动迁移、安全习惯）。
+- [x] UI 框架统一（2026-11-11，用户要求）：卸载 radix-vue / shadcn-vue 生态与 `cn()` 工具；全部交互控件改 naive-ui；`NConfigProvider` + `darkTheme` + `themeOverrides` 让 Tailwind 与 naive-ui 共用一套 CSS 变量；浮层统一挂载点；`EntryList` / `Sidebar` / `SettingsView` / `UnlockView` 四个视图完成重构，深浅主题与中英文案同步生效（见 `02`）。
+- [x] 预设页面与条目弹窗下拉的 GUI 逐项点击走查（2026-11-11，真实 Tauri 窗口逐项点击）：四类 Tab 的表格/空态/新增/内联编辑/删除确认与取消/表单类型随 Tab 联动；账号、邮箱、手机号、常用密码四类预设下拉回填的都是**值**而非 ID；生成器长度 16→24 可改、生成、重新生成、填入密码字段；浅色↔深色主题与中英文切换、浮层继承主题；`EntryList` / `Sidebar` / `SettingsView` / `UnlockView` 视觉一致性。走查数据已清理，偏好恢复为中文 + 跟随系统。
+- [x] 移除 `PresetsView` 的 `NDataTable virtual-scroll`：预设数据量小，虚拟滚动反而触发 `ResizeObserver loop completed with undelivered notifications.`，改用普通 `max-height` 滚动。
+
+**验收**：浅/深两套主题下控件颜色一致、浮层继承主题、无原生控件与硬编码文案；预设下拉选中的是值而不是 ID；生成器长度可改。（2026-11-11 GUI 走查逐项通过，结论见 `local/DEVLOG.md`。）
 
 ## 后续路线（非 MVP，按需排期）
 

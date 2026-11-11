@@ -2,60 +2,97 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * 全局设计令牌。Tailwind 布局类与 naive-ui 的 themeOverrides 共用这一套 HSL 变量：
+ * 浅/深两套只在 :root 与 .dark 之间切换，组件里不再出现硬编码色值。
+ */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    --background: 220 24% 98%;
+    --foreground: 222 32% 14%;
+    --surface: 220 20% 96%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --primary: 222 47% 11%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 222 47% 11%;
-    --radius: 0.5rem;
+    --card-foreground: 222 32% 14%;
+    --primary: 243 70% 54%;
+    --primary-hover: 243 72% 61%;
+    --primary-pressed: 243 74% 46%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 20% 95%;
+    --secondary-foreground: 222 32% 14%;
+    --muted: 220 18% 95%;
+    --muted-foreground: 220 10% 45%;
+    --accent: 220 20% 94%;
+    --accent-foreground: 222 32% 14%;
+    --border: 220 16% 89%;
+    --input: 220 16% 87%;
+    --ring: 243 70% 54%;
+    --radius: 0.625rem;
+    --text-1: 222 32% 14%;
+    --text-2: 220 14% 32%;
+    --text-3: 220 10% 48%;
+    --success: 152 62% 36%;
+    --warning: 30 88% 42%;
+    --error: 0 70% 47%;
+    --info: 212 85% 48%;
   }
 
   .dark {
-    --background: 222 47% 7%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 10%;
-    --card-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222 47% 11%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
-    --ring: 210 40% 80%;
+    --background: 222 24% 9%;
+    --foreground: 220 20% 94%;
+    --surface: 222 22% 11%;
+    --card: 222 21% 13%;
+    --card-foreground: 220 20% 94%;
+    --primary: 243 82% 68%;
+    --primary-hover: 243 88% 75%;
+    --primary-pressed: 243 70% 58%;
+    --primary-foreground: 222 30% 10%;
+    --secondary: 222 18% 18%;
+    --secondary-foreground: 220 20% 94%;
+    --muted: 222 18% 18%;
+    --muted-foreground: 220 12% 66%;
+    --accent: 222 18% 20%;
+    --accent-foreground: 220 20% 94%;
+    --border: 222 16% 22%;
+    --input: 222 16% 26%;
+    --ring: 243 82% 68%;
+    --text-1: 220 20% 94%;
+    --text-2: 220 14% 78%;
+    --text-3: 220 10% 62%;
+    --success: 152 55% 52%;
+    --warning: 34 90% 62%;
+    --error: 0 78% 66%;
+    --info: 210 85% 66%;
   }
 
-  * {
-    @apply border-border;
+  html,
+  body,
+  #app {
+    height: 100%;
   }
 
   body {
     @apply bg-background text-foreground antialiased;
     font-family:
-      ui-sans-serif,
-      system-ui,
-      -apple-system,
-      'Segoe UI',
-      Roboto,
-      'Helvetica Neue',
-      Arial,
-      'PingFang SC',
-      'Microsoft YaHei',
-      sans-serif;
+      ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+      'PingFang SC', 'Microsoft YaHei', sans-serif;
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  /* 焦点可见环由 naive-ui 组件提供；这里只兜住少量自定义元素 */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
+/* 状态过渡统一 180ms ease-out；尊重系统减少动效设置 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

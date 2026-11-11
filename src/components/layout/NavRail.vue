@@ -1,14 +1,14 @@
 <script setup lang="ts">
-// 最左侧图标导航栏：上方主页/预设，下方语言、设置、锁定。
-import { h } from 'vue'
+// 最左侧图标导航栏：上方条目/预设值，下方语言、设置、锁定。
+import { computed, h, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Home, IdCard, KeyRound, Languages, Lock, Settings } from 'lucide-vue-next'
+import { NMenu, NIcon, NButton, NTooltip, type MenuOption } from 'naive-ui'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useVaultStore } from '@/stores/vault'
 import { setI18nLocale } from '@/i18n'
 import type { Locale } from '@/types'
-import { NMenu, NIcon, NButton, NSpace } from 'naive-ui'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -39,54 +39,103 @@ async function onLock() {
   }
 }
 
-function renderIcon(icon: any) {
+function renderIcon(icon: Component) {
   return () => h(NIcon, null, { default: () => h(icon) })
 }
 
-const menuOptions = navItems.map((item) => ({
-  key: item.name,
-  label: t(item.label),
-  icon: renderIcon(item.icon),
-  onClick: () => router.push(item.to),
-}))
+// computed 保证切换语言后菜单文案立即刷新
+const menuOptions = computed<MenuOption[]>(() =>
+  navItems.map((item) => ({
+    key: item.name,
+    label: t(item.label),
+    icon: renderIcon(item.icon),
+  })),
+)
+
+function onMenuSelect(key: string) {
+  const target = navItems.find((item) => item.name === key)
+  if (target) router.push(target.to)
+}
+
+const isSettings = computed(() => route.name === 'settings')
 </script>
 
 <template>
-  <div class="flex h-full flex-col items-center gap-2 px-2 py-2">
-    <!-- Logo -->
-    <div class="mb-1 flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-      <NIcon :component="KeyRound" class="h-5 w-5" />
+  <div class="flex h-screen flex-col gap-1 px-2 py-3">
+    <!-- 品牌标识 -->
+    <div class="mb-3 flex h-10 items-center justify-center gap-2">
+      <div
+        class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground"
+      >
+        <NIcon :component="KeyRound" :size="20" />
+      </div>
+      <span v-if="!collapsed" class="truncate text-sm font-semibold tracking-tight">
+        {{ t('app.name') }}
+      </span>
     </div>
 
-    <!-- 主菜单 -->
-    <NSpace vertical size="small" class="flex-1">
-      <NMenu
-        :collapsed="collapsed"
-        :collapsed-width="64"
-        :collapsed-icon-size="22"
-        :options="menuOptions"
-        :value="route.name as string"
-        @update:value="(key: string) => router.push((navItems.find((i) => i.name === key) as any)?.to)"
-      />
-    </NSpace>
+    <NMenu
+      :collapsed="collapsed"
+      :collapsed-width="48"
+      :collapsed-icon-size="21"
+      :options="menuOptions"
+      :value="route.name as string"
+      :indent="12"
+      @update:value="onMenuSelect"
+    />
 
-    <!-- 底部操作 -->
-    <NSpace vertical size="small">
-      <NButton text :title="t('nav.language')" @click="toggleLocale">
-        <template #icon>
-          <NIcon :component="Languages" />
+    <div class="mt-auto flex flex-col items-center gap-1 pb-1">
+      <NTooltip placement="right" :show-arrow="false">
+        <template #trigger>
+          <NButton
+            quaternary
+            circle
+            :aria-label="t('nav.language')"
+            :title="t('nav.language')"
+            @click="toggleLocale"
+          >
+            <template #icon>
+              <NIcon :component="Languages" />
+            </template>
+          </NButton>
         </template>
-      </NButton>
-      <NButton text :title="t('nav.settings')" @click="router.push('/settings')">
-        <template #icon>
-          <NIcon :component="Settings" />
+        {{ preferences.locale === 'zh-CN' ? 'English' : '中文' }}
+      </NTooltip>
+
+      <NTooltip placement="right" :show-arrow="false">
+        <template #trigger>
+          <NButton
+            quaternary
+            circle
+            :type="isSettings ? 'primary' : 'default'"
+            :aria-label="t('nav.settings')"
+            :title="t('nav.settings')"
+            @click="router.push('/settings')"
+          >
+            <template #icon>
+              <NIcon :component="Settings" />
+            </template>
+          </NButton>
         </template>
-      </NButton>
-      <NButton text :title="t('nav.lock')" @click="onLock" class="hover:text-red-500">
-        <template #icon>
-          <NIcon :component="Lock" />
+        {{ t('nav.settings') }}
+      </NTooltip>
+
+      <NTooltip placement="right" :show-arrow="false">
+        <template #trigger>
+          <NButton
+            quaternary
+            circle
+            :aria-label="t('nav.lock')"
+            :title="t('nav.lock')"
+            @click="onLock"
+          >
+            <template #icon>
+              <NIcon :component="Lock" />
+            </template>
+          </NButton>
         </template>
-      </NButton>
-    </NSpace>
+        {{ t('nav.lock') }}
+      </NTooltip>
+    </div>
   </div>
 </template>

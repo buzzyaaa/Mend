@@ -161,6 +161,7 @@
     "imported": "恢复完成：{entries} 条条目、{categories} 个分类。请用该备份的主密码重新解锁。"
   },
   "settings": {
+    "appearance": "外观与行为",
     "theme": "主题",
     "themeSystem": "跟随系统",
     "themeLight": "浅色",
@@ -197,6 +198,7 @@
     "delete": "删除",
     "rename": "重命名",
     "close": "关闭",
-    "deleteConfirm": "确定删除该条目？"
+    "deleteConfirm": "确定删除该条目？",
+    "actions": "操作"
   }
 }

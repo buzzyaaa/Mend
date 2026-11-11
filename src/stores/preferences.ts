@@ -5,6 +5,7 @@ import { ref, watch } from 'vue'
 import type { Locale, ThemeMode } from '@/types'
 
 const STORAGE_KEY = 'mend.preferences'
+const colorScheme = window.matchMedia('(prefers-color-scheme: dark)')
 
 interface StoredPrefs {
   locale?: Locale
@@ -28,12 +29,8 @@ function detectLocale(stored: StoredPrefs): Locale {
   return navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en'
 }
 
-/** 把主题应用到 `<html>`：`system` 跟随系统，其余直接切换 `.dark`。 */
-function applyTheme(mode: ThemeMode) {
-  const dark =
-    mode === 'dark' ||
-    (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  document.documentElement.classList.toggle('dark', dark)
+function computeDark(mode: ThemeMode) {
+  return mode === 'dark' || (mode === 'system' && colorScheme.matches)
 }
 
 export const usePreferencesStore = defineStore('preferences', () => {
@@ -41,10 +38,18 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
   const locale = ref<Locale>(detectLocale(stored))
   const theme = ref<ThemeMode>(stored.theme ?? 'system')
+  /** 当前是否为深色：Tailwind 的 `.dark` 与 naive-ui 的 darkTheme 都以此为准。 */
+  const isDark = ref(computeDark(theme.value))
   /** 空闲自动锁定（分钟），0 = 关闭。 */
   const autoLockMinutes = ref<number>(stored.autoLockMinutes ?? 15)
   /** 复制后自动清空剪贴板（秒），0 = 关闭。 */
   const clipboardClearSeconds = ref<number>(stored.clipboardClearSeconds ?? 30)
+
+  /** 把主题应用到 `<html>`，并同步给 NConfigProvider。 */
+  function applyTheme(mode: ThemeMode = theme.value) {
+    isDark.value = computeDark(mode)
+    document.documentElement.classList.toggle('dark', isDark.value)
+  }
 
   watch(
     [locale, theme, autoLockMinutes, clipboardClearSeconds],
@@ -58,7 +63,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
           clipboardClearSeconds: clipboardClearSeconds.value,
         }),
       )
-      applyTheme(theme.value)
+      applyTheme()
     },
     { deep: false },
   )
@@ -81,8 +86,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
   /** 启动时调用：应用已保存的主题，并在 system 模式下跟随系统变化。 */
   function initTheme() {
-    applyTheme(theme.value)
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    applyTheme()
+    colorScheme.addEventListener('change', () => {
       if (theme.value === 'system') applyTheme('system')
     })
   }
@@ -90,6 +95,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
   return {
     locale,
     theme,
+    isDark,
     autoLockMinutes,
     clipboardClearSeconds,
     setLocale,

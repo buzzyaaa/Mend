@@ -1,6 +1,31 @@
 <script setup lang="ts">
+// 条目列表：搜索 / 排序 / 卡片字段展示 / 回收站视图。
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import {
+  Copy,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Search,
+  Star,
+  Trash2,
+} from 'lucide-vue-next'
+import {
+  NButton,
+  NCard,
+  NEmpty,
+  NIcon,
+  NInput,
+  NSelect,
+  NTag,
+  NText,
+  NTooltip,
+  useDialog,
+} from 'naive-ui'
 import { useEntryStore, type SortBy } from '@/stores/entry'
 import { useClipboard } from '@/composables/useClipboard'
 import { useToast } from '@/composables/useToast'
@@ -12,12 +37,22 @@ const { t } = useI18n()
 const store = useEntryStore()
 const { copy } = useClipboard()
 const toast = useToast()
+const dialog = useDialog()
 
 const dialogOpen = ref(false)
 const editing = ref<EntryView | null>(null)
 const revealedPasswordIds = ref<Set<string>>(new Set())
 
 const listTitle = computed(() => (store.isTrashView ? t('nav.trash') : t('entry.listTitle')))
+const sortOptions = computed(() => [
+  { label: t('entry.sortUpdated'), value: 'updated' },
+  { label: t('entry.sortTitle'), value: 'title' },
+  { label: t('entry.sortFavorite'), value: 'favorite' },
+])
+const emptyText = computed(() => {
+  if (store.isTrashView) return t('trash.empty')
+  return store.entries.length === 0 ? t('entry.empty') : t('entry.emptyInBucket')
+})
 
 function openCreate() {
   editing.value = null
@@ -49,10 +84,6 @@ function openUrl(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 
-function onSortChange(event: Event) {
-  store.setSortBy((event.target as HTMLSelectElement).value as SortBy)
-}
-
 function issueOf(entry: EntryView) {
   return store.passwordIssues.get(entry.id)
 }
@@ -66,24 +97,38 @@ async function restore(entry: EntryView) {
   }
 }
 
-async function purge(entry: EntryView) {
-  if (!window.confirm(t('trash.purgeConfirm', { title: entry.title }))) return
-  try {
-    await store.purgeEntry(entry.id)
-    toast.success(t('trash.purged'))
-  } catch (err) {
-    toast.error(t('toast.failed', { message: messageOf(err) }))
-  }
+function purge(entry: EntryView) {
+  dialog.warning({
+    title: t('trash.purge'),
+    content: t('trash.purgeConfirm', { title: entry.title }),
+    positiveText: t('common.delete'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: async () => {
+      try {
+        await store.purgeEntry(entry.id)
+        toast.success(t('trash.purged'))
+      } catch (err) {
+        toast.error(t('toast.failed', { message: messageOf(err) }))
+      }
+    },
+  })
 }
 
-async function purgeAll() {
-  if (!window.confirm(t('trash.purgeAllConfirm'))) return
-  try {
-    const count = await store.purgeAllTrash()
-    toast.success(t('trash.purgedMany', { count }))
-  } catch (err) {
-    toast.error(t('toast.failed', { message: messageOf(err) }))
-  }
+function purgeAll() {
+  dialog.warning({
+    title: t('trash.purgeAll'),
+    content: t('trash.purgeAllConfirm'),
+    positiveText: t('common.confirm'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: async () => {
+      try {
+        const count = await store.purgeAllTrash()
+        toast.success(t('trash.purgedMany', { count }))
+      } catch (err) {
+        toast.error(t('toast.failed', { message: messageOf(err) }))
+      }
+    },
+  })
 }
 
 function messageOf(err: unknown): string {
@@ -123,194 +168,196 @@ function formatDate(ms: number | null | undefined): string {
 
 <template>
   <section class="flex min-w-0 flex-1 flex-col bg-background">
-    <div class="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
-      <h2 class="shrink-0 text-sm font-medium">{{ listTitle }}</h2>
+    <!-- 工具条 -->
+    <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-3">
+      <NText strong class="mr-1 shrink-0 text-base">{{ listTitle }}</NText>
 
-      <input
+      <NInput
         :value="store.keyword"
-        class="min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+        clearable
+        class="min-w-40 flex-1"
         :placeholder="t('entry.searchPlaceholder')"
-        @input="store.setKeyword(($event.target as HTMLInputElement).value)"
-      />
+        @update:value="(value: string) => store.setKeyword(value)"
+      >
+        <template #prefix><NIcon :component="Search" :size="16" /></template>
+      </NInput>
 
-      <select
+      <NSelect
         v-if="!store.isTrashView"
         :value="store.sortBy"
-        class="shrink-0 rounded-md border border-input bg-background px-2 py-1.5 text-xs text-muted-foreground outline-none"
-        @change="onSortChange"
-      >
-        <option value="updated">{{ t('entry.sortUpdated') }}</option>
-        <option value="title">{{ t('entry.sortTitle') }}</option>
-        <option value="favorite">{{ t('entry.sortFavorite') }}</option>
-      </select>
+        :options="sortOptions"
+        style="width: 132px"
+        @update:value="(value: SortBy) => store.setSortBy(value)"
+      />
 
-      <button
+      <NButton
         v-if="store.isTrashView"
-        type="button"
-        class="shrink-0 rounded-md border border-destructive px-3 py-1.5 text-sm text-destructive hover:bg-accent disabled:opacity-60"
+        type="error"
+        secondary
         :disabled="store.trash.length === 0"
         @click="purgeAll"
       >
+        <template #icon><NIcon :component="Trash2" :size="16" /></template>
         {{ t('trash.purgeAll') }}
-      </button>
-
-      <button
-        v-else
-        type="button"
-        class="shrink-0 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
-        @click="openCreate"
-      >
-        ＋ {{ t('entry.add') }}
-      </button>
+      </NButton>
+      <NButton v-else type="primary" @click="openCreate">
+        <template #icon><NIcon :component="Plus" :size="16" /></template>
+        {{ t('entry.add') }}
+      </NButton>
     </div>
 
-    <div class="flex-1 overflow-y-auto p-4">
-      <div
-        v-if="store.visibleEntries.length === 0"
-        class="flex h-40 items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground"
-      >
-        {{
-          store.isTrashView
-            ? t('trash.empty')
-            : store.entries.length === 0
-              ? t('entry.empty')
-              : t('entry.emptyInBucket')
-        }}
-      </div>
+    <!-- 列表 -->
+    <div class="min-h-0 flex-1 overflow-y-auto p-4">
+      <NEmpty v-if="store.visibleEntries.length === 0" :description="emptyText" class="py-16">
+        <template v-if="!store.isTrashView" #extra>
+          <NButton size="small" @click="openCreate">{{ t('entry.add') }}</NButton>
+        </template>
+      </NEmpty>
 
-      <div
+      <NCard
         v-for="entry in store.visibleEntries"
         :key="entry.id"
-        class="mb-3 rounded-lg border border-border bg-card p-3 shadow-sm transition-colors hover:border-primary/40"
+        size="small"
+        hoverable
+        class="mb-3"
       >
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0">
-            <div class="flex items-center gap-2">
-              <span v-if="entry.favorite" class="text-xs text-amber-500">★</span>
-              <h3 class="truncate text-sm font-semibold">{{ entry.title }}</h3>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <NIcon
+                v-if="entry.favorite"
+                :component="Star"
+                :size="14"
+                color="hsl(var(--warning))"
+              />
+              <NText strong class="truncate text-sm">{{ entry.title }}</NText>
 
-              <!-- 密码体检标记 -->
-              <span
-                v-if="issueOf(entry)?.weak"
-                class="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-600"
-                :title="t('entry.weakPassword')"
-                >{{ t('entry.weakShort') }}</span
-              >
-              <span
-                v-if="issueOf(entry)?.duplicate"
-                class="shrink-0 rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] text-destructive"
-                :title="t('entry.duplicatePassword')"
-                >{{ t('entry.dupShort') }}</span
-              >
+              <NTooltip v-if="issueOf(entry)?.weak" :show-arrow="false">
+                <template #trigger>
+                  <NTag size="small" type="warning" :bordered="false" round>
+                    {{ t('entry.weakShort') }}
+                  </NTag>
+                </template>
+                {{ t('entry.weakPassword') }}
+              </NTooltip>
+              <NTooltip v-if="issueOf(entry)?.duplicate" :show-arrow="false">
+                <template #trigger>
+                  <NTag size="small" type="error" :bordered="false" round>
+                    {{ t('entry.dupShort') }}
+                  </NTag>
+                </template>
+                {{ t('entry.duplicatePassword') }}
+              </NTooltip>
             </div>
-            <p class="mt-0.5 text-xs text-muted-foreground">
+
+            <NText :depth="3" class="mt-0.5 block text-xs">
               {{ categoryName(entry.categoryId) }}
               <span v-if="store.isTrashView">
-                · {{ t('trash.deletedAt') }} {{ formatDate(entry.deletedAt) }}</span
-              >
-            </p>
-            <div v-if="entry.tags.length && !store.isTrashView" class="mt-1 flex flex-wrap gap-1">
-              <button
-                v-for="tag in entry.tags"
-                :key="tag"
-                type="button"
-                class="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                :class="store.tagFilter === tag ? 'bg-accent text-foreground' : ''"
-                :title="t('entry.tagFilterHint')"
-                @click="store.toggleTagFilter(tag)"
-              >
-                #{{ tag }}
-              </button>
+                · {{ t('trash.deletedAt') }} {{ formatDate(entry.deletedAt) }}
+              </span>
+            </NText>
+
+            <div v-if="entry.tags.length && !store.isTrashView" class="mt-1.5 flex flex-wrap gap-1">
+              <NTooltip v-for="tag in entry.tags" :key="tag" :show-arrow="false">
+                <template #trigger>
+                  <NTag
+                    size="small"
+                    round
+                    :bordered="false"
+                    :type="store.tagFilter === tag ? 'primary' : 'default'"
+                    class="cursor-pointer"
+                    @click="store.toggleTagFilter(tag)"
+                  >
+                    #{{ tag }}
+                  </NTag>
+                </template>
+                {{ t('entry.tagFilterHint') }}
+              </NTooltip>
             </div>
           </div>
 
           <div class="flex shrink-0 items-center gap-1">
             <template v-if="store.isTrashView">
-              <button
-                type="button"
-                class="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-                @click="restore(entry)"
-              >
+              <NButton size="small" quaternary @click="restore(entry)">
+                <template #icon><NIcon :component="RotateCcw" :size="14" /></template>
                 {{ t('trash.restore') }}
-              </button>
-              <button
-                type="button"
-                class="rounded-md px-2 py-1 text-xs text-destructive hover:bg-accent"
-                @click="purge(entry)"
-              >
+              </NButton>
+              <NButton size="small" quaternary type="error" @click="purge(entry)">
                 {{ t('trash.purge') }}
-              </button>
+              </NButton>
             </template>
-            <button
-              v-else
-              type="button"
-              class="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-              @click="openEdit(entry)"
-            >
+            <NButton v-else size="small" quaternary @click="openEdit(entry)">
+              <template #icon><NIcon :component="Pencil" :size="14" /></template>
               {{ t('entry.edit') }}
-            </button>
+            </NButton>
           </div>
         </div>
 
-        <!-- 回收站里只展示账号等摘要，不提供复制（避免已删数据继续扩散） -->
+        <!-- 回收站里不展示可复制字段，避免已删数据继续扩散 -->
         <div v-if="!store.isTrashView" class="mt-2 space-y-1">
-          <div
-            v-for="row in fieldRows(entry)"
-            :key="row.key"
-            class="flex items-center gap-2 text-sm"
-          >
-            <span class="w-16 shrink-0 text-xs text-muted-foreground">{{ row.label }}</span>
-            <span
-              class="min-w-0 flex-1 truncate font-mono"
-              :class="row.masked ? 'tracking-widest text-muted-foreground' : ''"
+          <div v-for="row in fieldRows(entry)" :key="row.key" class="flex items-center gap-2">
+            <NText :depth="3" class="w-16 shrink-0 text-xs">{{ row.label }}</NText>
+            <NText
+              code
+              class="min-w-0 flex-1 truncate"
+              :class="row.masked ? 'tracking-widest' : ''"
             >
               {{ row.masked ? '••••••••' : row.value }}
-            </span>
+            </NText>
 
-            <button
-              v-if="row.masked"
-              type="button"
-              class="shrink-0 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-              :title="t('entry.show')"
-              @click="togglePassword(entry.id)"
-            >
-              👁
-            </button>
-            <button
-              v-else-if="row.key === 'password'"
-              type="button"
-              class="shrink-0 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-              :title="t('entry.hide')"
-              @click="togglePassword(entry.id)"
-            >
-              🙈
-            </button>
+            <NTooltip v-if="row.key === 'password'" :show-arrow="false">
+              <template #trigger>
+                <NButton
+                  quaternary
+                  circle
+                  size="tiny"
+                  :aria-label="row.masked ? t('entry.show') : t('entry.hide')"
+                  @click="togglePassword(entry.id)"
+                >
+                  <template #icon>
+                    <NIcon :component="row.masked ? Eye : EyeOff" :size="14" />
+                  </template>
+                </NButton>
+              </template>
+              {{ row.masked ? t('entry.show') : t('entry.hide') }}
+            </NTooltip>
 
-            <button
-              v-if="row.href"
-              type="button"
-              class="shrink-0 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-              :title="t('entry.openUrl')"
-              @click="openUrl(row.value)"
-            >
-              ↗
-            </button>
+            <NTooltip v-if="row.href" :show-arrow="false">
+              <template #trigger>
+                <NButton
+                  quaternary
+                  circle
+                  size="tiny"
+                  :aria-label="t('entry.openUrl')"
+                  @click="openUrl(row.value)"
+                >
+                  <template #icon><NIcon :component="ExternalLink" :size="14" /></template>
+                </NButton>
+              </template>
+              {{ t('entry.openUrl') }}
+            </NTooltip>
 
-            <button
-              type="button"
-              class="shrink-0 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-              :title="t('entry.copy')"
-              @click="copy(row.value)"
-            >
-              ⧉
-            </button>
+            <NTooltip :show-arrow="false">
+              <template #trigger>
+                <NButton
+                  quaternary
+                  circle
+                  size="tiny"
+                  :aria-label="t('entry.copy')"
+                  @click="copy(row.value)"
+                >
+                  <template #icon><NIcon :component="Copy" :size="14" /></template>
+                </NButton>
+              </template>
+              {{ t('entry.copy') }}
+            </NTooltip>
           </div>
         </div>
 
-        <p v-if="entry.notes.trim()" class="mt-2 line-clamp-2 text-xs text-muted-foreground">
+        <NText v-if="entry.notes.trim()" :depth="3" class="mt-2 line-clamp-2 block text-xs">
           {{ summary(entry.notes) }}
-        </p>
-      </div>
+        </NText>
+      </NCard>
     </div>
 
     <EntryDialog :open="dialogOpen" :entry="editing" @close="dialogOpen = false" />

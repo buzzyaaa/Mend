@@ -31,7 +31,7 @@ Mend 是本地离线、存盘加密的个人密码管理器。接手或继续开
 | 核心逻辑 | `src-tauri/core/`（crate `mend-core`，不依赖 Tauri/WebView） | 加密、SQLite 仓储、条目/预设/备份编排、金库生命周期、生成器、同步 trait |
 | IPC 命令层 | `src-tauri/src/commands/` | 只做参数搬运、状态守卫、错误映射；不写业务规则 |
 | 应用装配 | `src-tauri/src/lib.rs` | 插件注册、`generate_handler!` 注册命令、`manage` 状态 |
-| 前端 | `src/`（`views/`、`components/`、`stores/`、`lib/`、`composables/`） | 界面、状态、IPC 封装、纯函数工具（如 `markdown.ts`、`security.ts`） |
+| 前端 | `src/`（`views/`、`components/`、`stores/`、`lib/`、`composables/`） | 界面、状态、IPC 封装、主题覆盖（`lib/theme.ts`）、纯函数工具（如 `markdown.ts`、`security.ts`） |
 
 新增业务逻辑默认落 `mend-core`；命令层与前端只做传递与展示。
 
@@ -103,7 +103,8 @@ Mend 属于 **product register**（用户在执行任务，设计服务于任务
 - 组件必须齐 `default / hover / focus / active / disabled / loading / error` 状态；列表要有空态、加载态、错误态。
 - 动效只表达状态，150–250ms，ease-out，不用 bounce/elastic，尊重 `prefers-reduced-motion`。
 - 绝对禁令：侧边彩色条、渐变文字、装饰性毛玻璃、大数字 hero 指标、同尺寸卡片阵列、动辄用弹窗。
-- 不引入新 UI 依赖（不装组件库；图标只用已装的 `lucide-vue-next` 按需引入，不再加第二套图标库），沿用 Tailwind + 现有 `cn()` 工具。
+- **组件库已定为 naive-ui**（见 `docs/02`）：按钮、输入、下拉、表格、弹窗、确认、消息、菜单一律用 naive-ui 组件，不写原生 `<button>` / `<input>` / `<select>` / `window.confirm`；Tailwind 只做布局与尺寸。不引入第二套组件库或图标库，图标只用已装的 `lucide-vue-next`；`cn()` 已随 shadcn 生态移除，不再使用。
+- 新组件的颜色必须来自 `main.css` 的 CSS 变量（naive-ui 侧由 `src/lib/theme.ts` 的 `themeOverrides` 注入）；需要 teleport 的浮层挂到 `OVERLAY_TARGET`，否则深浅主题会失效。
 
 ### awesome-design-md —— 需要某个品牌的设计语言参考时
 

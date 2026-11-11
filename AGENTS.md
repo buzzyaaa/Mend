@@ -5,7 +5,7 @@
 
 ## 1. 项目一句话定位
 
-**Mend**：本地离线、存盘加密的个人密码管理器（Tauri 2 + Vue 3 + TypeScript + TailwindCSS + SQLite）。
+**Mend**：本地离线、存盘加密的个人密码管理器（Tauri 2 + Vue 3 + TypeScript + naive-ui + TailwindCSS（仅布局）+ SQLite）。
 所有数据默认只保存在本机；UI 解锁后可明文查看（自用场景），但数据库落盘的敏感字段必须加密。
 
 ## 2. 当前状态（截至最近一次更新）
@@ -17,7 +17,8 @@
 - 仓库现状：前端 `src/`、`src-tauri/`（含 `core/`）、`scripts/dev-env.ps1`、`docs/`、`skills/`（开发 Skill 统一存放：`mend-dev` 为总入口，`self-improving` / `impeccable` / `awesome-design-md` 为配套，来源与许可见 `skills/NOTICE.md`）；`node_modules/`、`dist/`、`target/`、`local/` 已忽略。
 - 工具链：Node 22.23.2 / npm 10.9.8；Rust 1.99.1（GNU 目标）；MinGW-w64 gcc 16.2.0；git 2.55；gh CLI。安装位置、初始化与取舍见 `docs/09-env-setup.md`。
 - **每个新 PowerShell 会话先执行 `.\scripts\dev-env.ps1`**，把 cargo/MinGW/git/gh 加入会话 PATH（默认不在系统 PATH）。
-- 阶段 1 遗留：ESLint/Prettier 未配；占位图标；rusqlite 留待阶段 2 启用。
+- UI 框架已统一为 **naive-ui**（2026-11-11）：radix-vue / shadcn-vue 生态与 `cn()` 工具全部移除；`App.vue` 用 `NConfigProvider` + `darkTheme` + `themeOverrides` 让 Tailwind 与 naive-ui 共用一套 CSS 变量，浮层统一挂 `OVERLAY_TARGET`；`AppShell` / `NavRail` / `EntryDialog` / `PresetsView` 与 `EntryList` / `Sidebar` / `SettingsView` / `UnlockView` 全部使用 naive-ui 控件。规则细节见 `docs/02-tech-decision-ui.md` 与 `skills/mend-dev/references/frontend-quality.md`。
+- 占位图标仍在使用；阶段 1 的其他遗留（ESLint/Prettier、rusqlite）已补齐。
 - 最新进度与未完成项以本地私有 `local/DEVLOG.md` 顶部条目为准（该目录不入库、不推送）。
 
 ## 3. 必读文档（按顺序）

@@ -15,8 +15,9 @@ src-tauri/gen/
 *.rs.bk
 Cargo.lock.bak
 
-# --- 本地私有目录（开发日志等，不推送到 GitHub） ---
+# --- 本地私有目录（开发日志、工作区记忆等，不推送到 GitHub） ---
 /local/
+/.workbuddy/
 
 # --- 应用数据 / 敏感库文件（切勿提交） ---
 *.db

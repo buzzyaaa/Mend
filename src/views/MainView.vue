@@ -5,7 +5,7 @@ import EntryList from '@/components/layout/EntryList.vue'
 </script>
 
 <template>
-  <div class="flex flex-1 overflow-hidden">
+  <div class="flex h-screen min-h-0 w-full overflow-hidden">
     <Sidebar />
     <EntryList />
   </div>

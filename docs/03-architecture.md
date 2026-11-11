@@ -54,11 +54,11 @@ Mend/
 │   ├── stores/               # Pinia：vault、entry、preset、ui、preferences
 │   ├── views/                # UnlockView、MainView、PresetsView、SettingsView
 │   ├── components/
-│   │   ├── ui/               # 基础通用组件（ToastHost 等，纯 Tailwind）
 │   │   ├── layout/           # AppShell（外壳）、NavRail（图标导航栏）、Sidebar、EntryList
 │   │   └── entry/            # EntryDialog：条目表单 + Markdown 备注编辑/预览
 │   ├── composables/          # useClipboard、useToast、useAutoLock
-│   ├── lib/                  # ipc 封装、markdown 安全渲染、cn 工具
+│   ├── lib/                  # ipc 封装、markdown 安全渲染、theme 主题覆盖
+│   ├── assets/               # main.css：浅/深两套 CSS 变量（唯一色彩来源）
 │   ├── locales/              # zh-CN.json、en.json
 │   └── types/
 ├── src-tauri/
