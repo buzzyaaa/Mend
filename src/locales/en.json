@@ -9,12 +9,12 @@
     "trash": "Trash",
     "search": "Search",
     "categories": "Categories",
-    "addCategory": "Add category"
-  },
-  "topbar": {
-    "lock": "Lock",
+    "addCategory": "Add category",
+    "home": "Entries",
+    "presets": "Presets",
     "settings": "Settings",
-    "language": "Language"
+    "language": "Language",
+    "lock": "Lock"
   },
   "entry": {
     "title": "Title",
@@ -157,12 +157,9 @@
     "importAction": "Restore & overwrite",
     "exported": "Backup written: {path} ({size})",
     "importConfirm": "Restore will overwrite the current vault; the existing file is kept as a backup. Continue?",
-    "imported": "Restored {entries} entries and {categories} categories. Unlock again with the backup's master password.",
-    "webdav": "WebDAV sync",
-    "webdavDisabled": "Disabled (interface reserved; this version makes no network requests)"
+    "imported": "Restored {entries} entries and {categories} categories. Unlock again with the backup's master password."
   },
   "settings": {
-    "language": "Language",
     "theme": "Theme",
     "themeSystem": "Follow system",
     "themeLight": "Light",

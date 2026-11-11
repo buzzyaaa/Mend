@@ -103,7 +103,7 @@ Mend 属于 **product register**（用户在执行任务，设计服务于任务
 - 组件必须齐 `default / hover / focus / active / disabled / loading / error` 状态；列表要有空态、加载态、错误态。
 - 动效只表达状态，150–250ms，ease-out，不用 bounce/elastic，尊重 `prefers-reduced-motion`。
 - 绝对禁令：侧边彩色条、渐变文字、装饰性毛玻璃、大数字 hero 指标、同尺寸卡片阵列、动辄用弹窗。
-- 不引入新 UI 依赖（不装组件库/图标库），沿用 Tailwind + 现有 `cn()` 工具。
+- 不引入新 UI 依赖（不装组件库；图标只用已装的 `lucide-vue-next` 按需引入，不再加第二套图标库），沿用 Tailwind + 现有 `cn()` 工具。
 
 ### awesome-design-md —— 需要某个品牌的设计语言参考时
 

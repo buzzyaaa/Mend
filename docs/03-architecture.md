@@ -50,12 +50,12 @@ Mend/
 ├── src/                      # 前端
 │   ├── main.ts
 │   ├── App.vue
-│   ├── router/
-│   ├── stores/               # Pinia：vault、ui、preferences
-│   ├── views/                # UnlockView、MainView、SettingsView
+│   ├── router/               # 路由：AppShell 下挂 main / presets / settings，unlock 独立
+│   ├── stores/               # Pinia：vault、entry、preset、ui、preferences
+│   ├── views/                # UnlockView、MainView、PresetsView、SettingsView
 │   ├── components/
 │   │   ├── ui/               # 基础通用组件（ToastHost 等，纯 Tailwind）
-│   │   ├── layout/           # Sidebar、TopBar、EntryList
+│   │   ├── layout/           # AppShell（外壳）、NavRail（图标导航栏）、Sidebar、EntryList
 │   │   └── entry/            # EntryDialog：条目表单 + Markdown 备注编辑/预览
 │   ├── composables/          # useClipboard、useToast、useAutoLock
 │   ├── lib/                  # ipc 封装、markdown 安全渲染、cn 工具
@@ -131,9 +131,9 @@ Mend/
 
 ## 5. 窗口约定
 
-- 主窗口：左右布局（见 `05-mvp-spec.md`）。
+- 主窗口：最左侧图标导航栏 + 左右布局（见 `05-mvp-spec.md`）；`/main`、`/presets`、`/settings` 共用 `components/layout/AppShell.vue` 外壳，导航栏常驻。
 - 条目/备注编辑：MVP 优先用 **主窗口内 Dialog 弹窗**（独立浮层、可关闭）；若后续需要真正的独立系统窗口，再用 Tauri `WebviewWindow` 新开，接口与组件保持可替换。
-- 语言切换入口：左上角软件名右侧（见 `07-i18n.md`）。
+- 语言切换入口：导航栏左下方的语言图标，点击在中/英间切换（见 `07-i18n.md`）。
 
 ## 6. 环境与命令备忘
 

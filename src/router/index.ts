@@ -5,21 +5,32 @@ import { isTauri } from '@/lib/ipc'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: '/main' },
     {
-      path: '/main',
-      name: 'main',
-      component: () => import('@/views/MainView.vue'),
+      path: '/',
+      component: () => import('@/components/layout/AppShell.vue'),
+      children: [
+        { path: '', redirect: { name: 'main' } },
+        {
+          path: 'main',
+          name: 'main',
+          component: () => import('@/views/MainView.vue'),
+        },
+        {
+          path: 'presets',
+          name: 'presets',
+          component: () => import('@/views/PresetsView.vue'),
+        },
+        {
+          path: 'settings',
+          name: 'settings',
+          component: () => import('@/views/SettingsView.vue'),
+        },
+      ],
     },
     {
       path: '/unlock',
       name: 'unlock',
       component: () => import('@/views/UnlockView.vue'),
-    },
-    {
-      path: '/settings',
-      name: 'settings',
-      component: () => import('@/views/SettingsView.vue'),
     },
   ],
 })

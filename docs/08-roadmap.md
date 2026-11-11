@@ -94,6 +94,7 @@
 - [x] 标签（多标签，2026-11-11）：迁移 v2 新增 `entries.tags`（JSON 明文列）；表单逗号分隔输入，卡片 chip 展示并可点击过滤。
 - [x] 修改主密码（2026-11-11）：`vault_change_password`；core 校验旧密码后用新 salt/KEK 重包裹同一 DEK，事务更新 `meta`，历史密文无需重加密。
 - [x] ESLint + Prettier（2026-11-11）：flat config（eslint-plugin-vue + typescript-eslint），脚本 `npm run lint` / `npm run format`。
+- [x] 导航与页面结构改造（2026-11-11）：移除顶部栏，新增最左侧图标导航栏 `AppShell` + `NavRail`（`lucide-vue-next` 图标）；预设值从设置页迁出为独立 `/presets` 页面；语言切换、设置、锁定收进导航栏左下；未实现的 WebDAV 占位从设置页移除。
 - [x] 空状态与错误提示：各列表空状态、操作失败走 Toast；回收站空态单独文案。
 - [x] Tauri 打包：`tauri.conf.json` 已配 NSIS（`installMode: currentUser`）+ 图标 + 版本 0.2.0；`npm run tauri build` 在可访问 GitHub release 的环境下产出 `target/release/bundle/nsis/Mend_0.2.0_x64-setup.exe`（约 1.8 MB），网络受限时退化为 release `mend.exe`（便携分发）。
 - [x] README 使用说明（首次使用、回收站、备份/恢复、手动迁移、安全习惯）。

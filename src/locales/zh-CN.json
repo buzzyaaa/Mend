@@ -9,12 +9,12 @@
     "trash": "回收站",
     "search": "搜索",
     "categories": "分类",
-    "addCategory": "新增分类"
-  },
-  "topbar": {
-    "lock": "锁定",
+    "addCategory": "新增分类",
+    "home": "条目",
+    "presets": "预设值",
     "settings": "设置",
-    "language": "语言"
+    "language": "语言",
+    "lock": "锁定"
   },
   "entry": {
     "title": "标题",
@@ -157,12 +157,9 @@
     "importAction": "恢复并覆盖",
     "exported": "已导出备份：{path}（{size}）",
     "importConfirm": "恢复将用备份覆盖当前库，现有库会改名留底。继续？",
-    "imported": "恢复完成：{entries} 条条目、{categories} 个分类。请用该备份的主密码重新解锁。",
-    "webdav": "WebDAV 同步",
-    "webdavDisabled": "未启用（预留接口，当前版本不发起任何网络请求）"
+    "imported": "恢复完成：{entries} 条条目、{categories} 个分类。请用该备份的主密码重新解锁。"
   },
   "settings": {
-    "language": "语言",
     "theme": "主题",
     "themeSystem": "跟随系统",
     "themeLight": "浅色",

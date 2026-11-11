@@ -6,7 +6,7 @@ Mend 是 product register（用户在执行任务，界面服务于任务）。�
 
 - Vue 3 `<script setup>` + TypeScript 严格模式 + TailwindCSS（`tailwind.config.ts`，`darkMode: 'class'`）。
 - 颜色与圆角全部走 `src/assets/main.css` 的 CSS 变量（`:root` 与 `.dark` 两套 HSL），不写死 `#hex`、不新造色板。
-- 组件类名用 `cn()` 组合；不引入新的样式库、组件库、图标库；图标优先现成的字符或简单 SVG，不堆 emoji。
+- 组件类名用 `cn()` 组合；不引入新的样式库、组件库；图标只用已装的 `lucide-vue-next`（按需引入单个图标），不再引入第二套图标库，也不堆 emoji。
 - 深浅两套必须同时成立：新组件要检查 `.dark` 下的对比度与层级。
 
 ## 文案

@@ -59,4 +59,5 @@
 ## 3. 关键依赖建议（阶段 1 落地时复核版本）
 
 - 前端：`vue`、`vue-router`、`pinia`、`vue-i18n`、`tailwindcss`、`radix-vue`（shadcn-vue 的底层原语）、`markdown-it`、`@vueuse/core`（剪贴板、空闲监听等）。
+- 图标：`lucide-vue-next`（ISC，按需 tree-shake 引入单个图标组件）。仅在导航栏等确实需要图标的少量位置使用；其余装饰仍用纯 Tailwind / 简单 SVG，不额外引入第二套图标库。
 - Rust：`tauri`（2.x）、`rusqlite`（bundled）、`argon2`、`chacha20poly1305`、`hkdf`、`rand`（OsRng）、`serde`/`serde_json`、`thiserror`、`zeroize`。
