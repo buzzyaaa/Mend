@@ -1,4 +1,4 @@
-// 偏好持久化：语言、主题、空闲自动锁定、剪贴板清空。全部存 localStorage（非敏感配置）。
+// 偏好持久化：语言、主题、空闲自动锁定。全部存 localStorage（非敏感配置）。
 
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
@@ -11,7 +11,6 @@ interface StoredPrefs {
   locale?: Locale
   theme?: ThemeMode
   autoLockMinutes?: number
-  clipboardClearSeconds?: number
 }
 
 function readStored(): StoredPrefs {
@@ -42,8 +41,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const isDark = ref(computeDark(theme.value))
   /** 空闲自动锁定（分钟），0 = 关闭。 */
   const autoLockMinutes = ref<number>(stored.autoLockMinutes ?? 15)
-  /** 复制后自动清空剪贴板（秒），0 = 关闭。 */
-  const clipboardClearSeconds = ref<number>(stored.clipboardClearSeconds ?? 30)
 
   /** 把主题应用到 `<html>`，并同步给 NConfigProvider。 */
   function applyTheme(mode: ThemeMode = theme.value) {
@@ -52,7 +49,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
   }
 
   watch(
-    [locale, theme, autoLockMinutes, clipboardClearSeconds],
+    [locale, theme, autoLockMinutes],
     () => {
       localStorage.setItem(
         STORAGE_KEY,
@@ -60,7 +57,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
           locale: locale.value,
           theme: theme.value,
           autoLockMinutes: autoLockMinutes.value,
-          clipboardClearSeconds: clipboardClearSeconds.value,
         }),
       )
       applyTheme()
@@ -80,10 +76,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
     autoLockMinutes.value = next
   }
 
-  function setClipboardClearSeconds(next: number) {
-    clipboardClearSeconds.value = next
-  }
-
   /** 启动时调用：应用已保存的主题，并在 system 模式下跟随系统变化。 */
   function initTheme() {
     applyTheme()
@@ -97,11 +89,9 @@ export const usePreferencesStore = defineStore('preferences', () => {
     theme,
     isDark,
     autoLockMinutes,
-    clipboardClearSeconds,
     setLocale,
     setTheme,
     setAutoLockMinutes,
-    setClipboardClearSeconds,
     initTheme,
   }
 })

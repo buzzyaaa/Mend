@@ -169,11 +169,8 @@
     "themeDark": "深色",
     "autoLock": "空闲自动锁定",
     "autoLockHint": "超过设定时长无鼠标/键盘操作即锁定",
-    "clipboard": "剪贴板自动清空",
-    "clipboardHint": "复制密码后到点自动清空；内容已被你替换为其他东西时不处理",
     "off": "关闭",
     "minutes": "{n} 分钟",
-    "seconds": "{n} 秒",
     "changePassword": "修改主密码",
     "changePasswordHint": "校验旧密码后重新加密主密钥；历史数据无需重加密",
     "oldPassword": "当前主密码",
@@ -189,8 +186,7 @@
     "saved": "已保存",
     "deleted": "已删除",
     "failed": "操作失败：{message}",
-    "autoLocked": "已因长时间无操作自动锁定",
-    "clipboardCleared": "剪贴板已自动清空"
+    "autoLocked": "已因长时间无操作自动锁定"
   },
   "common": {
     "save": "保存",

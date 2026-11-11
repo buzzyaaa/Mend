@@ -1,34 +1,12 @@
-// 复制到剪贴板 + 超时清空：只在剪贴板内容仍是我们写入的那段文字时才清空，
-// 避免把用户后来复制的东西一起抹掉；读取被限制时静默跳过（宁可不删）。
+// 复制到剪贴板：仅写入，不做任何后续读取或清空，避免干扰用户剪贴板。
+// 之前的"复制后到时自动清空"会因 WebView 静默失败而误导用户，已移除。
 
 import { useI18n } from 'vue-i18n'
 import { useToast } from '@/composables/useToast'
-import { usePreferencesStore } from '@/stores/preferences'
 
 export function useClipboard() {
   const toast = useToast()
   const { t } = useI18n()
-  const preferences = usePreferencesStore()
-
-  let clearTimer: number | null = null
-
-  function scheduleClear(value: string) {
-    if (clearTimer !== null) window.clearTimeout(clearTimer)
-    const seconds = preferences.clipboardClearSeconds
-    if (!seconds || seconds <= 0) return
-
-    clearTimer = window.setTimeout(async () => {
-      clearTimer = null
-      try {
-        const current = await navigator.clipboard.readText()
-        if (!current || current !== value) return
-        await navigator.clipboard.writeText('')
-        toast.success(t('toast.clipboardCleared'))
-      } catch {
-        // WebView 拒绝读取剪贴板：不清空，避免误删用户内容
-      }
-    }, seconds * 1000)
-  }
 
   /** 复制到剪贴板并给出 Toast；返回是否成功。 */
   async function copy(text: string): Promise<boolean> {
@@ -36,7 +14,6 @@ export function useClipboard() {
     try {
       await navigator.clipboard.writeText(text)
       toast.success(t('toast.copied'))
-      scheduleClear(text)
       return true
     } catch {
       toast.error(t('toast.copyFailed'))

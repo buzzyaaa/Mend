@@ -29,7 +29,6 @@ const toast = useToast()
 const dialog = useDialog()
 
 const autoLockValues = [1, 5, 10, 15, 30, 60]
-const clipboardValues = [15, 30, 60, 120]
 
 const themeOptions = computed(() => [
   { label: t('settings.themeSystem'), value: 'system' },
@@ -39,10 +38,6 @@ const themeOptions = computed(() => [
 const autoLockOptions = computed(() => [
   { label: t('settings.off'), value: 0 },
   ...autoLockValues.map((n) => ({ label: t('settings.minutes', { n }), value: n })),
-])
-const clipboardOptions = computed(() => [
-  { label: t('settings.off'), value: 0 },
-  ...clipboardValues.map((n) => ({ label: t('settings.seconds', { n }), value: n })),
 ])
 
 // —— 备份与恢复 ——
@@ -237,18 +232,6 @@ async function changePassword() {
               :options="autoLockOptions"
               style="width: 160px"
               @update:value="(value: number) => preferences.setAutoLockMinutes(value)"
-            />
-          </div>
-          <div class="flex items-center justify-between gap-4 py-2.5">
-            <div class="min-w-0">
-              <NText class="block text-sm">{{ t('settings.clipboard') }}</NText>
-              <NText :depth="3" class="block text-xs">{{ t('settings.clipboardHint') }}</NText>
-            </div>
-            <NSelect
-              :value="preferences.clipboardClearSeconds"
-              :options="clipboardOptions"
-              style="width: 160px"
-              @update:value="(value: number) => preferences.setClipboardClearSeconds(value)"
             />
           </div>
         </div>

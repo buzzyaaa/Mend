@@ -169,11 +169,8 @@
     "themeDark": "Dark",
     "autoLock": "Auto-lock when idle",
     "autoLockHint": "Locks the vault after the chosen period without mouse or keyboard input",
-    "clipboard": "Clear clipboard after copy",
-    "clipboardHint": "Clears the copied password after the chosen delay; skipped if you copied something else in the meantime",
     "off": "Off",
     "minutes": "{n} min",
-    "seconds": "{n} s",
     "changePassword": "Change master password",
     "changePasswordHint": "Verifies the old password and re-wraps the master key; existing data is not re-encrypted",
     "oldPassword": "Current master password",
@@ -189,8 +186,7 @@
     "saved": "Saved",
     "deleted": "Deleted",
     "failed": "Action failed: {message}",
-    "autoLocked": "Vault locked after inactivity",
-    "clipboardCleared": "Clipboard cleared"
+    "autoLocked": "Vault locked after inactivity"
   },
   "common": {
     "save": "Save",
