@@ -30,6 +30,7 @@
 5. **状态齐全**：交互组件覆盖 default / hover / focus / active / disabled / loading / error；列表必须有空态，危险操作必须二次确认并写清后果。
 6. **i18n 先行**：所有界面文案（含 aria-label、tooltip、确认弹窗文案）走词条，中英两份同步，组件里不硬编码中英文。
 7. **不引入第二套组件库 / 图标库**：radix-vue、shadcn-vue 及其配套工具（`class-variance-authority` / `clsx` / `tailwind-merge` / `cn()`）已全部移除，不再恢复。
+8. **导航栏折叠全栏一致**：`NavRail` 的 `collapsed` 同时作用于品牌文字、上方 `NMenu` 与左下角操作按钮；展开态一律「图标 + 文字」且左对齐，折叠态一律只剩图标（Tooltip 补说明），不允许局部常驻文字或常驻图标。
 
 ## 3. 组件落点
 

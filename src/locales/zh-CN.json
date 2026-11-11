@@ -14,6 +14,7 @@
     "presets": "预设值",
     "settings": "设置",
     "language": "语言",
+    "languageHint": "切换到 English",
     "lock": "锁定"
   },
   "entry": {

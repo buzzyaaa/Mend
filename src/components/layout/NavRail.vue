@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // 最左侧图标导航栏：上方条目/预设值，下方语言、设置、锁定。
+// 折叠规则全栏统一：展开时图标 + 文字，折叠时只有图标（Tooltip 补说明）。
 import { computed, h, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -8,6 +9,7 @@ import { NMenu, NIcon, NButton, NTooltip, type MenuOption } from 'naive-ui'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useVaultStore } from '@/stores/vault'
 import { setI18nLocale } from '@/i18n'
+import { OVERLAY_TARGET } from '@/lib/theme'
 import type { Locale } from '@/types'
 
 const { t } = useI18n()
@@ -58,6 +60,43 @@ function onMenuSelect(key: string) {
 }
 
 const isSettings = computed(() => route.name === 'settings')
+
+/** 左下角操作与上方菜单共用同一套折叠规则，避免一处有文字、一处永远只有图标。 */
+type RailAction = {
+  key: string
+  icon: Component
+  label: string
+  hint: string
+  type: 'default' | 'primary'
+  onClick: () => void
+}
+
+const actions = computed<RailAction[]>(() => [
+  {
+    key: 'language',
+    icon: Languages,
+    label: t('nav.language'),
+    hint: t('nav.languageHint'),
+    type: 'default',
+    onClick: toggleLocale,
+  },
+  {
+    key: 'settings',
+    icon: Settings,
+    label: t('nav.settings'),
+    hint: t('nav.settings'),
+    type: isSettings.value ? 'primary' : 'default',
+    onClick: () => router.push('/settings'),
+  },
+  {
+    key: 'lock',
+    icon: Lock,
+    label: t('nav.lock'),
+    hint: t('nav.lock'),
+    type: 'default',
+    onClick: onLock,
+  },
+])
 </script>
 
 <template>
@@ -84,57 +123,37 @@ const isSettings = computed(() => route.name === 'settings')
       @update:value="onMenuSelect"
     />
 
-    <div class="mt-auto flex flex-col items-center gap-1 pb-1">
-      <NTooltip placement="right" :show-arrow="false">
+    <div
+      class="mt-auto flex flex-col gap-1 pb-1"
+      :class="collapsed ? 'items-center' : 'items-stretch'"
+    >
+      <NTooltip
+        v-for="action in actions"
+        :key="action.key"
+        placement="right"
+        :show-arrow="false"
+        :to="OVERLAY_TARGET"
+        :disabled="!collapsed"
+      >
         <template #trigger>
           <NButton
             quaternary
-            circle
-            :aria-label="t('nav.language')"
-            :title="t('nav.language')"
-            @click="toggleLocale"
+            :circle="collapsed"
+            :block="!collapsed"
+            :type="action.type"
+            :aria-label="action.label"
+            :title="collapsed ? action.label : undefined"
+            :class="collapsed ? 'h-12 w-12' : ''"
+            :style="collapsed ? undefined : { justifyContent: 'flex-start', paddingLeft: '12px' }"
+            @click="action.onClick"
           >
             <template #icon>
-              <NIcon :component="Languages" />
+              <NIcon :component="action.icon" />
             </template>
+            <span v-if="!collapsed" class="truncate">{{ action.label }}</span>
           </NButton>
         </template>
-        {{ preferences.locale === 'zh-CN' ? 'English' : '中文' }}
-      </NTooltip>
-
-      <NTooltip placement="right" :show-arrow="false">
-        <template #trigger>
-          <NButton
-            quaternary
-            circle
-            :type="isSettings ? 'primary' : 'default'"
-            :aria-label="t('nav.settings')"
-            :title="t('nav.settings')"
-            @click="router.push('/settings')"
-          >
-            <template #icon>
-              <NIcon :component="Settings" />
-            </template>
-          </NButton>
-        </template>
-        {{ t('nav.settings') }}
-      </NTooltip>
-
-      <NTooltip placement="right" :show-arrow="false">
-        <template #trigger>
-          <NButton
-            quaternary
-            circle
-            :aria-label="t('nav.lock')"
-            :title="t('nav.lock')"
-            @click="onLock"
-          >
-            <template #icon>
-              <NIcon :component="Lock" />
-            </template>
-          </NButton>
-        </template>
-        {{ t('nav.lock') }}
+        {{ action.hint }}
       </NTooltip>
     </div>
   </div>
