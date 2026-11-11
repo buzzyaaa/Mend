@@ -305,22 +305,22 @@ async function changePassword() {
         <div class="mb-4 grid gap-2">
           <div class="flex items-center gap-2">
             <NText :depth="3" class="w-20 shrink-0 text-xs">{{ t('backup.dataDir') }}</NText>
-            <NInput :value="paths?.dataDir ?? ''" readonly size="small" class="font-mono" />
+            <NInput :value="paths?.dataDir ?? ''" readonly size="small" class="font-mono min-w-0 flex-1" />
           </div>
           <NText :depth="3" class="block text-xs">{{ t('backup.dataDirHint') }}</NText>
           <NText :depth="3" class="block text-xs">{{ t('backup.pickHint') }}</NText>
         </div>
 
         <div class="grid gap-3 sm:grid-cols-2">
-          <div class="rounded-lg border border-border p-3">
+          <div class="min-w-0 rounded-lg border border-border p-3">
             <NText strong class="mb-2 block text-sm">{{ t('backup.export') }}</NText>
             <div class="grid gap-2">
               <div class="flex items-center gap-2">
-                <NButton size="small" :disabled="backupBusy" @click="chooseExportPath">
+                <NButton size="small" :disabled="backupBusy" class="shrink-0" @click="chooseExportPath">
                   <template #icon><NIcon :component="FolderOpen" :size="14" /></template>
                   {{ t('backup.chooseExport') }}
                 </NButton>
-                <NText :depth="3" class="min-w-0 flex-1 truncate font-mono text-xs">{{ exportPath || t('backup.noLocation') }}</NText>
+                <div class="min-w-0 flex-1 truncate font-mono text-xs text-[var(--n-text-color-3,#999)]">{{ exportPath || t('backup.noLocation') }}</div>
               </div>
               <NInput
                 v-model:value="exportPassword"
@@ -337,15 +337,15 @@ async function changePassword() {
             </div>
           </div>
 
-          <div class="rounded-lg border border-border p-3">
+          <div class="min-w-0 rounded-lg border border-border p-3">
             <NText strong class="mb-2 block text-sm">{{ t('backup.import') }}</NText>
             <div class="grid gap-2">
               <div class="flex items-center gap-2">
-                <NButton size="small" :disabled="backupBusy" @click="chooseImportPath">
+                <NButton size="small" :disabled="backupBusy" class="shrink-0" @click="chooseImportPath">
                   <template #icon><NIcon :component="FolderOpen" :size="14" /></template>
                   {{ t('backup.chooseImport') }}
                 </NButton>
-                <NText :depth="3" class="min-w-0 flex-1 truncate font-mono text-xs">{{ importPath || t('backup.noLocation') }}</NText>
+                <div class="min-w-0 flex-1 truncate font-mono text-xs text-[var(--n-text-color-3,#999)]">{{ importPath || t('backup.noLocation') }}</div>
               </div>
               <NInput
                 v-model:value="importPassword"
