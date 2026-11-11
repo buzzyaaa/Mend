@@ -107,13 +107,13 @@
   },
   "preset": {
     "title": "预设值",
-    "hint": "账号 / 邮箱 / 手机号的下拉候选，值加密存储；密码不做预设，用生成器",
+    "hint": "账号 / 邮箱 / 手机号 / 常用密码的候选值，落盘加密，仅解锁后可见",
     "empty": "还没有预设值",
     "add": "新增预设",
     "edit": "编辑预设",
     "type": "类型",
     "label": "名称",
-    "labelPlaceholder": "例如：工作",
+    "labelPlaceholder": "例如：论坛通用",
     "value": "值",
     "choose": "选择预设",
     "save": "保存预设",
@@ -121,7 +121,8 @@
     "types": {
       "username": "账号",
       "email": "邮箱",
-      "phone": "手机号"
+      "phone": "手机号",
+      "password": "常用密码"
     }
   },
   "notes": {

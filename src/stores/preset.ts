@@ -1,4 +1,4 @@
-// 预设值仓库：账号 / 邮箱 / 手机号的下拉候选，值只在解锁态可见。
+// 预设值仓库：账号 / 邮箱 / 手机号 / 常用密码的候选项，值只在解锁态可见。
 
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
@@ -17,6 +17,7 @@ export const usePresetStore = defineStore('preset', () => {
     username: byType('username'),
     email: byType('email'),
     phone: byType('phone'),
+    password: byType('password'),
   }))
 
   async function refresh() {

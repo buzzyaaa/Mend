@@ -107,13 +107,13 @@
   },
   "preset": {
     "title": "Presets",
-    "hint": "Candidates for username / email / phone dropdowns, stored encrypted; passwords are never preset",
+    "hint": "Preset candidates for usernames, emails, phones and common passwords; encrypted at rest, visible only when unlocked",
     "empty": "No presets yet",
     "add": "Add preset",
     "edit": "Edit preset",
     "type": "Type",
     "label": "Name",
-    "labelPlaceholder": "e.g. Work",
+    "labelPlaceholder": "e.g. forum default",
     "value": "Value",
     "choose": "Pick a preset",
     "save": "Save preset",
@@ -121,7 +121,8 @@
     "types": {
       "username": "Username",
       "email": "Email",
-      "phone": "Phone"
+      "phone": "Phone",
+      "password": "Common password"
     }
   },
   "notes": {

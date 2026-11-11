@@ -7,8 +7,8 @@ use crate::crypto::{decrypt_field, encrypt_field, field_aad, DEK_LEN};
 use crate::db::PresetRowEnc;
 use crate::error::{MendError, MendResult};
 
-/// 允许做预设的字段类型；密码不做预设，一律走生成器或手输。
-pub const FIELD_TYPES: [&str; 3] = ["username", "email", "phone"];
+/// 允许做预设的字段类型；密码预设只用于"常用密码"候选，落盘同样加密。
+pub const FIELD_TYPES: [&str; 4] = ["username", "email", "phone", "password"];
 
 const LABEL_MAX: usize = 40;
 const VALUE_MAX: usize = 512;
@@ -114,10 +114,23 @@ mod tests {
     }
 
     #[test]
+    fn preset_accepts_password_type() {
+        let mut pw = input();
+        pw.field_type = "password".into();
+        pw.label = "常用密码".into();
+        pw.value = "CorrectHorseBatteryStaple".into();
+        let row = encrypt_input(&DEK, "p5", &pw, 1, 1).expect("密码预设允许");
+        assert_ne!(row.value_enc, "CorrectHorseBatteryStaple");
+        let view = decrypt_row(&DEK, &row).expect("解密");
+        assert_eq!(view.field_type, "password");
+        assert_eq!(view.value, "CorrectHorseBatteryStaple");
+    }
+
+    #[test]
     fn preset_rejects_bad_input() {
         let mut bad = input();
-        bad.field_type = "password".into();
-        assert!(encrypt_input(&DEK, "p2", &bad, 1, 1).is_err(), "密码不允许预设");
+        bad.field_type = "creditcard".into();
+        assert!(encrypt_input(&DEK, "p2", &bad, 1, 1).is_err(), "未知类型拒绝");
 
         let mut bad = input();
         bad.label = "  ".into();

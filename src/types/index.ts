@@ -43,7 +43,7 @@ export interface EntryInput {
   tags: string[]
 }
 
-export type PresetFieldType = 'username' | 'email' | 'phone'
+export type PresetFieldType = 'username' | 'email' | 'phone' | 'password'
 
 export interface Preset {
   id: string

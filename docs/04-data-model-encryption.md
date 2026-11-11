@@ -90,7 +90,7 @@ base64( nonce[24B] || ciphertext || tag[16B] )
 | 列 | 类型 | 说明 |
 | --- | --- | --- |
 | id | TEXT PK | |
-| field_type | TEXT | `username` / `email` / `phone`（密码不做预设，走生成器） |
+| field_type | TEXT | `username` / `email` / `phone` / `password`（密码预设即"常用密码"候选） |
 | label | TEXT | 下拉显示名，如"工作邮箱" |
 | value_enc | TEXT | 密文存储预设值 |
 | sort_order | INTEGER | |

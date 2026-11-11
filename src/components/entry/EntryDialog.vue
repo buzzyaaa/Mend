@@ -88,15 +88,19 @@ watch(
   { immediate: true },
 )
 
-/** 从预设下拉选中后填入对应字段。 */
+/** 从预设下拉选中后按类型填入对应字段（密码类填入密码框）。 */
+function applyPresetById(field: PresetFieldType, id: string) {
+  const preset = presetStore.presets.find((item) => item.id === id)
+  if (!preset) return
+  if (field === 'username') form.username = preset.value
+  else if (field === 'email') form.email = preset.value
+  else if (field === 'phone') form.phone = preset.value
+  else form.password = preset.value
+}
+
 function applyPreset(field: PresetFieldType, event: Event) {
   const select = event.target as HTMLSelectElement
-  const preset = presetStore.presets.find((item) => item.id === select.value)
-  if (preset) {
-    if (field === 'username') form.username = preset.value
-    else if (field === 'email') form.email = preset.value
-    else form.phone = preset.value
-  }
+  applyPresetById(field, select.value)
   select.value = ''
 }
 
@@ -239,6 +243,14 @@ function messageOf(err: unknown): string {
                 type="text"
                 autocomplete="off"
                 class="min-w-0 flex-1"
+              />
+              <NSelect
+                v-if="presetStore.grouped.password.length"
+                :value="null"
+                :options="presetStore.grouped.password.map((p) => ({ label: p.label, value: p.id }))"
+                :placeholder="t('preset.choose')"
+                class="shrink-0 w-28"
+                @update:value="(id: string) => applyPresetById('password', id)"
               />
               <NButton
                 size="small"
