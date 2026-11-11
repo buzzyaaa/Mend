@@ -1,6 +1,7 @@
 import { ref } from 'vue'
+import { useMessage } from 'naive-ui'
 
-export type ToastKind = 'success' | 'error'
+export type ToastKind = 'success' | 'error' | 'warning' | 'info'
 
 export interface ToastItem {
   id: number
@@ -20,10 +21,25 @@ function push(text: string, kind: ToastKind = 'success', duration = 2200) {
 }
 
 export function useToast() {
+  const message = useMessage()
   return {
     items,
-    success: (text: string) => push(text, 'success'),
-    error: (text: string) => push(text, 'error', 3200),
+    success: (text: string) => {
+      message.success(text)
+      push(text, 'success')
+    },
+    error: (text: string) => {
+      message.error(text)
+      push(text, 'error', 3200)
+    },
+    warning: (text: string) => {
+      message.warning(text)
+      push(text, 'warning', 3200)
+    },
+    info: (text: string) => {
+      message.info(text)
+      push(text, 'info', 3200)
+    },
     dismiss: (id: number) => {
       items.value = items.value.filter((item) => item.id !== id)
     },

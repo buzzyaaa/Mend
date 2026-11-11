@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch, h } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEntryStore } from '@/stores/entry'
 import { usePresetStore } from '@/stores/preset'
-import { useToast } from '@/composables/useToast'
+import { useMessage } from 'naive-ui'
 import { generatorApi } from '@/lib/ipc'
 import { renderMarkdown } from '@/lib/markdown'
 import type { EntryInput, EntryView, GeneratorOptions, PresetFieldType } from '@/types'
+import { NButton, NInput, NSelect, NCheckbox, NDivider, NRadioGroup, NRadio, NText, NTag } from 'naive-ui'
 
 const props = defineProps<{
   open: boolean
@@ -17,8 +18,9 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 
 const { t } = useI18n()
 const store = useEntryStore()
+const generatorLength = computed(() => generatorOptions.length.toString())
 const presetStore = usePresetStore()
-const toast = useToast()
+const message = useMessage()
 
 const busy = ref(false)
 const formError = ref('')
@@ -144,7 +146,7 @@ async function save() {
     } else {
       await store.createEntry(input)
     }
-    toast.success(t('toast.saved'))
+    message.success(t('toast.saved'))
     emit('close')
   } catch (err) {
     formError.value = messageOf(err)
@@ -159,7 +161,7 @@ async function remove() {
   busy.value = true
   try {
     await store.deleteEntry(props.entry.id)
-    toast.success(t('toast.deleted'))
+    message.success(t('toast.deleted'))
     emit('close')
   } catch (err) {
     formError.value = messageOf(err)
@@ -176,204 +178,193 @@ function messageOf(err: unknown): string {
 <template>
   <div
     v-if="open"
-    class="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:items-center"
+    class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4 sm:items-center"
     @click.self="emit('close')"
   >
     <div class="w-full max-w-2xl rounded-xl border border-border bg-card p-5 shadow-lg">
-      <h3 class="mb-3 text-base font-semibold">{{ heading }}</h3>
+      <h3 class="mb-4 text-lg font-semibold">{{ heading }}</h3>
 
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label class="block sm:col-span-2">
-          <span class="mb-1 block text-xs text-muted-foreground">{{ t('entry.title') }} *</span>
-          <input
-            v-model="form.title"
-            class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-            maxlength="120"
+      <div class="space-y-3">
+        <NInput
+          v-model:value="form.title"
+          :placeholder="t('entry.title')"
+          :maxlength="120"
+          show-count
+        />
+
+        <div class="grid grid-cols-2 gap-3">
+          <NSelect
+            v-model:value="form.categoryId"
+            :options="[{ label: t('entry.uncategorized'), value: null as any }].concat(
+              store.categories.map((cat) => ({
+                label: cat.name,
+                value: cat.id,
+              }))
+            )"
+            :placeholder="t('entry.category')"
           />
-        </label>
-
-        <label class="block">
-          <span class="mb-1 block text-xs text-muted-foreground">{{ t('entry.category') }}</span>
-          <select
-            v-model="form.categoryId"
-            class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option :value="null">{{ t('entry.uncategorized') }}</option>
-            <option v-for="cat in store.categories" :key="cat.id" :value="cat.id">
-              {{ cat.name }}
-            </option>
-          </select>
-        </label>
-
-        <label class="block">
-          <span class="mb-1 block text-xs text-muted-foreground">{{ t('entry.url') }}</span>
-          <input
-            v-model="form.url"
-            class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-            placeholder="https://"
+          <NInput
+            v-model:value="form.url"
+            :placeholder="t('entry.url')"
           />
-        </label>
-
-        <div class="block">
-          <span class="mb-1 block text-xs text-muted-foreground">{{ t('entry.username') }}</span>
-          <div class="flex gap-1">
-            <input
-              v-model="form.username"
-              class="min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-            />
-            <select
-              v-if="presetStore.grouped.username.length"
-              class="shrink-0 rounded-md border border-input bg-background px-1 text-xs text-muted-foreground outline-none"
-              @change="applyPreset('username', $event)"
-            >
-              <option value="">{{ t('preset.choose') }}</option>
-              <option v-for="p in presetStore.grouped.username" :key="p.id" :value="p.id">
-                {{ p.label }}
-              </option>
-            </select>
-          </div>
         </div>
 
-        <div class="block">
-          <span class="mb-1 block text-xs text-muted-foreground">{{ t('entry.password') }}</span>
-          <div class="flex gap-1">
-            <input
-              v-model="form.password"
-              type="text"
-              autocomplete="off"
-              class="min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-ring"
-            />
-            <button
-              type="button"
-              class="shrink-0 rounded-md border border-input px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-              @click="showGenerator = !showGenerator"
-            >
-              {{ t('generator.open') }}
-            </button>
-          </div>
-
-          <!-- 生成器面板 -->
-          <div
-            v-if="showGenerator"
-            class="mt-2 space-y-2 rounded-md border border-dashed border-border p-2"
-          >
-            <div class="flex items-center gap-2 text-xs">
-              <span class="text-muted-foreground">{{ t('generator.length') }}</span>
-              <input
-                v-model.number="generatorOptions.length"
-                type="number"
-                min="6"
-                max="64"
-                class="w-16 rounded border border-input bg-background px-2 py-1 text-xs outline-none"
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <span class="mb-1 block text-xs text-muted-foreground">{{ t('entry.username') }}</span>
+            <div class="flex gap-1">
+              <NInput
+                v-model:value="form.username"
+                class="min-w-0 flex-1"
               />
-              <span class="flex-1 text-muted-foreground">{{ t('generator.hint') }}</span>
+              <NSelect
+                v-if="presetStore.grouped.username.length"
+                v-model:value="form.username"
+                :options="[{ label: t('preset.choose'), value: '' as any }].concat(
+                  presetStore.grouped.username.map((p) => ({
+                    label: p.label,
+                    value: p.id,
+                  }))
+                )"
+                class="shrink-0 w-24"
+              />
             </div>
+          </div>
 
-            <div class="flex flex-wrap items-center gap-3 text-xs">
-              <label class="flex items-center gap-1">
-                <input v-model="generatorOptions.uppercase" type="checkbox" />
-                {{ t('generator.uppercase') }}
-              </label>
-              <label class="flex items-center gap-1">
-                <input v-model="generatorOptions.lowercase" type="checkbox" />
-                {{ t('generator.lowercase') }}
-              </label>
-              <label class="flex items-center gap-1">
-                <input v-model="generatorOptions.digits" type="checkbox" />
-                {{ t('generator.digits') }}
-              </label>
-              <label class="flex items-center gap-1">
-                <input v-model="generatorOptions.symbols" type="checkbox" />
-                {{ t('generator.symbols') }}
-              </label>
-              <label class="flex items-center gap-1">
-                <input v-model="generatorOptions.excludeAmbiguous" type="checkbox" />
-                {{ t('generator.excludeAmbiguous') }}
-              </label>
-            </div>
-
-            <div class="rounded bg-muted px-2 py-1 font-mono text-xs break-all">
-              {{ generated || '—' }}
-            </div>
-
-            <p v-if="generatorError" class="text-xs text-destructive">{{ generatorError }}</p>
-
-            <div class="flex justify-end gap-2 text-xs">
-              <button
-                type="button"
-                class="rounded px-2 py-1 text-muted-foreground hover:bg-accent"
-                @click="generate"
+          <div>
+            <span class="mb-1 block text-xs text-muted-foreground">{{ t('entry.password') }}</span>
+            <div class="flex gap-1">
+              <NInput
+                v-model:value="form.password"
+                type="text"
+                autocomplete="off"
+                class="min-w-0 flex-1"
+              />
+              <NButton
+                size="small"
+                @click="showGenerator = !showGenerator"
               >
-                {{ t('generator.regenerate') }}
-              </button>
-              <button
-                type="button"
-                class="rounded bg-primary px-2 py-1 text-primary-foreground disabled:opacity-60"
-                :disabled="!generated"
-                @click="fillGenerated"
-              >
-                {{ t('generator.fill') }}
-              </button>
+                {{ t('generator.open') }}
+              </NButton>
+            </div>
+
+            <!-- 生成器面板 -->
+            <div
+              v-if="showGenerator"
+              class="mt-2 space-y-2 rounded-md border border-dashed border-border p-2"
+            >
+              <div class="flex items-center gap-2 text-xs">
+                <span class="text-muted-foreground">{{ t('generator.length') }}</span>
+                <NInput
+                  v-model:value="generatorLength"
+                  type="text"
+                  :min="6"
+                  :max="64"
+                  class="w-16"
+                />
+                <span class="flex-1 text-muted-foreground">{{ t('generator.hint') }}</span>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-3 text-xs">
+                <NCheckbox v-model:checked="generatorOptions.uppercase">
+                  {{ t('generator.uppercase') }}
+                </NCheckbox>
+                <NCheckbox v-model:checked="generatorOptions.lowercase">
+                  {{ t('generator.lowercase') }}
+                </NCheckbox>
+                <NCheckbox v-model:checked="generatorOptions.digits">
+                  {{ t('generator.digits') }}
+                </NCheckbox>
+                <NCheckbox v-model:checked="generatorOptions.symbols">
+                  {{ t('generator.symbols') }}
+                </NCheckbox>
+                <NCheckbox v-model:checked="generatorOptions.excludeAmbiguous">
+                  {{ t('generator.excludeAmbiguous') }}
+                </NCheckbox>
+              </div>
+
+              <div class="rounded bg-muted px-2 py-1 font-mono text-xs break-all">
+                {{ generated || '—' }}
+              </div>
+
+              <p v-if="generatorError" class="text-xs text-red-500">{{ generatorError }}</p>
+
+              <div class="flex justify-end gap-2 text-xs">
+                <NButton size="small" @click="generate">
+                  {{ t('generator.regenerate') }}
+                </NButton>
+                <NButton
+                  size="small"
+                  type="primary"
+                  :disabled="!generated"
+                  @click="fillGenerated"
+                >
+                  {{ t('generator.fill') }}
+                </NButton>
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="block">
-          <span class="mb-1 block text-xs text-muted-foreground">{{ t('entry.email') }}</span>
-          <div class="flex gap-1">
-            <input
-              v-model="form.email"
-              class="min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-            />
-            <select
-              v-if="presetStore.grouped.email.length"
-              class="shrink-0 rounded-md border border-input bg-background px-1 text-xs text-muted-foreground outline-none"
-              @change="applyPreset('email', $event)"
-            >
-              <option value="">{{ t('preset.choose') }}</option>
-              <option v-for="p in presetStore.grouped.email" :key="p.id" :value="p.id">
-                {{ p.label }}
-              </option>
-            </select>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <span class="mb-1 block text-xs text-muted-foreground">{{ t('entry.email') }}</span>
+            <div class="flex gap-1">
+              <NInput
+                v-model:value="form.email"
+                class="min-w-0 flex-1"
+              />
+              <NSelect
+                v-if="presetStore.grouped.email.length"
+                v-model:value="form.email"
+                :options="[{ label: t('preset.choose'), value: '' as any }].concat(
+                  presetStore.grouped.email.map((p) => ({
+                    label: p.label,
+                    value: p.id,
+                  }))
+                )"
+                class="shrink-0 w-24"
+              />
+            </div>
+          </div>
+
+          <div>
+            <span class="mb-1 block text-xs text-muted-foreground">{{ t('entry.phone') }}</span>
+            <div class="flex gap-1">
+              <NInput
+                v-model:value="form.phone"
+                class="min-w-0 flex-1"
+              />
+              <NSelect
+                v-if="presetStore.grouped.phone.length"
+                v-model:value="form.phone"
+                :options="[{ label: t('preset.choose'), value: '' as any }].concat(
+                  presetStore.grouped.phone.map((p) => ({
+                    label: p.label,
+                    value: p.id,
+                  }))
+                )"
+                class="shrink-0 w-24"
+              />
+            </div>
           </div>
         </div>
 
-        <div class="block">
-          <span class="mb-1 block text-xs text-muted-foreground">{{ t('entry.phone') }}</span>
-          <div class="flex gap-1">
-            <input
-              v-model="form.phone"
-              class="min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-            />
-            <select
-              v-if="presetStore.grouped.phone.length"
-              class="shrink-0 rounded-md border border-input bg-background px-1 text-xs text-muted-foreground outline-none"
-              @change="applyPreset('phone', $event)"
-            >
-              <option value="">{{ t('preset.choose') }}</option>
-              <option v-for="p in presetStore.grouped.phone" :key="p.id" :value="p.id">
-                {{ p.label }}
-              </option>
-            </select>
-          </div>
-        </div>
+        <NDivider />
 
-        <label class="flex items-center gap-2 sm:col-span-2">
-          <input v-model="form.favorite" type="checkbox" class="h-4 w-4 accent-current" />
+        <div class="flex items-center gap-2">
+          <NCheckbox v-model:checked="form.favorite" />
           <span class="text-sm">{{ t('entry.favorite') }}</span>
-        </label>
+        </div>
 
-        <label class="block sm:col-span-2">
-          <span class="mb-1 block text-xs text-muted-foreground">{{ t('entry.tags') }}</span>
-          <input
-            v-model="tagsText"
-            class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-            :placeholder="t('entry.tagsPlaceholder')"
-          />
-        </label>
+        <NInput
+          v-model:value="tagsText"
+          :placeholder="t('entry.tagsPlaceholder')"
+          show-count
+        />
 
-        <div class="sm:col-span-2">
-          <div class="mb-1 flex items-center justify-between">
+        <div>
+          <div class="mb-2 flex items-center justify-between">
             <span class="text-xs text-muted-foreground">{{ t('entry.notes') }}</span>
             <div class="flex gap-1 rounded-md bg-muted p-0.5 text-xs">
               <button
@@ -419,7 +410,7 @@ function messageOf(err: unknown): string {
         </div>
       </div>
 
-      <p v-if="formError" class="mt-3 text-xs text-destructive">{{ formError }}</p>
+      <p v-if="formError" class="mt-3 text-xs text-red-500">{{ formError }}</p>
 
       <div class="mt-4 flex items-center justify-between">
         <button

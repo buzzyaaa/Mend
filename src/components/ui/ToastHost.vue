@@ -1,26 +1,25 @@
 <script setup lang="ts">
-import { useToast } from '@/composables/useToast'
+import { ref } from 'vue'
+import { useMessage } from 'naive-ui'
 
-const toast = useToast()
+const message = useMessage()
+
+export function useToast() {
+  return {
+    items: ref([]),
+    success: (text: string) => message.success(text),
+    error: (text: string) => message.error(text),
+    warning: (text: string) => message.warning(text),
+    info: (text: string) => message.info(text),
+    dismiss: (id: number) => {
+      // naive ui message 不提供直接关闭方法，只能等待自动关闭
+      // 这里不做操作，依赖自动关闭
+    },
+  }
+}
 </script>
 
 <template>
-  <div
-    class="pointer-events-none fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2"
-  >
-    <button
-      v-for="item in toast.items.value"
-      :key="item.id"
-      type="button"
-      class="pointer-events-auto max-w-sm rounded-md px-3 py-2 text-sm shadow-md transition-opacity"
-      :class="
-        item.kind === 'error'
-          ? 'bg-destructive text-destructive-foreground'
-          : 'bg-foreground text-background'
-      "
-      @click="toast.dismiss(item.id)"
-    >
-      {{ item.text }}
-    </button>
-  </div>
+  <!-- 占位，避免 Vue 警告 -->
+  <div />
 </template>
