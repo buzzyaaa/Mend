@@ -78,6 +78,7 @@ base64( nonce[24B] || ciphertext || tag[16B] )
 | phone_enc | TEXT | 密文 | 手机号 |
 | notes_enc | TEXT | 密文 | Markdown 备注全文 |
 | favorite | INTEGER | 明文 | 收藏标记 0/1 |
+| tags | TEXT | 明文 | JSON 数组的标签名列表（如 `["工作","金融"]`），语义与分类名同级：自用场景可明文 |
 | created_at | INTEGER | 明文 | |
 | updated_at | INTEGER | 明文 | |
 | deleted_at | INTEGER | 明文 | 软删除时间戳，空 = 未删除（已启用：删除进回收站，可恢复/彻底清除） |
@@ -101,6 +102,8 @@ base64( nonce[24B] || ciphertext || tag[16B] )
 - **解锁**：读取 salt 与 KDF 参数 → 派生 KEK → 解包 DEK；认证失败即主密码错误。解锁后 DEK 存内存会话，命令层据此加解密。
 - **新增/编辑条目**：前端提交明文 `EntryInput` → Rust 侧逐字段加密 → 事务写入；返回解密后的展示模型供界面刷新。
 - **删除**：`entry_delete` 只写 `deleted_at`（软删除，进回收站）；`entry_restore` 清空该列；`entry_purge` / `entry_purge_all` 才做物理删除，且仅允许删除回收站里的条目。分类删除仍走"条目归未分类"。
+- **标签**：条目可挂多个标签，存 `entries.tags`（JSON 数组，明文）；标签由前端在内存中过滤（与备注检索同口径）。写入时 trim、去空、去重，上限 16 个、单个最长 32 字。
+- **修改主密码**：校验旧密码（派生旧 KEK 解包 DEK，认证失败即旧密码错误）→ 生成新 salt、派生新 KEK → 用新 KEK 重新包裹**同一个 DEK** → 在一个事务内更新 `meta` 的 `salt`/`kdf_params`/`dek_wrapped`。DEK 不变，历史密文无需重加密；事务保证中途崩溃不会出现"salt 与包裹密钥不一致"的坏库。
 - **分类删除**：其下条目 `category_id` 置空（未分类），不级联删条目。
 - **迁移**：schema 版本号存 `meta`，启动时按版本顺序执行迁移；每个迁移可重入。
 
@@ -115,4 +118,5 @@ base64( nonce[24B] || ciphertext || tag[16B] )
 
 - Argon2id 的 memory / iterations / parallelism（在解锁流畅度与抗暴力破解间取平衡）。
 - 字段加密是否对 `url` 也加密。
-- 是否在 `entries` 增加 `tags` 多标签字段，MVP 暂不做。
+
+> `entries.tags` 已于迁移 v2 落地（见 §2.3、§3）。

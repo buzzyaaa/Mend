@@ -22,6 +22,9 @@ pub struct EntryInput {
     pub notes: String,
     #[serde(default)]
     pub favorite: bool,
+    /// 明文标签（IPC 传输与落库均为明文，语义同分类名）。
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 /// 解密后的展示模型（仅解锁态返回给前端）。
@@ -38,6 +41,7 @@ pub struct EntryView {
     pub phone: String,
     pub notes: String,
     pub favorite: bool,
+    pub tags: Vec<String>,
     pub created_at: i64,
     pub updated_at: i64,
     /// 回收站时间戳：正常条目为 null，回收站里为删除时间。
@@ -53,6 +57,30 @@ fn validate_title(input: &EntryInput) -> MendResult<String> {
         return Err(MendError::Vault("标题过长（上限 120 字）".into()));
     }
     Ok(title.to_string())
+}
+
+/// 标签上限：条目最多 16 个，单个最长 32 字（契约见 docs/04 §3）。
+const MAX_TAGS: usize = 16;
+const MAX_TAG_LEN: usize = 32;
+
+fn validate_tags(input: &EntryInput) -> MendResult<Vec<String>> {
+    let mut tags: Vec<String> = Vec::new();
+    for raw in &input.tags {
+        let tag = raw.trim().to_string();
+        if tag.is_empty() || tags.iter().any(|t| t == &tag) {
+            continue;
+        }
+        if tag.chars().count() > MAX_TAG_LEN {
+            return Err(MendError::Vault(format!(
+                "单个标签过长（上限 {MAX_TAG_LEN} 字）"
+            )));
+        }
+        tags.push(tag);
+    }
+    if tags.len() > MAX_TAGS {
+        return Err(MendError::Vault(format!("标签过多（上限 {MAX_TAGS} 个）")));
+    }
+    Ok(tags)
 }
 
 /// 明文入参 → 密文行。AAD 绑定 `entry_id:field`，故 id 必须先确定。
@@ -75,6 +103,7 @@ pub fn encrypt_input(
         phone_enc: encrypt_field(dek, &field_aad(id, "phone"), &input.phone)?,
         notes_enc: encrypt_field(dek, &field_aad(id, "notes"), &input.notes)?,
         favorite: input.favorite,
+        tags: validate_tags(input)?,
         created_at,
         updated_at,
         deleted_at: None,
@@ -94,6 +123,7 @@ pub fn decrypt_row(dek: &[u8; DEK_LEN], row: &EntryRowEnc) -> MendResult<EntryVi
         phone: decrypt_field(dek, &field_aad(&row.id, "phone"), &row.phone_enc)?,
         notes: decrypt_field(dek, &field_aad(&row.id, "notes"), &row.notes_enc)?,
         favorite: row.favorite,
+        tags: row.tags.clone(),
         created_at: row.created_at,
         updated_at: row.updated_at,
         deleted_at: row.deleted_at,
@@ -133,6 +163,7 @@ mod tests {
             phone: "13800138000-明文".into(),
             notes: "备注-明文".into(),
             favorite: false,
+            tags: vec!["工作".into(), " 邮箱 ".into(), "工作".into()],
         }
     }
 
@@ -178,6 +209,8 @@ mod tests {
         assert_eq!(view.email, input.email);
         assert_eq!(view.phone, input.phone);
         assert_eq!(view.notes, input.notes);
+        // 标签 normalize：trim、去空、去重后保留顺序。
+        assert_eq!(view.tags, vec!["工作".to_string(), "邮箱".to_string()]);
         assert_eq!(view.created_at, 1);
         assert_eq!(view.updated_at, 2);
     }

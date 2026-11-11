@@ -5,7 +5,6 @@ import { usePreferencesStore } from '@/stores/preferences'
 import { useVaultStore } from '@/stores/vault'
 import { setI18nLocale } from '@/i18n'
 import type { Locale } from '@/types'
-import { cn } from '@/lib/utils'
 
 const { t } = useI18n()
 const router = useRouter()

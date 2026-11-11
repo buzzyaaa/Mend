@@ -100,7 +100,8 @@ interface FieldRow {
 
 function fieldRows(entry: EntryView): FieldRow[] {
   const rows: FieldRow[] = []
-  if (entry.username) rows.push({ key: 'username', label: t('entry.username'), value: entry.username })
+  if (entry.username)
+    rows.push({ key: 'username', label: t('entry.username'), value: entry.username })
   if (entry.password)
     rows.push({
       key: 'password',
@@ -168,7 +169,13 @@ function formatDate(ms: number | null | undefined): string {
         v-if="store.visibleEntries.length === 0"
         class="flex h-40 items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground"
       >
-        {{ store.isTrashView ? t('trash.empty') : store.entries.length === 0 ? t('entry.empty') : t('entry.emptyInBucket') }}
+        {{
+          store.isTrashView
+            ? t('trash.empty')
+            : store.entries.length === 0
+              ? t('entry.empty')
+              : t('entry.emptyInBucket')
+        }}
       </div>
 
       <div
@@ -198,8 +205,23 @@ function formatDate(ms: number | null | undefined): string {
             </div>
             <p class="mt-0.5 text-xs text-muted-foreground">
               {{ categoryName(entry.categoryId) }}
-              <span v-if="store.isTrashView"> · {{ t('trash.deletedAt') }} {{ formatDate(entry.deletedAt) }}</span>
+              <span v-if="store.isTrashView">
+                · {{ t('trash.deletedAt') }} {{ formatDate(entry.deletedAt) }}</span
+              >
             </p>
+            <div v-if="entry.tags.length && !store.isTrashView" class="mt-1 flex flex-wrap gap-1">
+              <button
+                v-for="tag in entry.tags"
+                :key="tag"
+                type="button"
+                class="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                :class="store.tagFilter === tag ? 'bg-accent text-foreground' : ''"
+                :title="t('entry.tagFilterHint')"
+                @click="store.toggleTagFilter(tag)"
+              >
+                #{{ tag }}
+              </button>
+            </div>
           </div>
 
           <div class="flex shrink-0 items-center gap-1">
@@ -232,7 +254,11 @@ function formatDate(ms: number | null | undefined): string {
 
         <!-- 回收站里只展示账号等摘要，不提供复制（避免已删数据继续扩散） -->
         <div v-if="!store.isTrashView" class="mt-2 space-y-1">
-          <div v-for="row in fieldRows(entry)" :key="row.key" class="flex items-center gap-2 text-sm">
+          <div
+            v-for="row in fieldRows(entry)"
+            :key="row.key"
+            class="flex items-center gap-2 text-sm"
+          >
             <span class="w-16 shrink-0 text-xs text-muted-foreground">{{ row.label }}</span>
             <span
               class="min-w-0 flex-1 truncate font-mono"

@@ -5,7 +5,9 @@ const toast = useToast()
 </script>
 
 <template>
-  <div class="pointer-events-none fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2">
+  <div
+    class="pointer-events-none fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2"
+  >
     <button
       v-for="item in toast.items.value"
       :key="item.id"

@@ -105,10 +105,14 @@ function messageOf(err: unknown): string {
             class="mb-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
             :placeholder="t('unlock.confirm')"
           />
-          <p v-if="strength" class="mb-4 text-xs" :class="{
-            'text-destructive': strength === 'weak',
-            'text-muted-foreground': strength !== 'weak',
-          }">
+          <p
+            v-if="strength"
+            class="mb-4 text-xs"
+            :class="{
+              'text-destructive': strength === 'weak',
+              'text-muted-foreground': strength !== 'weak',
+            }"
+          >
             {{ t('unlock.strengthLabel') }}: {{ t(`unlock.strength.${strength}`) }}
           </p>
         </template>

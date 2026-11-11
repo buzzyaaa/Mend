@@ -30,16 +30,22 @@ impl VaultKeys {
     }
 }
 
-/// 首次初始化：生成 salt 与 DEK，包裹后写 `meta`，返回会话可用的 DEK。
-pub fn setup(conn: &Connection, master_password: &str) -> MendResult<VaultKeys> {
-    if master_password.trim().is_empty() {
+/// 主密码统一校验：非空、达到最短长度（setup 与 change_password 共用）。
+fn validate_master_password(password: &str) -> MendResult<()> {
+    if password.trim().is_empty() {
         return Err(MendError::Vault("主密码不能为空".into()));
     }
-    if master_password.chars().count() < MIN_PASSWORD_LEN {
+    if password.chars().count() < MIN_PASSWORD_LEN {
         return Err(MendError::Vault(format!(
             "主密码至少 {MIN_PASSWORD_LEN} 位"
         )));
     }
+    Ok(())
+}
+
+/// 首次初始化：生成 salt 与 DEK，包裹后写 `meta`，返回会话可用的 DEK。
+pub fn setup(conn: &Connection, master_password: &str) -> MendResult<VaultKeys> {
+    validate_master_password(master_password)?;
     if db::is_initialized(conn)? {
         return Err(MendError::Vault("库已初始化".into()));
     }
@@ -85,6 +91,39 @@ pub fn unlock(conn: &Connection, master_password: &str) -> MendResult<VaultKeys>
     drop(kek);
 
     Ok(VaultKeys { dek, kdf: params })
+}
+
+/// 修改主密码：校验旧密码后生成新 salt/KEK，重新包裹**同一个 DEK**，事务更新 meta。
+/// DEK 不变，历史密文无需重加密；事务保证中途崩溃不会出现 salt 与包裹密钥不一致。
+pub fn change_password(
+    conn: &Connection,
+    old_password: &str,
+    new_password: &str,
+) -> MendResult<VaultKeys> {
+    validate_master_password(new_password)?;
+    if !db::is_initialized(conn)? {
+        return Err(MendError::Vault("库尚未初始化".into()));
+    }
+
+    // 旧密码校验：派生旧 KEK 解包 DEK，认证失败即旧密码错误。
+    let (_, dek, _, _) = derive_kek_and_unwrap(conn, old_password)?;
+
+    let new_salt = crypto::random_salt();
+    let new_params = KdfParams::default();
+    let new_kek = crypto::derive_kek(new_password, &new_salt, new_params)?;
+    let wrapped = crypto::wrap_dek(&new_kek, &dek)?;
+    drop(new_kek);
+
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|err| MendError::Db(err.to_string()))?;
+    db::meta_set(&tx, META_SALT, &B64.encode(new_salt))?;
+    db::meta_set(&tx, META_KDF, &new_params.to_meta_value())?;
+    db::meta_set(&tx, META_DEK, &wrapped)?;
+    tx.commit()
+        .map_err(|err| MendError::Db(err.to_string()))?;
+
+    Ok(VaultKeys { dek, kdf: new_params })
 }
 
 /// 读取库内 salt 与 KDF 参数：导出备份时写进 `.mendbak` 头部，导入端据此派生密钥。
@@ -187,6 +226,47 @@ mod tests {
         let conn = db::open_and_migrate(&path).expect("建库");
         assert!(setup(&conn, "123").is_err(), "3 位应被拒绝");
         assert!(setup(&conn, "1234").is_ok(), "4 位应被接受");
+
+        let _ = fs::remove_dir_all(path.parent().expect("父目录"));
+    }
+
+    /// 修改主密码后：新密码可解锁且 DEK 不变，旧密码失效。
+    #[test]
+    fn change_password_rewraps_same_dek() {
+        let path = temp_db("changepw");
+        let conn = db::open_and_migrate(&path).expect("建库");
+
+        let original = setup(&conn, "old-password-1234").expect("初始化");
+        let changed = change_password(&conn, "old-password-1234", "new-password-5678").expect("改密");
+
+        assert_eq!(
+            original.dek_bytes(),
+            changed.dek_bytes(),
+            "DEK 应保持不变（历史密文无需重加密）"
+        );
+        let reopened = unlock(&conn, "new-password-5678").expect("新密码解锁");
+        assert_eq!(original.dek_bytes(), reopened.dek_bytes());
+        assert!(unlock(&conn, "old-password-1234").is_err(), "旧密码必须失效");
+
+        let _ = fs::remove_dir_all(path.parent().expect("父目录"));
+    }
+
+    #[test]
+    fn change_password_rejects_wrong_old_password() {
+        let path = temp_db("changepw-wrong");
+        let conn = db::open_and_migrate(&path).expect("建库");
+        setup(&conn, "right-password").expect("初始化");
+        assert!(change_password(&conn, "wrong-password", "new-password-5678").is_err());
+
+        let _ = fs::remove_dir_all(path.parent().expect("父目录"));
+    }
+
+    #[test]
+    fn change_password_validates_new_password() {
+        let path = temp_db("changepw-short");
+        let conn = db::open_and_migrate(&path).expect("建库");
+        setup(&conn, "old-password-1234").expect("初始化");
+        assert!(change_password(&conn, "old-password-1234", "abc").is_err(), "新密码 3 位应被拒绝");
 
         let _ = fs::remove_dir_all(path.parent().expect("父目录"));
     }

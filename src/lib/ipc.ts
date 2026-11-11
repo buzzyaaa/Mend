@@ -38,6 +38,9 @@ export const vaultApi = {
   setup: (masterPassword: string) => invoke<UnlockResult>('vault_setup', { masterPassword }),
   unlock: (masterPassword: string) => invoke<UnlockResult>('vault_unlock', { masterPassword }),
   lock: () => invoke<void>('vault_lock'),
+  /** 修改主密码：core 校验旧密码并重包裹同一 DEK。 */
+  changePassword: (oldPassword: string, newPassword: string) =>
+    invoke<void>('vault_change_password', { oldPassword, newPassword }),
 }
 
 export const categoryApi = {

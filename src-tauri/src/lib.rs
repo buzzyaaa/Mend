@@ -14,6 +14,7 @@ pub fn run() {
             commands::vault_setup,
             commands::vault_unlock,
             commands::vault_lock,
+            commands::vault_change_password,
             commands::category_list,
             commands::category_create,
             commands::category_rename,

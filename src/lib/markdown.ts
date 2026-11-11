@@ -50,7 +50,9 @@ export function renderMarkdown(source: string): string {
     if (line.trim().startsWith('```')) {
       closeList()
       if (inCode) {
-        html.push(`<pre class="overflow-x-auto rounded-md bg-muted p-3 text-xs"><code>${escapeHtml(codeBuffer.join('\n'))}</code></pre>`)
+        html.push(
+          `<pre class="overflow-x-auto rounded-md bg-muted p-3 text-xs"><code>${escapeHtml(codeBuffer.join('\n'))}</code></pre>`,
+        )
         codeBuffer = []
         inCode = false
       } else {
@@ -117,7 +119,9 @@ export function renderMarkdown(source: string): string {
   }
 
   if (inCode && codeBuffer.length) {
-    html.push(`<pre class="overflow-x-auto rounded-md bg-muted p-3 text-xs"><code>${escapeHtml(codeBuffer.join('\n'))}</code></pre>`)
+    html.push(
+      `<pre class="overflow-x-auto rounded-md bg-muted p-3 text-xs"><code>${escapeHtml(codeBuffer.join('\n'))}</code></pre>`,
+    )
   }
   closeList()
 

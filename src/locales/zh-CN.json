@@ -53,7 +53,10 @@
     "noNotes": "（无备注）",
     "notesEdit": "编辑",
     "notesPreview": "预览",
-    "notesPlaceholder": "支持 Markdown：标题、列表、加粗、代码、链接…"
+    "notesPlaceholder": "支持 Markdown：标题、列表、加粗、代码、链接…",
+    "tags": "标签",
+    "tagsPlaceholder": "多个标签用逗号分隔，如：工作, 金融",
+    "tagFilterHint": "点击按该标签过滤，再点一次取消"
   },
   "sidebar": {
     "placeholder": "还没有分类，点击下方新增",
@@ -170,7 +173,15 @@
     "clipboardHint": "复制密码后到点自动清空；内容已被你替换为其他东西时不处理",
     "off": "关闭",
     "minutes": "{n} 分钟",
-    "seconds": "{n} 秒"
+    "seconds": "{n} 秒",
+    "changePassword": "修改主密码",
+    "changePasswordHint": "校验旧密码后重新加密主密钥；历史数据无需重加密",
+    "oldPassword": "当前主密码",
+    "newPassword": "新主密码",
+    "confirmPassword": "确认新主密码",
+    "passwordTooShort": "主密码至少 4 位",
+    "passwordMismatch": "两次输入的新密码不一致",
+    "passwordChanged": "主密码已修改"
   },
   "toast": {
     "copied": "已复制到剪贴板",

@@ -47,7 +47,11 @@ const form = reactive<EntryInput>({
   phone: '',
   notes: '',
   favorite: false,
+  tags: [],
 })
+
+/** 标签在表单里以逗号分隔输入，提交时拆分成数组。 */
+const tagsText = ref('')
 
 const heading = computed(() => (props.entry ? t('entry.dialogEdit') : t('entry.dialogCreate')))
 const previewHtml = computed(() => renderMarkdown(form.notes))
@@ -62,6 +66,7 @@ function fillFrom(entry: EntryView | null) {
   form.phone = entry?.phone ?? ''
   form.notes = entry?.notes ?? ''
   form.favorite = entry?.favorite ?? false
+  tagsText.value = entry?.tags.join(', ') ?? ''
   notesTab.value = 'edit'
   formError.value = ''
   showGenerator.value = false
@@ -126,6 +131,10 @@ async function save() {
     phone: form.phone,
     notes: form.notes,
     favorite: form.favorite,
+    tags: tagsText.value
+      .split(/[,，]/)
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0),
   }
 
   busy.value = true
@@ -190,7 +199,9 @@ function messageOf(err: unknown): string {
             class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
           >
             <option :value="null">{{ t('entry.uncategorized') }}</option>
-            <option v-for="cat in store.categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
+            <option v-for="cat in store.categories" :key="cat.id" :value="cat.id">
+              {{ cat.name }}
+            </option>
           </select>
         </label>
 
@@ -242,7 +253,10 @@ function messageOf(err: unknown): string {
           </div>
 
           <!-- 生成器面板 -->
-          <div v-if="showGenerator" class="mt-2 space-y-2 rounded-md border border-dashed border-border p-2">
+          <div
+            v-if="showGenerator"
+            class="mt-2 space-y-2 rounded-md border border-dashed border-border p-2"
+          >
             <div class="flex items-center gap-2 text-xs">
               <span class="text-muted-foreground">{{ t('generator.length') }}</span>
               <input
@@ -285,7 +299,11 @@ function messageOf(err: unknown): string {
             <p v-if="generatorError" class="text-xs text-destructive">{{ generatorError }}</p>
 
             <div class="flex justify-end gap-2 text-xs">
-              <button type="button" class="rounded px-2 py-1 text-muted-foreground hover:bg-accent" @click="generate">
+              <button
+                type="button"
+                class="rounded px-2 py-1 text-muted-foreground hover:bg-accent"
+                @click="generate"
+              >
                 {{ t('generator.regenerate') }}
               </button>
               <button
@@ -313,7 +331,9 @@ function messageOf(err: unknown): string {
               @change="applyPreset('email', $event)"
             >
               <option value="">{{ t('preset.choose') }}</option>
-              <option v-for="p in presetStore.grouped.email" :key="p.id" :value="p.id">{{ p.label }}</option>
+              <option v-for="p in presetStore.grouped.email" :key="p.id" :value="p.id">
+                {{ p.label }}
+              </option>
             </select>
           </div>
         </div>
@@ -331,7 +351,9 @@ function messageOf(err: unknown): string {
               @change="applyPreset('phone', $event)"
             >
               <option value="">{{ t('preset.choose') }}</option>
-              <option v-for="p in presetStore.grouped.phone" :key="p.id" :value="p.id">{{ p.label }}</option>
+              <option v-for="p in presetStore.grouped.phone" :key="p.id" :value="p.id">
+                {{ p.label }}
+              </option>
             </select>
           </div>
         </div>
@@ -341,6 +363,15 @@ function messageOf(err: unknown): string {
           <span class="text-sm">{{ t('entry.favorite') }}</span>
         </label>
 
+        <label class="block sm:col-span-2">
+          <span class="mb-1 block text-xs text-muted-foreground">{{ t('entry.tags') }}</span>
+          <input
+            v-model="tagsText"
+            class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+            :placeholder="t('entry.tagsPlaceholder')"
+          />
+        </label>
+
         <div class="sm:col-span-2">
           <div class="mb-1 flex items-center justify-between">
             <span class="text-xs text-muted-foreground">{{ t('entry.notes') }}</span>
@@ -348,7 +379,9 @@ function messageOf(err: unknown): string {
               <button
                 type="button"
                 class="rounded px-2 py-0.5"
-                :class="notesTab === 'edit' ? 'bg-card font-medium shadow-sm' : 'text-muted-foreground'"
+                :class="
+                  notesTab === 'edit' ? 'bg-card font-medium shadow-sm' : 'text-muted-foreground'
+                "
                 @click="notesTab = 'edit'"
               >
                 {{ t('entry.notesEdit') }}
@@ -356,7 +389,9 @@ function messageOf(err: unknown): string {
               <button
                 type="button"
                 class="rounded px-2 py-0.5"
-                :class="notesTab === 'preview' ? 'bg-card font-medium shadow-sm' : 'text-muted-foreground'"
+                :class="
+                  notesTab === 'preview' ? 'bg-card font-medium shadow-sm' : 'text-muted-foreground'
+                "
                 @click="notesTab = 'preview'"
               >
                 {{ t('entry.notesPreview') }}

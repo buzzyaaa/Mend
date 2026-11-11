@@ -10,7 +10,7 @@
 
 ## 2. 当前状态（截至最近一次更新）
 
-- 阶段：**阶段 1–6 已完成**（阶段 6：空闲自动锁定、剪贴板超时清空、深浅色主题、回收站、弱密码/重复密码标记、排序、备注全文检索、原生文件选择对话框、README 与版本号 0.2.0）。打包配置已就绪（NSIS，`installMode: currentUser`），`npm run tauri build` 产出 `src-tauri/target/release/mend.exe` 与 `bundle/nsis/Mend_0.2.0_x64-setup.exe`；安装包阶段需要访问 GitHub release 下载 NSIS 工具，网络受限时只产出 release exe（便携分发）。前端通过 `npm run build`；Rust 侧 `cargo check`/`cargo build` 通过，`npm run tauri dev` 已端到端启动。核心逻辑（加密、SQLite 仓储、条目/预设加解密编排、金库生命周期、密码生成、备份容器、回收站）在独立 crate `src-tauri/core`（包名 `mend-core`），测试可独立运行。
+- 阶段：**阶段 1–6 已完成**（阶段 6：空闲自动锁定、剪贴板超时清空、深浅色主题、回收站、弱密码/重复密码标记、排序、备注全文检索、原生文件选择对话框、README 与版本号 0.2.0）。后续增强（2026-11-11）：条目多标签（迁移 v2 `entries.tags`）、修改主密码（`vault_change_password`，重包裹 DEK 不重加密历史密文）、ESLint/Prettier（`npm run lint`/`format`）。打包配置已就绪（NSIS，`installMode: currentUser`），`npm run tauri build` 产出 `src-tauri/target/release/mend.exe` 与 `bundle/nsis/Mend_0.2.0_x64-setup.exe`；安装包阶段需要访问 GitHub release 下载 NSIS 工具，网络受限时只产出 release exe（便携分发）。前端通过 `npm run build`；Rust 侧 `cargo check`/`cargo build` 通过，`npm run tauri dev` 已端到端启动。核心逻辑（加密、SQLite 仓储、条目/预设加解密编排、金库生命周期、密码生成、备份容器、回收站）在独立 crate `src-tauri/core`（包名 `mend-core`），测试可独立运行。
 - 后端结构：主 crate `mend` 只保留 IPC 命令层（`commands/`）与会话状态（`vault/`）；`mend-core` 不依赖 Tauri/WebView。新增业务逻辑优先落在 `mend-core`，命令层只做参数搬运与状态守卫。
 - 主密码策略：最短 4 位（`mend-core` 的 `MIN_PASSWORD_LEN`，前端同值校验）。开发期允许弱口令便于本地调试，具体测试口令只在本地 `local/` 记录，不写入仓库。
 - 测试：`cargo test --manifest-path src-tauri\core\Cargo.toml`（单元测试 + `tests/flow.rs` 数据链路测试）。**不要在 `src-tauri` 主 crate 上跑 `cargo test`**——测试二进制链接 WebView 依赖，本机会以 `STATUS_ENTRYPOINT_NOT_FOUND` 崩溃（应用本身正常）。

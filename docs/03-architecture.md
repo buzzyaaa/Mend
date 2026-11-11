@@ -92,6 +92,7 @@ Mend/
 | `vault_setup` | `{ masterPassword }` | `{ unlocked: bool }` | 首次启动建库、派生 KEK 并包裹 DEK（已实现） |
 | `vault_unlock` | `{ masterPassword }` | `{ unlocked: bool }` | 校验密钥、装载会话 DEK 到内存（已实现） |
 | `vault_lock` | — | — | 销毁会话密钥、清空敏感内存（已实现） |
+| `vault_change_password` | `{ oldPassword, newPassword }` | — | 校验旧密码后用新 KEK 重包裹同一 DEK，事务更新 meta（已实现） |
 | `vault_status` | — | `{ initialized, unlocked }` | 启动时判断走解锁页还是主界面（已实现） |
 | `category_list` | — | `Vec<Category>` | 分类列表（含 entryCount 聚合，已实现） |
 | `category_create` | `{ input: { name } }` | `Category` | 已实现 |
@@ -99,7 +100,7 @@ Mend/
 | `category_delete` | `{ id }` | — | 删除时条目移入"未分类"（已实现） |
 | `entry_list` | `{ categoryId?, keyword? }` | `Vec<EntryView>` | 解锁态返回解密后的展示模型（已实现） |
 | `entry_get` | `{ id }` | `EntryView` | 单条详情（已实现） |
-| `entry_create` | `{ input: EntryInput }` | `EntryView` | 敏感字段后端加密后落库（已实现） |
+| `entry_create` | `{ input: EntryInput }` | `EntryView` | 敏感字段后端加密后落库；`EntryInput`/`EntryView` 含 `tags: string[]`（已实现） |
 | `entry_update` | `{ id, input: EntryInput }` | `EntryView` | 已实现 |
 | `entry_delete` | `{ id }` | — | 软删除：写 `deleted_at` 进回收站（已实现） |
 | `entry_trash_list` | — | `Vec<EntryView>` | 回收站列表（解密返回，含 `deletedAt`，已实现） |

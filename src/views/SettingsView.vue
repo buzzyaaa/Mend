@@ -216,6 +216,35 @@ async function remove(preset: Preset) {
     toast.error(t('toast.failed', { message: err instanceof Error ? err.message : String(err) }))
   }
 }
+
+// —— 修改主密码 ——
+const pwForm = reactive({ old: '', next: '', confirm: '' })
+const pwError = ref('')
+const pwBusy = ref(false)
+
+async function changePassword() {
+  pwError.value = ''
+  if (pwForm.next.length < 4) {
+    pwError.value = t('settings.passwordTooShort')
+    return
+  }
+  if (pwForm.next !== pwForm.confirm) {
+    pwError.value = t('settings.passwordMismatch')
+    return
+  }
+  pwBusy.value = true
+  try {
+    await vaultStore.changePassword(pwForm.old, pwForm.next)
+    pwForm.old = ''
+    pwForm.next = ''
+    pwForm.confirm = ''
+    toast.success(t('settings.passwordChanged'))
+  } catch (err) {
+    pwError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    pwBusy.value = false
+  }
+}
 </script>
 
 <template>
@@ -290,6 +319,51 @@ async function remove(preset: Preset) {
               {{ t('settings.seconds', { n: s }) }}
             </option>
           </select>
+        </div>
+      </section>
+
+      <!-- 修改主密码 -->
+      <section class="rounded-lg border border-border bg-card p-4">
+        <h2 class="text-sm font-medium">{{ t('settings.changePassword') }}</h2>
+        <p class="mb-3 mt-0.5 text-xs text-muted-foreground">
+          {{ t('settings.changePasswordHint') }}
+        </p>
+
+        <div class="grid max-w-md grid-cols-1 gap-2">
+          <input
+            v-model="pwForm.old"
+            type="password"
+            autocomplete="current-password"
+            class="rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+            :placeholder="t('settings.oldPassword')"
+          />
+          <input
+            v-model="pwForm.next"
+            type="password"
+            autocomplete="new-password"
+            class="rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+            :placeholder="t('settings.newPassword')"
+          />
+          <input
+            v-model="pwForm.confirm"
+            type="password"
+            autocomplete="new-password"
+            class="rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+            :placeholder="t('settings.confirmPassword')"
+          />
+
+          <p v-if="pwError" class="text-xs text-destructive">{{ pwError }}</p>
+
+          <div class="flex justify-end">
+            <button
+              type="button"
+              class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+              :disabled="pwBusy || !pwForm.old || !pwForm.next"
+              @click="changePassword"
+            >
+              {{ t('common.confirm') }}
+            </button>
+          </div>
         </div>
       </section>
 

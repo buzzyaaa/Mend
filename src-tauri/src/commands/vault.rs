@@ -87,3 +87,19 @@ pub fn vault_unlock(
 pub fn vault_lock(state: State<'_, VaultState>) -> MendResult<()> {
     state.lock()
 }
+
+/// 修改主密码：仅解锁态可用；core 校验旧密码并事务内重包裹 DEK，会话 DEK 保持不变。
+#[tauri::command]
+pub fn vault_change_password(
+    app: AppHandle,
+    state: State<'_, VaultState>,
+    old_password: String,
+    new_password: String,
+) -> MendResult<()> {
+    if !state.is_unlocked() {
+        return Err(MendError::Vault("库未解锁".into()));
+    }
+    let conn = open_db(&app)?;
+    mend_core::vault::change_password(&conn, &old_password, &new_password)?;
+    Ok(())
+}

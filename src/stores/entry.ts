@@ -18,6 +18,8 @@ export const useEntryStore = defineStore('entry', () => {
   const trash = ref<EntryView[]>([])
   const bucket = ref<Bucket>('all')
   const keyword = ref('')
+  /** 标签过滤：点卡片上的标签 chip 设置，再点同一个清除。 */
+  const tagFilter = ref<string | null>(null)
   const sortBy = ref<SortBy>('updated')
   const loading = ref(false)
 
@@ -30,7 +32,14 @@ export const useEntryStore = defineStore('entry', () => {
   /** 关键字命中：标题 / 账号 / 邮箱 / 手机 / 网址 / 备注（备注为密文列，只能在内存里过滤）。 */
   function matches(entry: EntryView, kw: string): boolean {
     if (!kw) return true
-    const haystack = [entry.title, entry.username, entry.email, entry.phone, entry.url ?? '', entry.notes]
+    const haystack = [
+      entry.title,
+      entry.username,
+      entry.email,
+      entry.phone,
+      entry.url ?? '',
+      entry.notes,
+    ]
       .join(' ')
       .toLowerCase()
     return haystack.includes(kw)
@@ -38,6 +47,7 @@ export const useEntryStore = defineStore('entry', () => {
 
   const filteredEntries = computed(() => {
     const kw = keyword.value.trim().toLowerCase()
+    const tag = tagFilter.value
     const list = entries.value.filter((item) => {
       if (bucket.value === 'uncategorized' && item.categoryId) return false
       if (
@@ -48,6 +58,7 @@ export const useEntryStore = defineStore('entry', () => {
       ) {
         return false
       }
+      if (tag && !item.tags.includes(tag)) return false
       return matches(item, kw)
     })
 
@@ -80,7 +91,6 @@ export const useEntryStore = defineStore('entry', () => {
   const passwordIssues = computed<Map<string, PasswordIssue>>(() => analyzePasswords(entries.value))
 
   const uncategorizedCount = computed(() => entries.value.filter((item) => !item.categoryId).length)
-
 
   /** 从 Rust 侧拉全量分类与条目；浏览器预览下不做任何请求。 */
   async function refresh() {
@@ -157,6 +167,12 @@ export const useEntryStore = defineStore('entry', () => {
 
   function selectBucket(next: Bucket) {
     bucket.value = next
+    tagFilter.value = null
+  }
+
+  /** 点同一个标签取消过滤，点新标签切换。 */
+  function toggleTagFilter(tag: string) {
+    tagFilter.value = tagFilter.value === tag ? null : tag
   }
 
   function setKeyword(value: string) {
@@ -176,6 +192,7 @@ export const useEntryStore = defineStore('entry', () => {
     bucket,
     selectedCategoryId,
     keyword,
+    tagFilter,
     sortBy,
     loading,
     refresh,
@@ -191,5 +208,6 @@ export const useEntryStore = defineStore('entry', () => {
     setSortBy,
     selectBucket,
     setKeyword,
+    toggleTagFilter,
   }
 })

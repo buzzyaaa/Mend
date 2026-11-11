@@ -51,9 +51,12 @@
     "dupShort": "dup",
     "titleRequired": "Title is required",
     "noNotes": "(no notes)",
-    "notesEdit": "Write",
+    "notesEdit": "Edit",
     "notesPreview": "Preview",
-    "notesPlaceholder": "Markdown supported: headings, lists, bold, code, links…"
+    "notesPlaceholder": "Markdown supported: headings, lists, bold, code, links…",
+    "tags": "Tags",
+    "tagsPlaceholder": "Comma separated, e.g. work, finance",
+    "tagFilterHint": "Click to filter by this tag, click again to clear"
   },
   "sidebar": {
     "placeholder": "No categories yet, add one below",
@@ -170,7 +173,15 @@
     "clipboardHint": "Clears the copied password after the chosen delay; skipped if you copied something else in the meantime",
     "off": "Off",
     "minutes": "{n} min",
-    "seconds": "{n} s"
+    "seconds": "{n} s",
+    "changePassword": "Change master password",
+    "changePasswordHint": "Verifies the old password and re-wraps the master key; existing data is not re-encrypted",
+    "oldPassword": "Current master password",
+    "newPassword": "New master password",
+    "confirmPassword": "Confirm new master password",
+    "passwordTooShort": "Master password must be at least 4 characters",
+    "passwordMismatch": "The two new passwords do not match",
+    "passwordChanged": "Master password changed"
   },
   "toast": {
     "copied": "Copied to clipboard",

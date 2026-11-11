@@ -29,6 +29,7 @@ fn sample_input() -> entries::EntryInput {
         phone: "13800138000".into(),
         notes: "## 登录步骤\n- 先连内网\n- 再输入动态口令".into(),
         favorite: true,
+        tags: vec!["工作".into(), "vpn".into()],
     }
 }
 

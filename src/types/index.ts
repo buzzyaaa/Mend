@@ -20,6 +20,8 @@ export interface EntryView {
   phone: string
   notes: string
   favorite: boolean
+  /** 明文标签列表（语义同分类名）。 */
+  tags: string[]
   createdAt: number
   updatedAt: number
   /** 回收站条目才有值（删除时间戳）。 */
@@ -37,6 +39,8 @@ export interface EntryInput {
   phone: string
   notes: string
   favorite: boolean
+  /** 逗号分隔输入解析前的最终数组形式；提交前由表单拆分。 */
+  tags: string[]
 }
 
 export type PresetFieldType = 'username' | 'email' | 'phone'

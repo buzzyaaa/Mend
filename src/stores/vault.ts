@@ -44,5 +44,16 @@ export const useVaultStore = defineStore('vault', () => {
     status.value = { ...status.value, unlocked: false }
   }
 
-  return { status, busy, setStatus, refresh, setup, unlock, lock }
+  /** 修改主密码：DEK 不变，会话保持解锁。 */
+  async function changePassword(oldPassword: string, newPassword: string) {
+    busy.value = true
+    try {
+      if (!isTauri()) throw new Error('[ipc] vault_change_password 仅在 Tauri 运行时可用')
+      await vaultApi.changePassword(oldPassword, newPassword)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  return { status, busy, setStatus, refresh, setup, unlock, lock, changePassword }
 })

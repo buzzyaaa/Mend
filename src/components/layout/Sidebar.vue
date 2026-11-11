@@ -154,7 +154,10 @@ function messageOf(err: unknown): string {
         </div>
       </div>
 
-      <p v-if="entryStore.categories.length === 0" class="px-2.5 py-2 text-xs text-muted-foreground">
+      <p
+        v-if="entryStore.categories.length === 0"
+        class="px-2.5 py-2 text-xs text-muted-foreground"
+      >
         {{ t('sidebar.placeholder') }}
       </p>
     </nav>

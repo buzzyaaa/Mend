@@ -14,7 +14,7 @@ pub use rusqlite::Connection;
 
 use crate::error::{MendError, MendResult};
 
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 pub const DB_FILE_NAME: &str = "mend.db";
 
 const SCHEMA_V1: &str = r#"
@@ -62,6 +62,9 @@ CREATE INDEX IF NOT EXISTS idx_entries_category ON entries(category_id);
 CREATE INDEX IF NOT EXISTS idx_entries_deleted ON entries(deleted_at);
 "#;
 
+/// v1 → v2：条目多标签（JSON 数组，明文，见 docs/04 §2.3）。
+const MIGRATION_V2: &str = "ALTER TABLE entries ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';";
+
 pub fn db_file_path(app_data_dir: &Path) -> PathBuf {
     app_data_dir.join(DB_FILE_NAME)
 }
@@ -94,6 +97,12 @@ pub fn open_and_migrate(path: &Path) -> MendResult<Connection> {
 
 pub fn migrate(conn: &Connection) -> MendResult<()> {
     conn.execute_batch(SCHEMA_V1).map_err(db_err)?;
+    let current: i64 = meta_get(conn, "schema_version")?
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    if current < 2 {
+        conn.execute_batch(MIGRATION_V2).map_err(db_err)?;
+    }
     meta_set(conn, "schema_version", &SCHEMA_VERSION.to_string())
 }
 
@@ -226,6 +235,8 @@ pub struct EntryRowEnc {
     pub phone_enc: String,
     pub notes_enc: String,
     pub favorite: bool,
+    /// 明文标签列表（JSON 落 `tags` 列，语义同分类名，见 docs/04 §2.3）。
+    pub tags: Vec<String>,
     pub created_at: i64,
     pub updated_at: i64,
     /// 回收站时间戳：`None` = 正常条目，`Some(ms)` = 已软删除。
@@ -233,11 +244,12 @@ pub struct EntryRowEnc {
 }
 
 pub fn insert_entry(conn: &Connection, row: &EntryRowEnc) -> MendResult<()> {
+    let tags_json = tags_to_json(&row.tags)?;
     conn.execute(
         "INSERT INTO entries(id, category_id, title, url,
                              username_enc, password_enc, email_enc, phone_enc, notes_enc,
-                             favorite, created_at, updated_at)
-         VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                             favorite, tags, created_at, updated_at)
+         VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
         params![
             row.id,
             row.category_id,
@@ -249,6 +261,7 @@ pub fn insert_entry(conn: &Connection, row: &EntryRowEnc) -> MendResult<()> {
             row.phone_enc,
             row.notes_enc,
             row.favorite as i64,
+            tags_json,
             row.created_at,
             row.updated_at,
         ],
@@ -258,12 +271,13 @@ pub fn insert_entry(conn: &Connection, row: &EntryRowEnc) -> MendResult<()> {
 }
 
 pub fn update_entry(conn: &Connection, row: &EntryRowEnc) -> MendResult<()> {
+    let tags_json = tags_to_json(&row.tags)?;
     let changed = conn
         .execute(
             "UPDATE entries
                 SET category_id = ?2, title = ?3, url = ?4,
                     username_enc = ?5, password_enc = ?6, email_enc = ?7,
-                    phone_enc = ?8, notes_enc = ?9, favorite = ?10, updated_at = ?11
+                    phone_enc = ?8, notes_enc = ?9, favorite = ?10, tags = ?11, updated_at = ?12
               WHERE id = ?1 AND deleted_at IS NULL",
             params![
                 row.id,
@@ -276,6 +290,7 @@ pub fn update_entry(conn: &Connection, row: &EntryRowEnc) -> MendResult<()> {
                 row.phone_enc,
                 row.notes_enc,
                 row.favorite as i64,
+                tags_json,
                 row.updated_at,
             ],
         )
@@ -286,10 +301,18 @@ pub fn update_entry(conn: &Connection, row: &EntryRowEnc) -> MendResult<()> {
     Ok(())
 }
 
+fn tags_to_json(tags: &[String]) -> MendResult<String> {
+    serde_json::to_string(tags).map_err(|err| MendError::Db(format!("标签序列化失败: {err}")))
+}
+
+fn tags_from_json(raw: &str) -> MendResult<Vec<String>> {
+    serde_json::from_str(raw).map_err(|err| MendError::Db(format!("标签数据损坏: {err}")))
+}
+
 pub fn get_entry(conn: &Connection, id: &str) -> MendResult<Option<EntryRowEnc>> {
     conn.query_row(
         "SELECT id, category_id, title, url, username_enc, password_enc, email_enc,
-                phone_enc, notes_enc, favorite, created_at, updated_at, deleted_at
+                phone_enc, notes_enc, favorite, tags, created_at, updated_at, deleted_at
            FROM entries WHERE id = ?1 AND deleted_at IS NULL",
         params![id],
         map_entry_row,
@@ -307,7 +330,7 @@ pub fn list_entries(
     let mut stmt = conn
         .prepare(
             "SELECT id, category_id, title, url, username_enc, password_enc, email_enc,
-                    phone_enc, notes_enc, favorite, created_at, updated_at, deleted_at
+                    phone_enc, notes_enc, favorite, tags, created_at, updated_at, deleted_at
                FROM entries
               WHERE deleted_at IS NULL
                 AND (?1 IS NULL OR category_id = ?1)
@@ -328,7 +351,7 @@ pub fn list_trashed_entries(conn: &Connection) -> MendResult<Vec<EntryRowEnc>> {
     let mut stmt = conn
         .prepare(
             "SELECT id, category_id, title, url, username_enc, password_enc, email_enc,
-                    phone_enc, notes_enc, favorite, created_at, updated_at, deleted_at
+                    phone_enc, notes_enc, favorite, tags, created_at, updated_at, deleted_at
                FROM entries
               WHERE deleted_at IS NOT NULL
               ORDER BY deleted_at DESC",
@@ -497,9 +520,19 @@ fn map_entry_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EntryRowEnc> {
         phone_enc: row.get(7)?,
         notes_enc: row.get(8)?,
         favorite: row.get::<_, i64>(9)? != 0,
-        created_at: row.get(10)?,
-        updated_at: row.get(11)?,
-        deleted_at: row.get(12)?,
+        tags: row
+            .get::<_, String>(10)
+            .and_then(|raw| {
+                tags_from_json(&raw)
+                    .map_err(|err| rusqlite::Error::FromSqlConversionFailure(
+                        10,
+                        rusqlite::types::Type::Text,
+                        Box::new(err),
+                    ))
+            })?,
+        created_at: row.get(11)?,
+        updated_at: row.get(12)?,
+        deleted_at: row.get(13)?,
     })
 }
 
@@ -519,10 +552,34 @@ mod tests {
         migrate(&conn).unwrap();
         assert_eq!(
             meta_get(&conn, "schema_version").unwrap().as_deref(),
-            Some("1")
+            Some("2")
         );
         assert!(!is_initialized(&conn).unwrap());
         assert!(list_entries(&conn, None, None).unwrap().is_empty());
+    }
+
+    /// v1 旧库（无 tags 列）升级到 v2：加列成功且旧数据带默认空标签。
+    #[test]
+    fn v1_database_upgrades_to_v2_with_default_tags() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA_V1).unwrap();
+        conn.execute(
+            "INSERT INTO entries(id, title, username_enc, password_enc, email_enc, phone_enc,
+                                 notes_enc, favorite, created_at, updated_at)
+             VALUES('e1', 't', 'u', 'p', 'm', 'ph', 'n', 0, 1, 1)",
+            [],
+        )
+        .unwrap();
+        meta_set(&conn, "schema_version", "1").unwrap();
+
+        migrate(&conn).unwrap();
+        assert_eq!(
+            meta_get(&conn, "schema_version").unwrap().as_deref(),
+            Some("2")
+        );
+        let rows = list_entries(&conn, None, None).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].tags.is_empty(), "旧条目升级后应为空标签");
     }
 
     #[test]
@@ -542,6 +599,7 @@ mod tests {
                 phone_enc: "c".into(),
                 notes_enc: "c".into(),
                 favorite: false,
+                tags: vec![],
                 created_at: 1,
                 updated_at: 1,
                 deleted_at: None,
@@ -579,6 +637,7 @@ mod tests {
             phone_enc: "enc-phone".into(),
             notes_enc: "enc-notes".into(),
             favorite: false,
+            tags: vec![],
             created_at: 1,
             updated_at: 1,
             deleted_at: None,

@@ -29,7 +29,7 @@
 - [x] Pinia store 骨架（vault / entry / preferences）。
 - [x] 前端构建脚本：`dev`、`build`（vue-tsc + vite）、`typecheck`。
 - [x] `src-tauri` 骨架编译通过：`cargo check`/`cargo build` 成功，`npm run tauri dev` 端到端启动（Vite :1420 + `mend.exe` + WebView，页面 200）。
-- [ ] lint/format 脚本与配置（待补 ESLint + Prettier）。
+- [x] lint/format 脚本与配置（ESLint 9 flat config + Prettier，`npm run lint` / `npm run format`，2026-11-11 补齐）。
 
 **验收**：`npm run tauri dev` 启动窗口；左右布局与顶栏可见；中/英切换生效；typecheck 通过；提交 feat 提交并推送到 `origin`。（工具链见 `09-env-setup.md`。）
 
@@ -91,19 +91,24 @@
 - [x] 弱密码与重复密码提示：`src/lib/security.ts` 计算（少于 8 位或字符种类单一 = 弱；同一密码被多条共用 = 重复），列表卡片显示"弱/重"标记。
 - [x] 排序（最近更新 / 名称 / 收藏优先）与收藏标记。
 - [x] 备注全文检索：调用 `entry_list` 拉全量后在内存里按标题/账号/邮箱/手机/网址/备注匹配。
-- [ ] 标签（`tags` 字段/多标签）未做，列入后续。
+- [x] 标签（多标签，2026-11-11）：迁移 v2 新增 `entries.tags`（JSON 明文列）；表单逗号分隔输入，卡片 chip 展示并可点击过滤。
+- [x] 修改主密码（2026-11-11）：`vault_change_password`；core 校验旧密码后用新 salt/KEK 重包裹同一 DEK，事务更新 `meta`，历史密文无需重加密。
+- [x] ESLint + Prettier（2026-11-11）：flat config（eslint-plugin-vue + typescript-eslint），脚本 `npm run lint` / `npm run format`。
 - [x] 空状态与错误提示：各列表空状态、操作失败走 Toast；回收站空态单独文案。
 - [x] Tauri 打包：`tauri.conf.json` 已配 NSIS（`installMode: currentUser`）+ 图标 + 版本 0.2.0；`npm run tauri build` 在可访问 GitHub release 的环境下产出 `target/release/bundle/nsis/Mend_0.2.0_x64-setup.exe`（约 1.8 MB），网络受限时退化为 release `mend.exe`（便携分发）。
 - [x] README 使用说明（首次使用、回收站、备份/恢复、手动迁移、安全习惯）。
 
 ## 后续路线（非 MVP，按需排期）
 
-- CSV / KDBX / Bitwarden JSON 导入导出。
-- TOTP 动态验证码。
-- 真实 WebDAV 同步（手动/定时/变更触发）、冲突合并与同步历史。
-- Windows Hello / 生物识别快速解锁。
-- 浏览器扩展与自动填充。
-- CI（GitHub Actions）、自动更新。
+优先级（2026-11-11 用户指定，详见本地 `local/learnings/FEATURE_REQUESTS.md`）：
+
+1. **CI / 自动更新**：GitHub Actions（core 测试 + typecheck + build + 打包产物）+ Tauri updater 自动更新。排在未来 feat 第一位。
+2. 以下均为"很久之后"，无时间预期：
+   - CSV / KDBX / Bitwarden JSON 导入导出。
+   - TOTP 动态验证码。
+   - 真实 WebDAV 同步（手动/定时/变更触发）、冲突合并与同步历史。
+   - Windows Hello / 生物识别快速解锁。
+   - 浏览器扩展与自动填充。
 
 ## 里程碑与推送约定
 
