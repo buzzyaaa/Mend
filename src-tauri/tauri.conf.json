@@ -45,11 +45,3 @@
     }
   }
 }
-  "updater": {
-    "active": false,
-    "endpoints": [],
-    "pubkey": "",
-    "dialog": true,
-    "installerArgs": [],
-    "pubkeyProvider": "app"
-  }
