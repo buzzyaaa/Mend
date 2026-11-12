@@ -134,7 +134,7 @@ MVP（阶段 0–6）与 CI/自动更新已完成，下面是盘点出的尚未�
 
 **列表交互与表单体验修复（2026-11-12，用户反馈 5 项）**
 
-- [x] 拖拽排序闭环补全（T1）：最左侧 `GripVertical` 手柄仅在「手动排序」且非回收站 / 星标 / 归档视图时出现，SortableJS 直接绑定 naive-ui 渲染的真实 `<tbody>` 收集 DOM 行序 → `store.reorder` → `entry_reorder` 落库。本次补两处：① `EntryView` 新增 `sortOrder` 随 `entry_list` 下发，前端 `refresh()` 时按 `sort_order` 重建各桶手动序（`src/lib/manualOrder.ts`），拖拽结果跨刷新 / 重启保留（此前只写库、前端回退 `updatedAt`）；② `db::reorder_entries` 改为**按 `category_id` 分组**写回——可见子集按给定顺序填回原位、未提供条目留在原位、整桶紧凑 `0..n-1`，避免跨分类互相覆盖，也避免关键字 / 标签过滤下出现重复 / 空洞序号。
+- [x] 拖拽排序闭环补全（T1）：最左侧 `GripVertical` 手柄在主列表（全部 / 未分类 / 具体分类）**始终显示**（回收站 / 星标 / 归档视图除外，非单一手动序或只读），SortableJS 直接绑定 naive-ui 渲染的真实 `<tbody>` 收集 DOM 行序 → `store.reorder` → `entry_reorder` 落库；在非「手动排序」模式下拖拽会**自动切到手动排序**再落库（否则只写库、界面仍按原排序键展示）。本次另补两处：① `EntryView` 新增 `sortOrder` 随 `entry_list` 下发，前端 `refresh()` 时按 `sort_order` 重建各桶手动序（`src/lib/manualOrder.ts`），拖拽结果跨刷新 / 重启保留（此前只写库、前端回退 `updatedAt`）；② `db::reorder_entries` 改为**按 `category_id` 分组**写回——可见子集按给定顺序填回原位、未提供条目留在原位、整桶紧凑 `0..n-1`，避免跨分类互相覆盖，也避免关键字 / 标签过滤下出现重复 / 空洞序号。分类列图标随分类色变色用 `NIcon` 的 `color` prop（`style.color` 会被 naive-ui 内部 `color: undefined` 覆盖而失效）。
 - [x] 列表响应式（T2）：列宽按表格容器宽度分 normal / compact / tiny 三档，`ResizeObserver` 驱动；小屏逐列收窄并保证最右侧操作列始终可见，极窄档隐藏 email / phone / notes（内容仍可在展开行查看），不再被固定 1300px 的 `scrollX` 把操作列挤出视口。
 - [x] 分类列图标随分类色变色（T3）：分类列 `NIcon` 与文字共用 `cat.color`。
 - [x] 新建条目默认沿用当前分类（T4）：`EntryDialog` 新建时分类选择器取 `store.selectedCategoryId`；编辑仍保留条目自身分类。

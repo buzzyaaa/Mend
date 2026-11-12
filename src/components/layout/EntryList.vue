@@ -63,10 +63,10 @@ const expandedKeys = ref<string[]>([])
 const tableWrapRef = ref<HTMLElement | null>(null)
 
 // —— 手动排序拖拽（SortableJS，直接操作 naive-ui 渲染出的真实 `<tbody>`）——
-// 仅「手动排序」且非回收站 / 星标 / 归档视图时启用；拖拽顺序是后端 `sort_order` 的内存镜像。
+// 主列表（全部 / 未分类 / 具体分类）始终显示拖拽手柄；拖拽即切到「手动排序」并按
+// 后端 `sort_order` 落库。回收站 / 星标 / 归档视图不启用（非单一手动序或只读）。
 const dragEnabled = computed(
-  () =>
-    store.sortBy === 'manual' && !store.isTrashView && !store.isArchiveView && !store.isStarredView,
+  () => !store.isTrashView && !store.isArchiveView && !store.isStarredView,
 )
 
 // 锁定（手动 / 空闲自动）后清掉本地明文残留：已显示密码的条目集合与展开行。
@@ -334,14 +334,16 @@ function setupSortable() {
       const ids = Array.from(tbody!.querySelectorAll('tr[data-id]'))
         .map((tr) => tr.getAttribute('data-id'))
         .filter(Boolean) as string[]
-      if (ids.length) {
-        store
-          .reorder(ids)
-          .then(() => toast.success(t('entry.reorderSaved')))
-          .catch((err: unknown) => {
-            toast.error(t('toast.failed', { message: messageOf(err) }))
-          })
-      }
+      if (!ids.length) return
+      // 在「最近更新 / 名称 / 星标优先」下拖拽：先切到「手动排序」再落库，否则拖拽结果
+      // 只写库、界面仍按原排序键展示（用户看到的就是"拖了没反应"）。
+      if (store.sortBy !== 'manual') store.setSortBy('manual')
+      store
+        .reorder(ids)
+        .then(() => toast.success(t('entry.reorderSaved')))
+        .catch((err: unknown) => {
+          toast.error(t('toast.failed', { message: messageOf(err) }))
+        })
     },
   })
 }
@@ -383,10 +385,14 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', handleWindowResize)
 })
 
-watch(dragEnabled, (enabled) => {
-  if (enabled) nextTick(setupSortable)
-  else destroySortable()
-})
+watch(
+  () => [dragEnabled.value, store.bucket] as const,
+  () => {
+    // 视图切换（如 全部 ↔ 具体分类）会重建表格行，重新挂载 Sortable 才能在新 tbody 上生效。
+    if (dragEnabled.value) nextTick(setupSortable)
+    else destroySortable()
+  },
+)
 
 // —— 展开行（完整 Markdown 备注 + 字段 + 标签 + 编辑）——
 
@@ -576,7 +582,7 @@ const columns = computed<DataTableColumns<EntryView>>(() => {
   // 选中具体分类时隐藏分类列（全部 / 未分类 / 回收站保留）。
   const hideCategory = store.selectedCategoryId !== null
   const base: DataTableColumns<EntryView> = [
-    // 拖拽手柄列：仅手动排序时出现（回收站 / 星标视图不启用拖拽）。
+    // 拖拽手柄列：主列表（全部 / 未分类 / 具体分类）始终出现，回收站 / 星标 / 归档视图不启用拖拽。
     ...(dragEnabled.value
       ? [
           {
@@ -745,11 +751,14 @@ const columns = computed<DataTableColumns<EntryView>>(() => {
                   class: 'flex min-w-0 items-center gap-1 rounded px-1.5 py-0.5',
                 },
                 [
-                  // 分类图标跟随分类文字颜色（分类自定义色时图标同色）。
+                  // 分类图标跟随分类文字颜色。注意必须用 NIcon 的 `color` prop：
+                  // 图标 svg 用 `fill: currentColor`，而 NIcon 的 mergedStyle 会输出
+                  // `color: undefined`，normalizeStyle 合并数组时会覆盖掉 attrs 里的
+                  // `style.color`，导致 style 写法无效。
                   h(NIcon, {
                     component: resolveCategoryIcon(cat?.icon),
                     size: 14,
-                    style: cat?.color ? { color: cat.color } : undefined,
+                    color: cat?.color || undefined,
                   }),
                   h(
                     NText,
