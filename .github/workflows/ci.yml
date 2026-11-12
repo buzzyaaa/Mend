@@ -34,25 +34,6 @@ jobs:
       - name: Build
         run: npm run build
 
-  tauri-build:
-    name: Tauri Release Build
-    needs: [core-test, frontend-check]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: rustup target add x86_64-pc-windows-gnu
-      - uses: Swatinem/rust-cache@v2
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: npm ci
-      - name: Build
-        run: npm run tauri build
-      - name: Upload release binaries
-        uses: actions/upload-artifact@v4
-        with:
-          name: mend-release
-          path: src-tauri/target/release/mend.exe
+  # 说明：真实的可安装包（Windows NSIS）只能在 Windows 上构建，由 .github/workflows/release.yml
+  # 在打 `v*` tag 时构建并发布到 GitHub Release（含 latest.json 与签名）。这里不跑 Tauri 打包，
+  # 避免在非 Windows 环境因 NSIS 不可用而失败。

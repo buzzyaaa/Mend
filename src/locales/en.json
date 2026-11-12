@@ -182,6 +182,25 @@
     "passwordMismatch": "The two new passwords do not match",
     "passwordChanged": "Master password changed"
   },
+  "update": {
+    "title": "Update",
+    "hint": "Checks for new versions from GitHub Releases by default. The source and protocol can be swapped in code (see src/lib/update.ts).",
+    "currentVersion": "Current version",
+    "checkNow": "Check for updates",
+    "checkInterval": "Update check frequency",
+    "checkIntervalHint": "Reminds on launch at the chosen interval: weekly / monthly / yearly",
+    "intervalWeek": "Weekly",
+    "intervalMonth": "Monthly",
+    "intervalYear": "Yearly",
+    "upToDate": "You are on the latest version",
+    "availableTitle": "New version {version} available",
+    "availableBody": "Release notes:\n{notes}",
+    "availableBodyPlain": "A new version is available. Update now?",
+    "updateNow": "Update now",
+    "later": "Later",
+    "checkFailed": "Update check failed: {message}",
+    "installFailed": "Update install failed: {message}"
+  },
   "toast": {
     "copied": "Copied to clipboard",
     "copyFailed": "Copy failed, please select the text manually",

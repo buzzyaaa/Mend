@@ -1,6 +1,6 @@
 [package]
 name = "mend"
-version = "0.2.0"
+version = "0.3.0"
 description = "Mend — local offline encrypted password manager"
 edition = "2021"
 rust-version = "1.77"
@@ -23,6 +23,11 @@ zeroize = { version = "1", features = ["derive"] }
 
 # 原生文件选择对话框（备份导出/恢复）
 tauri-plugin-dialog = "2"
+
+# 自动更新：检查 / 下载 / 安装（数据源在 tauri.conf.json 的 plugins.updater.endpoints，当前为 GitHub Releases）
+tauri-plugin-updater = "2"
+# 安装后重启应用
+tauri-plugin-process = "2"
 
 [profile.release]
 panic = "abort"

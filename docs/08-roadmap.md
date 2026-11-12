@@ -109,7 +109,7 @@
 
 优先级（2026-11-11 用户指定，详见本地 `local/learnings/FEATURE_REQUESTS.md`）：
 
-1. **CI / 自动更新**：GitHub Actions（core 测试 + typecheck + build + 打包产物）+ Tauri updater 自动更新。排在未来 feat 第一位。
+1. **CI / 自动更新**（已完成，2026-11-12）：见 `10-release-update.md`。CI 拆分为 `ci.yml`（Ubuntu 上 core 测试 + 前端类型检查/构建）与 `release.yml`（打 `v*` tag 时在 `windows-latest` 用 tauri-action 构建 NSIS 并发布 GitHub Release，含 `latest.json` 与签名）；软件侧接入 `tauri-plugin-updater`，设置页可设检查频率（每周/每月/每年），启动按间隔自动检查并弹窗提醒，更新数据源经 `src/lib/update.ts` 的 `UpdateProvider` 抽象层收敛，便于未来替换为自建服务器。
 2. 以下均为"很久之后"，无时间预期：
    - CSV / KDBX / Bitwarden JSON 导入导出。
    - TOTP 动态验证码。

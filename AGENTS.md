@@ -19,6 +19,7 @@
 - **每个新 PowerShell 会话先执行 `.\scripts\dev-env.ps1`**，把 cargo/MinGW/git/gh 加入会话 PATH（默认不在系统 PATH）。
 - UI 框架已统一为 **naive-ui**（2026-11-11）：radix-vue / shadcn-vue 生态与 `cn()` 工具全部移除；`App.vue` 用 `NConfigProvider` + `darkTheme` + `themeOverrides` 让 Tailwind 与 naive-ui 共用一套 CSS 变量，浮层统一挂 `OVERLAY_TARGET`；`AppShell` / `NavRail` / `EntryDialog` / `PresetsView` 与 `EntryList` / `Sidebar` / `SettingsView` / `UnlockView` 全部使用 naive-ui 控件。规则细节见 `docs/02-tech-decision-ui.md` 与 `skills/mend-dev/references/frontend-quality.md`。
 - 占位图标仍在使用；阶段 1 的其他遗留（ESLint/Prettier、rusqlite）已补齐。
+- 自动发布与自动更新（2026-11-12，见 `docs/10-release-update.md`）：CI 拆分为 `ci.yml`（Ubuntu 上 core 测试 + 前端类型检查/构建）与 `release.yml`（打 `v*` tag 时在 `windows-latest` 用 tauri-action 构建并发布 GitHub Release，含 `latest.json` 与签名）；软件侧接入 `tauri-plugin-updater`，设置页可设检查频率（每周/每月/每年），启动按间隔自动检查并弹窗提醒，更新数据源经 `src/lib/update.ts` 的 `UpdateProvider` 抽象层收敛，便于未来替换为自建服务器。发布版本号需在三处（`tauri.conf.json` / `Cargo.toml` / `package.json`）同步。
 - 最新进度与未完成项以本地私有 `local/DEVLOG.md` 顶部条目为准（该目录不入库、不推送）。
 
 ## 3. 必读文档（按顺序）
@@ -34,6 +35,7 @@
 | 7 | `docs/06-backup-webdav.md` | 本地备份/拷贝/恢复方案 + WebDAV 接入预留设计 |
 | 8 | `docs/07-i18n.md` | 中英文切换方案与目录约定 |
 | 9 | `docs/08-roadmap.md` | 分阶段开发计划、里程碑、验收标准 |
+| 10 | `docs/10-release-update.md` | 自动发布（release.yml）+ 自动更新（Tauri updater、检查频率、数据源抽象层、发版步骤） |
 | — | `local/DEVLOG.md` | 开发日志（本地私有，被 `.gitignore` 忽略，不推送；每次实质性改动后追加） |
 
 ## 4. 硬性约束（不可违背）

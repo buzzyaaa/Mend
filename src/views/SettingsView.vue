@@ -3,7 +3,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Download, FolderOpen, KeyRound, LockKeyhole, Palette, Upload } from 'lucide-vue-next'
+import { Download, FolderOpen, KeyRound, LockKeyhole, Palette, RefreshCw, Upload } from 'lucide-vue-next'
 import {
   NAlert,
   NButton,
@@ -18,6 +18,8 @@ import { usePreferencesStore } from '@/stores/preferences'
 import { useVaultStore } from '@/stores/vault'
 import { useToast } from '@/composables/useToast'
 import { backupApi, isTauri } from '@/lib/ipc'
+import { getAppVersion } from '@/lib/update'
+import { useUpdateChecker } from '@/composables/useUpdateChecker'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import type { AppPaths, ThemeMode } from '@/types'
 
@@ -27,6 +29,7 @@ const preferences = usePreferencesStore()
 const vaultStore = useVaultStore()
 const toast = useToast()
 const dialog = useDialog()
+const { checking, runCheck } = useUpdateChecker()
 
 const autoLockValues = [1, 5, 10, 15, 30, 60]
 
@@ -39,6 +42,18 @@ const autoLockOptions = computed(() => [
   { label: t('settings.off'), value: 0 },
   ...autoLockValues.map((n) => ({ label: t('settings.minutes', { n }), value: n })),
 ])
+const updateIntervalOptions = computed(() => [
+  { label: t('update.intervalWeek'), value: 7 },
+  { label: t('update.intervalMonth'), value: 30 },
+  { label: t('update.intervalYear'), value: 365 },
+])
+
+// —— 更新 ——
+const appVersion = ref('')
+
+async function checkNow() {
+  await runCheck(true)
+}
 
 // —— 备份与恢复 ——
 const paths = ref<AppPaths | null>(null)
@@ -173,6 +188,13 @@ onMounted(() => {
     .catch(() => {
       // 拿不到路径只影响默认值，不阻塞页面
     })
+  getAppVersion()
+    .then((v) => {
+      appVersion.value = v
+    })
+    .catch(() => {
+      // 拿不到版本只影响展示
+    })
 })
 
 // —— 修改主密码 ——
@@ -241,6 +263,45 @@ async function changePassword() {
               @update:value="(value: number) => preferences.setAutoLockMinutes(value)"
             />
           </div>
+          <div class="flex items-center justify-between gap-4 py-2.5">
+            <div class="min-w-0">
+              <NText class="block text-sm">{{ t('update.checkInterval') }}</NText>
+              <NText :depth="3" class="block text-xs">{{ t('update.checkIntervalHint') }}</NText>
+            </div>
+            <NSelect
+              :value="preferences.updateCheckIntervalDays"
+              :options="updateIntervalOptions"
+              style="width: 160px"
+              @update:value="(value: number) => preferences.setUpdateCheckIntervalDays(value)"
+            />
+          </div>
+        </div>
+      </NCard>
+
+      <!-- 更新 -->
+      <NCard size="small" class="mb-4">
+        <template #header>
+          <div class="flex items-center gap-2">
+            <NIcon :component="Download" :size="17" />
+            <NText strong>{{ t('update.title') }}</NText>
+          </div>
+        </template>
+        <NText :depth="3" class="mb-3 block text-xs">{{ t('update.hint') }}</NText>
+
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <NText :depth="3" class="text-xs">{{ t('update.currentVersion') }}</NText>
+            <NText class="font-mono text-sm">{{ appVersion || '—' }}</NText>
+          </div>
+          <NButton
+            size="small"
+            :loading="checking"
+            :disabled="!isTauri()"
+            @click="checkNow"
+          >
+            <template #icon><NIcon :component="RefreshCw" :size="14" /></template>
+            {{ t('update.checkNow') }}
+          </NButton>
         </div>
       </NCard>
 

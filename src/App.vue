@@ -16,6 +16,7 @@ import {
 } from 'naive-ui'
 import { usePreferencesStore } from '@/stores/preferences'
 import { OVERLAY_TARGET, createThemeOverrides } from '@/lib/theme'
+import UpdateChecker from '@/components/UpdateChecker.vue'
 
 const preferences = usePreferencesStore()
 const theme = computed(() => (preferences.isDark ? darkTheme : null))
@@ -41,6 +42,7 @@ const themeOverrides = computed(() => {
     <NMessageProvider :to="OVERLAY_TARGET" :max="3">
       <NDialogProvider :to="OVERLAY_TARGET">
         <RouterView />
+        <UpdateChecker />
       </NDialogProvider>
     </NMessageProvider>
   </NConfigProvider>
