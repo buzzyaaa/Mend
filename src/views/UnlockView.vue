@@ -88,7 +88,7 @@ function messageOf(err: unknown): string {
 </script>
 
 <template>
-  <div class="flex h-screen items-center justify-center bg-background p-4">
+  <div class="flex h-full items-center justify-center bg-background p-4">
     <div class="w-full max-w-sm">
       <NCard :bordered="true" size="large" class="shadow-sm">
         <div class="mb-5 text-center">

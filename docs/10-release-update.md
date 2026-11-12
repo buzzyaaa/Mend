@@ -32,7 +32,7 @@
 2. 提交并推送 `main`：`git commit -am "chore: release v0.3.0" && git push origin main`
 3. 打 tag 并推送：`git tag v0.3.0 && git push origin v0.3.0`
 4. 在 GitHub Actions 观察 `Release` 工作流；成功后到 Releases 页确认安装包、`*.sig`、`latest.json` 已发布。
-5. 在已安装旧版的应用里验证：启动 → 若到了检查间隔会提示更新；或在设置页"立即检查更新"。
+5. 在已安装旧版的应用里验证：启动 → 若到了检查间隔会提示更新；或在设置弹窗"立即检查更新"。
 
 > tag 名必须与版本号对应（`v` + 版本号），`release.yml` 的 `tagName` 直接使用 `github.ref_name`。
 
@@ -51,7 +51,7 @@
 - 偏好 `updateCheckIntervalDays`：7（每周）/ 30（每月）/ 365（每年），默认 7，存 `localStorage`。
 - 偏好 `lastUpdateCheckTs`：上次检查时间戳，用于按间隔节流提醒（不论有无更新都刷新，避免频繁打扰）。
 - 自动检查：应用启动（`src/components/UpdateChecker.vue`）调用 `useUpdateChecker`，按间隔到期才查。
-- 手动检查：设置页"立即检查更新"按钮（`SettingsView`）。
+- 手动检查：设置弹窗"立即检查更新"按钮（`SettingsDialog`）。
 
 ### 3.3 抽象层与"未来替换接口"
 
@@ -67,4 +67,4 @@
 
 - **未做代码签名**：当前安装包没有 Authenticode 签名，Windows SmartScreen 会报"未知发布者"警告，用户需手动允许。这是已知的可用性问题，不影响更新逻辑；后续若有代码签名证书，把 `TAURI_SIGNING_PRIVATE_KEY` 与证书相关步骤接入即可。
 - **离线优先原则**：更新检查是用户显式开启/可调的网络行为，不违反"默认零网络请求"——未到检查间隔或用户关闭/未安装时不会发起请求；且检查只读取公开的 `latest.json`，不上传任何数据。
-- **回退**：用户可在设置页把检查频率设为"每年"以降低打扰；也可始终手动检查。
+- **回退**：用户可在设置弹窗把检查频率设为"每年"以降低打扰；也可始终手动检查。

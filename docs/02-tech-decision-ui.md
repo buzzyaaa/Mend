@@ -15,7 +15,7 @@
 | 主题装配 | `src/lib/theme.ts` + `src/App.vue` | `NConfigProvider` 按 `preferences.isDark` 切 `darkTheme`，`themeOverrides` 把 naive-ui 变量指向 CSS 变量 |
 | 图标 | `lucide-vue-next` | 唯一图标来源，按需引入单个图标，不使用 emoji 当图标 |
 | 状态管理 | Pinia | vault / entry / preset / preferences |
-| 路由 | Vue Router | `/unlock` 独立；`/main` `/presets` `/settings` 共用 `AppShell` |
+| 路由 | Vue Router | 只有 `/unlock`（独立，不带标题栏操作）与 `/main`（解锁后唯一页面）；设置 / 预设值 / 语言选择均为弹窗，不占路由 |
 | 国际化 | vue-i18n | `src/locales/{zh-CN,en}.json`；naive-ui 内置文案由 `NConfigProvider` 的 `locale` / `dateLocale` 同步 |
 | Markdown | 自研白名单渲染器 `src/lib/markdown.ts` | 先转义再生成固定标签，只放行 http/https 链接；无第三方 Markdown 依赖 |
 | 数据库 | SQLite（Rust 侧 `rusqlite`） | 字段级加密，见 `04` |
@@ -30,19 +30,25 @@
 5. **状态齐全**：交互组件覆盖 default / hover / focus / active / disabled / loading / error；列表必须有空态，危险操作必须二次确认并写清后果。
 6. **i18n 先行**：所有界面文案（含 aria-label、tooltip、确认弹窗文案）走词条，中英两份同步，组件里不硬编码中英文。
 7. **不引入第二套组件库 / 图标库**：radix-vue、shadcn-vue 及其配套工具（`class-variance-authority` / `clsx` / `tailwind-merge` / `cn()`）已全部移除，不再恢复。
-8. **导航栏折叠全栏一致**：`NavRail` 的 `collapsed` 同时作用于品牌文字、上方 `NMenu` 与左下角操作按钮；展开态一律「图标 + 文字」且左对齐，折叠态一律只剩图标（Tooltip 补说明），不允许局部常驻文字或常驻图标。
+8. **顶栏集中导航与窗口控制，主布局左右两列**：左侧图标导航栏（`NavRail`）已移除。语言切换、预设值、设置三个功能全部收进顶部标题栏——各自是一个图标按钮，点击弹出窗口（`LanguageDialog` / `PresetsDialog` / `SettingsDialog`，开关状态在 `src/stores/ui.ts`），不再占用路由页；再往右是「锁定」按钮与窗口控制（最小化/最大化/关闭）。主界面（`MainView`）为左右两列：`Sidebar`（分类侧栏） + `EntryList`（密码列表 Data Table）。三个弹窗统一挂在 `App.vue` 的 `NMessageProvider` / `NDialogProvider` 内部，因此弹窗内可以直接使用 `useToast` / `useDialog`。
+9. **标题栏拖拽 + 右键菜单 + 单色强调**：窗口 `decorations:false`（见 `src-tauri/tauri.conf.json`）。拖拽用 `header` 的 `@mousedown` → `getCurrentWindow().startDragging()`（交互元素加 `@mousedown.stop` 拦截避免误触）；三个窗口控制按钮调用 `src/lib/window.ts`（最大化↔还原图标切换、订阅 `onResized` 同步状态）。标题栏 `data-titlebar` 右键由全局 `contextmenu` 监听拦截，调 `src/lib/titlebarMenu.ts` 弹出 Windows 风格菜单（还原/移动/大小/最小化/最大化/关闭），其余区域右键全局抑制（保持桌面观感，Ctrl+C/V 仍可用）。
+   **窗口控制与原生菜单需要 Tauri 能力授权**：`core:window:default` 只含读取类接口，`minimize` / `maximize` / `unmaximize` / `close` / `start-dragging` 等动作必须显式授权，否则 IPC 被权限层拒绝、按钮表现为"点了没反应"（前端 `.catch()` 会静默吞掉错误）。授权集中写在 `src-tauri/capabilities/default.json`，新增窗口动作时同步补一条 `core:window:allow-*`。右键菜单项的动作同样落到窗口能力上，所以菜单能弹出但项失效时，第一反应是查授权而不是查菜单构建。强调色统一为墨黑/近白单色（`main.css` 的 `--primary` / `--ring`），不再混用蓝/紫/黑；语义状态色（success/warning/error/info）仅用于标签与告警，不当作 UI 控件强调色。
 
 ## 3. 组件落点
 
 | 位置 | 使用的 naive-ui 能力 |
 | --- | --- |
-| `src/App.vue` | `NConfigProvider` + `NGlobalStyle` + `NMessageProvider` + `NDialogProvider` |
-| `src/components/layout/AppShell.vue` / `NavRail.vue` | `NLayout` / `NLayoutSider` / `NMenu` / `NTooltip` / `NButton` |
+| `src/App.vue` | `NConfigProvider` + `NGlobalStyle` + `NMessageProvider` + `NDialogProvider` + `TitleBar`；全局 `contextmenu` 监听（抑制默认右键菜单，标题栏弹出原生菜单）；挂载设置 / 预设值 / 语言三个弹窗 |
+| `src/components/layout/TitleBar.vue` | 自定义标题栏：`@mousedown` 拖拽 + 窗口控制（`@tauri-apps/api/window`，`src/lib/window.ts`）+ 语言 / 预设值 / 设置 / 锁定四个图标按钮（弹窗开关走 `src/stores/ui.ts`） |
+| `src/lib/titlebarMenu.ts` | 标题栏右键菜单：`@tauri-apps/api/menu` 构建 Windows 风格菜单并 `popup` 到光标处；每次右键重建，保证语言切换后文案最新 |
+| `src/stores/ui.ts` | 顶栏弹窗开关状态（设置 / 预设值 / 语言），三个弹窗组件都挂在 `App.vue` |
+| `src/components/layout/AppShell.vue` | 纯内容区（`RouterView`），不再含图标导航栏 |
 | `src/components/layout/Sidebar.vue` | `NButton` / `NIcon` / `NModal` / `NInput` / `useDialog` |
-| `src/components/layout/EntryList.vue` | `NInput` / `NSelect` / `NCard` / `NEmpty` / `NTag` / `NTooltip` / `useDialog` |
+| `src/components/layout/EntryList.vue` | `NDataTable`（密码列表：备注缩略 + 展开看完整 Markdown + 编辑按钮；展开走 `type: 'expand'` 列的 `renderExpand`）/ `NInput` / `NSelect` / `NEmpty` / `NTag` / `NPopconfirm` / `useDialog` |
 | `src/components/entry/EntryDialog.vue` | `NModal` + `NCard` / `NSelect` / `NInputNumber` / `NCheckbox` / `NTabs` |
-| `src/views/PresetsView.vue` | `NTabs` / `NDataTable`（普通滚动）/ `NTag` / `useDialog` |
-| `src/views/SettingsView.vue` | `NCard` / `NSelect` / `NInput` / `NAlert` / `useDialog` |
+| `src/components/presets/PresetsDialog.vue` | 预设值弹窗（原 `src/views/PresetsView.vue`）：`NTabs` / `NDataTable`（普通滚动）/ `NTag` / `useDialog` |
+| `src/components/settings/SettingsDialog.vue` | 设置弹窗（原 `src/views/SettingsView.vue`）：`NCard` / `NSelect` / `NInput` / `NAlert` / `useDialog` |
+| `src/components/language/LanguageDialog.vue` | 语言选择弹窗：`NModal` + `NCard` + `NRadioGroup`，选中即切换并关闭 |
 | `src/views/UnlockView.vue` | `NCard` / `NInput` / `NTag` / `NAlert` |
 
 ## 4. 当前前端依赖

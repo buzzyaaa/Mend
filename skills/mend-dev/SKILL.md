@@ -93,7 +93,7 @@ npm run tauri build                                     # 产物 src-tauri/targe
 
 ### impeccable —— 任何界面设计、评审、打磨
 
-路径：`../impeccable/SKILL.md`。触发：新增/重做页面与组件、空态、设置页、表单、主题与配色、间距与层级、动效、UX 文案、可访问性、界面性能、响应式、"看起来太平/太吵"的调整。
+路径：`../impeccable/SKILL.md`。触发：新增/重做页面与组件、空态、设置弹窗、表单、主题与配色、间距与层级、动效、UX 文案、可访问性、界面性能、响应式、"看起来太平/太吵"的调整。
 
 Mend 属于 **product register**（用户在执行任务，设计服务于任务），先读 `../impeccable/reference/product.md`；`../impeccable/reference/{brand,craft}.md` 供建站式页面或端到端 craft 流程参考。上游 25 个文件（`command` 对应 reference、`reference/*.md`、`scripts/*.mjs`）已随仓库完整安装，命令表里点名的 reference 都能直接读。
 

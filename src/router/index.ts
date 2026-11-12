@@ -15,16 +15,6 @@ const router = createRouter({
           name: 'main',
           component: () => import('@/views/MainView.vue'),
         },
-        {
-          path: 'presets',
-          name: 'presets',
-          component: () => import('@/views/PresetsView.vue'),
-        },
-        {
-          path: 'settings',
-          name: 'settings',
-          component: () => import('@/views/SettingsView.vue'),
-        },
       ],
     },
     {

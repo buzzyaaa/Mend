@@ -25,7 +25,7 @@
 - [x] 初始化前端工程（Vue + TS + Vite），配置目录结构（见 `03-architecture.md`）。
 - [x] 接入 TailwindCSS、基础主题令牌（浅色/暗色变量预留）；早期 `cn()` 工具与 shadcn-vue 原语已随 naive-ui 迁移移除。
 - [x] 接入 vue-i18n：`zh-CN`/`en` 词条骨架、顶部栏语言切换（软件名右侧）、偏好持久化。
-- [x] 路由与页面骨架：解锁页占位、主界面左右布局占位、设置页占位。
+- [x] 路由与页面骨架：解锁页占位、主界面左右布局占位、设置弹窗占位。
 - [x] Pinia store 骨架（vault / entry / preferences）。
 - [x] 前端构建脚本：`dev`、`build`（vue-tsc + vite）、`typecheck`。
 - [x] `src-tauri` 骨架编译通过：`cargo check`/`cargo build` 成功，`npm run tauri dev` 端到端启动（Vite :1420 + `mend.exe` + WebView，页面 200）。
@@ -56,7 +56,7 @@
 - [x] 右侧条目列表：卡片/行展示、搜索过滤、选中、收藏预留。
 - [x] 条目弹窗：独立 Dialog 表单，字段含标题/账号/密码/邮箱/手机/网址/备注；回填编辑。
 - [x] 字段复制：每字段复制按钮 + Toast。
-- [x] 预设值：账号/邮箱/手机号预设维护（设置页）与条目表单下拉选择，值密文存储。
+- [x] 预设值：账号/邮箱/手机号预设维护（设置弹窗）与条目表单下拉选择，值密文存储。
 - [x] Markdown 备注：弹窗内编辑/预览 Tabs，安全渲染（自研白名单渲染器，未引第三方库）；列表显示摘要。
 
 **验收**：`05` 第 7 节验收要点 1、2、4、6 可演示；弹窗编辑保存后列表刷新；切换分类/搜索正确过滤。
@@ -76,16 +76,16 @@
 **目标**：本地备份闭环；WebDAV 接口与配置预留，不实现联网。
 
 - [x] 应用内加密导出 `.mendbak` / 导入恢复（完整性校验、临时位置校验后替换）：`mend-core/src/backup.rs` + `commands/backup.rs`，覆盖恢复且旧库自动留底。
-- [x] 设置页展示数据目录；文档说明手动拷贝库文件到 U 盘及恢复步骤（见 `06`）。
-- [x] Rust `sync/` trait 与 `WebdavConfig` 结构落地（`mend-core/src/sync.rs`，`DisabledSync` 占位）；设置页留"未启用"占位；不发起真实请求。
+- [x] 设置弹窗展示数据目录；文档说明手动拷贝库文件到 U 盘及恢复步骤（见 `06`）。
+- [x] Rust `sync/` trait 与 `WebdavConfig` 结构落地（`mend-core/src/sync.rs`，`DisabledSync` 占位）；设置弹窗留"未启用"占位；不发起真实请求。
 - [x] 备份格式版本号与认证标签（魔数 `MENDBK01` + KDF 参数 + XChaCha20-Poly1305 认证密文），为未来版本兼容留口。
 
 **验收**：导出备份 → 删除/清空 → 从备份恢复，条目与分类一致；手动拷贝库到另一目录/机器可恢复；代码中 WebDAV 仅有 trait/配置，无默认联网。
 
 ## 阶段 6 — 加固、打磨与打包（MVP 之后）
 
-- [x] 空闲自动锁定（`useAutoLock`，设置页 1/5/10/15/30/60 分钟或关闭，默认 15 分钟）。
-- [x] 字段复制：每字段复制按钮 + Toast 反馈（复制后自动清空剪贴板已移除——桌面 WebView 下静默失败且属对用户的剪贴板干预，改为仅写入、不读取/清空；设置页不再有该项）。
+- [x] 空闲自动锁定（`useAutoLock`，设置弹窗 1/5/10/15/30/60 分钟或关闭，默认 15 分钟）。
+- [x] 字段复制：每字段复制按钮 + Toast 反馈（复制后自动清空剪贴板已移除——桌面 WebView 下静默失败且属对用户的剪贴板干预，改为仅写入、不读取/清空；设置弹窗不再有该项）。
 - [x] 深浅色主题：跟随系统 / 浅色 / 深色，`<html class="dark">` 切换 CSS 变量，偏好存 localStorage。
 - [x] 回收站：删除写 `deleted_at` 进回收站，可恢复 / 彻底删除 / 清空；`entry_restore`、`entry_purge`、`entry_purge_all`。
 - [x] 弱密码与重复密码提示：`src/lib/security.ts` 计算（少于 8 位或字符种类单一 = 弱；同一密码被多条共用 = 重复），列表卡片显示"弱/重"标记。
@@ -94,22 +94,27 @@
 - [x] 标签（多标签，2026-11-11）：迁移 v2 新增 `entries.tags`（JSON 明文列）；表单逗号分隔输入，卡片 chip 展示并可点击过滤。
 - [x] 修改主密码（2026-11-11）：`vault_change_password`；core 校验旧密码后用新 salt/KEK 重包裹同一 DEK，事务更新 `meta`，历史密文无需重加密。
 - [x] ESLint + Prettier（2026-11-11）：flat config（eslint-plugin-vue + typescript-eslint），脚本 `npm run lint` / `npm run format`。
-- [x] 导航与页面结构改造（2026-11-11）：移除顶部栏，新增最左侧图标导航栏 `AppShell` + `NavRail`（`lucide-vue-next` 图标）；预设值从设置页迁出为独立 `/presets` 页面；语言切换、设置、锁定收进导航栏左下；未实现的 WebDAV 占位从设置页移除。
-- [x] 导航栏折叠全栏一致（2026-11-11，用户反馈）：左下角语言/设置/锁定按钮与上方菜单、品牌共用 `collapsed`，展开都有文字、折叠都只有图标；折叠态 Tooltip 挂 `OVERLAY_TARGET`（约定见 `02`）。
+- [x] 导航与页面结构改造（2026-11-11 引入最左侧 `NavRail`；2026-11-12 改为顶部标题栏）：`NavRail` 已移除。语言切换、预设值、设置全部收进顶部标题栏右侧的图标按钮；主界面（`MainView`）保持左右两列（分类侧栏 + 条目列表）；未实现的 WebDAV 占位从设置弹窗移除。
+- [x] 标题栏折叠与 Tooltip 挂载点（2026-11-11）：按钮 Tooltip 挂 `OVERLAY_TARGET`（约定见 `02`）。
 - [x] 空状态与错误提示：各列表空状态、操作失败走 Toast；回收站空态单独文案。
 - [x] Tauri 打包：`tauri.conf.json` 已配 NSIS（`installMode: currentUser`）+ 图标 + 版本 0.2.0；`npm run tauri build` 在可访问 GitHub release 的环境下产出 `target/release/bundle/nsis/Mend_0.2.0_x64-setup.exe`（约 1.8 MB），网络受限时退化为 release `mend.exe`（便携分发）。
 - [x] README 使用说明（首次使用、回收站、备份/恢复、手动迁移、安全习惯）。
-- [x] UI 框架统一（2026-11-11，用户要求）：卸载 radix-vue / shadcn-vue 生态与 `cn()` 工具；全部交互控件改 naive-ui；`NConfigProvider` + `darkTheme` + `themeOverrides` 让 Tailwind 与 naive-ui 共用一套 CSS 变量；浮层统一挂载点；`EntryList` / `Sidebar` / `SettingsView` / `UnlockView` 四个视图完成重构，深浅主题与中英文案同步生效（见 `02`）。
-- [x] 预设页面与条目弹窗下拉的 GUI 逐项点击走查（2026-11-11，真实 Tauri 窗口逐项点击）：四类 Tab 的表格/空态/新增/内联编辑/删除确认与取消/表单类型随 Tab 联动；账号、邮箱、手机号、常用密码四类预设下拉回填的都是**值**而非 ID；生成器长度 16→24 可改、生成、重新生成、填入密码字段；浅色↔深色主题与中英文切换、浮层继承主题；`EntryList` / `Sidebar` / `SettingsView` / `UnlockView` 视觉一致性。走查数据已清理，偏好恢复为中文 + 跟随系统。
-- [x] 移除 `PresetsView` 的 `NDataTable virtual-scroll`：预设数据量小，虚拟滚动反而触发 `ResizeObserver loop completed with undelivered notifications.`，改用普通 `max-height` 滚动。
+- [x] UI 框架统一（2026-11-11，用户要求）：卸载 radix-vue / shadcn-vue 生态与 `cn()` 工具；全部交互控件改 naive-ui；`NConfigProvider` + `darkTheme` + `themeOverrides` 让 Tailwind 与 naive-ui 共用一套 CSS 变量；浮层统一挂载点；`EntryList` / `Sidebar` / `SettingsDialog` / `UnlockView` 四个视图完成重构，深浅主题与中英文案同步生效（见 `02`）。
+- [x] 预设页面与条目弹窗下拉的 GUI 逐项点击走查（2026-11-11，真实 Tauri 窗口逐项点击）：四类 Tab 的表格/空态/新增/内联编辑/删除确认与取消/表单类型随 Tab 联动；账号、邮箱、手机号、常用密码四类预设下拉回填的都是**值**而非 ID；生成器长度 16→24 可改、生成、重新生成、填入密码字段；浅色↔深色主题与中英文切换、浮层继承主题；`EntryList` / `Sidebar` / `SettingsDialog` / `UnlockView` 视觉一致性。走查数据已清理，偏好恢复为中文 + 跟随系统。
+- [x] 移除 `PresetsDialog` 的 `NDataTable virtual-scroll`：预设数据量小，虚拟滚动反而触发 `ResizeObserver loop completed with undelivered notifications.`，改用普通 `max-height` 滚动。
+- [x] 顶栏交互缺陷修复（2026-11-12，用户反馈 4 项）：
+  1. **最小化 / 最大化 / 关闭按钮失效**——根因是 `src-tauri/capabilities/default.json` 只授权 `core:default`，而 `core:window:default` 不含动作类接口，IPC 被权限层拒绝且被前端 `.catch()` 静默吞掉；补齐 `core:window:allow-{minimize,unminimize,maximize,unmaximize,toggle-maximize,close,destroy,start-dragging}` 八条授权（约定见 `02` 第 2 节第 9 条）。
+  2. **标题栏右键菜单「没有功能」**——菜单本身能弹出，但六个菜单项的动作全部落到窗口能力上，同样因缺 `core:window:allow-*` 授权被拒（前端 `.catch()` 静默吞错），表现为「菜单弹出来了、点哪项都没反应」；补授权后即通。
+  3. **主页面 DataTable 内容空白**——`flex-height` 需要确定高度链，原父级未给高度导致表体 `flex-basis:0` 塌成 0 高；改为父级 `flex min-h-0 flex-1 flex-col` + 表格 `min-h-0 flex-1`。
+  4. **设置 / 语言选择 / 预设值改为弹窗**——删除 `PresetsView` / `SettingsView` 两个路由页，迁为 `PresetsDialog` / `SettingsDialog` / `LanguageDialog`（开关在 `src/stores/ui.ts`），顶栏改为语言 / 预设值 / 设置 / 锁定四个图标按钮；路由只剩 `/main` 与 `/unlock`。同时修掉展开行从未生效的问题（`renderExpand` 必须挂在 `type: 'expand'` 的列上，不能当表格级 prop 传）。
 
-**验收**：浅/深两套主题下控件颜色一致、浮层继承主题、无原生控件与硬编码文案；预设下拉选中的是值而不是 ID；生成器长度可改。（2026-11-11 GUI 走查逐项通过，结论见 `local/DEVLOG.md`。）
+**验收**：浅/深两套主题下控件颜色一致、浮层继承主题、无原生控件与硬编码文案；预设下拉选中的是值而不是 ID；生成器长度可改。（2026-11-11 GUI 走查逐项通过，结论见 `local/DEVLOG.md`。2026-11-12 的窗口控制与右键菜单真机行为待 `npm run tauri dev` 复验。）
 
 ## 后续路线（非 MVP，按需排期）
 
 优先级（2026-11-11 用户指定，详见本地 `local/learnings/FEATURE_REQUESTS.md`）：
 
-1. **CI / 自动更新**（已完成，2026-11-12）：见 `10-release-update.md`。CI 拆分为 `ci.yml`（Ubuntu 上 core 测试 + 前端类型检查/构建）与 `release.yml`（打 `v*` tag 时在 `windows-latest` 用 tauri-action 构建 NSIS 并发布 GitHub Release，含 `latest.json` 与签名）；软件侧接入 `tauri-plugin-updater`，设置页可设检查频率（每周/每月/每年），启动按间隔自动检查并弹窗提醒，更新数据源经 `src/lib/update.ts` 的 `UpdateProvider` 抽象层收敛，便于未来替换为自建服务器。
+1. **CI / 自动更新**（已完成，2026-11-12）：见 `10-release-update.md`。CI 拆分为 `ci.yml`（Ubuntu 上 core 测试 + 前端类型检查/构建）与 `release.yml`（打 `v*` tag 时在 `windows-latest` 用 tauri-action 构建 NSIS 并发布 GitHub Release，含 `latest.json` 与签名）；软件侧接入 `tauri-plugin-updater`，设置弹窗可设检查频率（每周/每月/每年），启动按间隔自动检查并弹窗提醒，更新数据源经 `src/lib/update.ts` 的 `UpdateProvider` 抽象层收敛，便于未来替换为自建服务器。
 2. 以下均为"很久之后"，无时间预期：
    - CSV / KDBX / Bitwarden JSON 导入导出。
    - TOTP 动态验证码。

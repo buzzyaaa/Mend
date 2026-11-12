@@ -1,15 +1,18 @@
 <script setup lang="ts">
-// 预设值页面：账号 / 邮箱 / 手机号 / 常用密码四类分组，均用 Data Table 展示。
+// 预设值弹窗：账号 / 邮箱 / 手机号 / 常用密码四类分组，均用 Data Table 展示。
 // 值落盘加密，仅在解锁态内存中明文显示（密码类同样明文展示，不做遮挡）。
-import { computed, h, onMounted, reactive, ref, watch } from 'vue'
+// 原为独立 /presets 路由页，改为弹窗后顶栏不再跳转路由。
+import { computed, h, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   NAlert,
   NButton,
+  NCard,
   NDataTable,
   NDivider,
   NEmpty,
   NInput,
+  NModal,
   NSelect,
   NSpace,
   NTabPane,
@@ -22,7 +25,14 @@ import {
 } from 'naive-ui'
 import { usePresetStore } from '@/stores/preset'
 import { useToast } from '@/composables/useToast'
+import { OVERLAY_TARGET } from '@/lib/theme'
 import type { Preset, PresetFieldType } from '@/types'
+
+const props = defineProps<{
+  open: boolean
+}>()
+
+const emit = defineEmits<{ (e: 'close'): void }>()
 
 const { t } = useI18n()
 const presetStore = usePresetStore()
@@ -54,11 +64,18 @@ const typeOptions = computed<SelectOption[]>(() =>
   fieldTypes.map((type) => ({ label: t(`preset.types.${type}`), value: type })),
 )
 
-onMounted(() => {
-  presetStore.refresh().catch(() => {
-    // 未解锁或浏览器预览：静默
-  })
-})
+// 每次打开弹窗都重新拉一次预设，避免外部改动后停留在旧列表
+watch(
+  () => props.open,
+  (open) => {
+    if (open) {
+      presetStore.refresh().catch(() => {
+        // 未解锁或浏览器预览：静默
+      })
+    }
+  },
+  { immediate: true },
+)
 
 // 新增态下表单类型跟随当前 Tab，编辑态保持原类型
 watch(activeTab, (type) => {
@@ -167,35 +184,43 @@ const columns = computed<DataTableColumns<Preset>>(() => [
 </script>
 
 <template>
-  <main class="flex h-screen flex-col overflow-hidden p-5">
-    <section class="flex min-h-0 flex-1 flex-col rounded-xl border border-border bg-card p-4">
-      <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <NText strong class="text-lg">{{ t('preset.title') }}</NText>
-        <NText :depth="3" class="text-xs">{{ t('preset.hint') }}</NText>
-      </div>
+  <NModal
+    :show="open"
+    :to="OVERLAY_TARGET"
+    :mask-closable="false"
+    @update:show="(show: boolean) => { if (!show) emit('close') }"
+  >
+    <NCard
+      :title="t('preset.title')"
+      :bordered="false"
+      closable
+      size="large"
+      style="width: min(880px, calc(100vw - 32px))"
+      :content-style="{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }"
+      @close="emit('close')"
+    >
+      <NText :depth="3" class="mb-3 block text-xs">{{ t('preset.hint') }}</NText>
 
-      <NTabs v-model:value="activeTab" type="line" animated class="min-h-0 flex-1">
+      <NTabs v-model:value="activeTab" type="line" animated>
         <NTabPane
           v-for="type in fieldTypes"
           :key="type"
           :name="type"
           :tab="`${t(`preset.types.${type}`)} (${presetStore.byType(type).length})`"
         >
-          <div class="pt-2">
-            <NDataTable
-              :columns="columns"
-              :data="presetStore.byType(type)"
-              :bordered="false"
-              :single-line="false"
-              :row-key="(row: Preset) => row.id"
-              :max-height="420"
-              size="small"
-            >
-              <template #empty>
-                <NEmpty :description="t('preset.empty')" />
-              </template>
-            </NDataTable>
-          </div>
+          <NDataTable
+            :columns="columns"
+            :data="presetStore.byType(type)"
+            :bordered="false"
+            :single-line="false"
+            :row-key="(row: Preset) => row.id"
+            :max-height="360"
+            size="small"
+          >
+            <template #empty>
+              <NEmpty :description="t('preset.empty')" />
+            </template>
+          </NDataTable>
         </NTabPane>
       </NTabs>
 
@@ -211,11 +236,7 @@ const columns = computed<DataTableColumns<Preset>>(() => [
           :maxlength="40"
           style="width: 180px"
         />
-        <NInput
-          v-model:value="form.value"
-          :placeholder="t('preset.value')"
-          class="min-w-0 flex-1"
-        />
+        <NInput v-model:value="form.value" :placeholder="t('preset.value')" class="min-w-0 flex-1" />
         <NButton type="primary" :loading="busy" @click="submit">
           {{ editId ? t('common.save') : t('preset.add') }}
         </NButton>
@@ -224,6 +245,12 @@ const columns = computed<DataTableColumns<Preset>>(() => [
       <NAlert v-if="formError" type="error" :show-icon="false" class="mt-2">
         {{ formError }}
       </NAlert>
-    </section>
-  </main>
+
+      <template #footer>
+        <div class="flex justify-end">
+          <NButton @click="emit('close')">{{ t('common.close') }}</NButton>
+        </div>
+      </template>
+    </NCard>
+  </NModal>
 </template>

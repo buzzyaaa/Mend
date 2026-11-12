@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// 条目列表：搜索 / 排序 / 卡片字段展示 / 回收站视图。
-import { computed, ref } from 'vue'
+// 条目列表（Data Table 版）：搜索 / 排序 / 备注缩略 + 展开看完整 Markdown / 随时编辑。
+import { computed, h, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   Copy,
@@ -9,27 +9,27 @@ import {
   EyeOff,
   Pencil,
   Plus,
-  RotateCcw,
   Search,
   Star,
   Trash2,
 } from 'lucide-vue-next'
 import {
   NButton,
-  NCard,
+  NDataTable,
   NEmpty,
   NIcon,
   NInput,
+  NPopconfirm,
   NSelect,
   NTag,
   NText,
-  NTooltip,
   useDialog,
+  type DataTableColumns,
 } from 'naive-ui'
 import { useEntryStore, type SortBy } from '@/stores/entry'
 import { useClipboard } from '@/composables/useClipboard'
 import { useToast } from '@/composables/useToast'
-import { markdownSummary } from '@/lib/markdown'
+import { markdownSummary, renderMarkdown } from '@/lib/markdown'
 import EntryDialog from '@/components/entry/EntryDialog.vue'
 import type { EntryView } from '@/types'
 
@@ -42,6 +42,7 @@ const dialog = useDialog()
 const dialogOpen = ref(false)
 const editing = ref<EntryView | null>(null)
 const revealedPasswordIds = ref<Set<string>>(new Set())
+const expandedKeys = ref<string[]>([])
 
 const listTitle = computed(() => (store.isTrashView ? t('nav.trash') : t('entry.listTitle')))
 const sortOptions = computed(() => [
@@ -71,6 +72,10 @@ function togglePassword(id: string) {
   revealedPasswordIds.value = next
 }
 
+function isRevealed(id: string) {
+  return revealedPasswordIds.value.has(id)
+}
+
 function categoryName(id: string | null): string {
   if (!id) return t('entry.uncategorized')
   return store.categories.find((cat) => cat.id === id)?.name ?? t('entry.uncategorized')
@@ -88,6 +93,284 @@ function issueOf(entry: EntryView) {
   return store.passwordIssues.get(entry.id)
 }
 
+function messageOf(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
+
+// —— 展开行（完整 Markdown 备注 + 字段 + 标签 + 编辑）——
+function toggleExpand(id: string) {
+  expandedKeys.value = expandedKeys.value.includes(id)
+    ? expandedKeys.value.filter((k) => k !== id)
+    : [...expandedKeys.value, id]
+}
+
+function iconBtn(icon: unknown, label: string, onClick: () => void) {
+  return h(
+    NButton,
+    {
+      quaternary: true,
+      circle: true,
+      size: 'tiny',
+      title: label,
+      ariaLabel: label,
+      onClick: (e: MouseEvent) => {
+        e.stopPropagation()
+        onClick()
+      },
+    },
+    { default: () => h(NIcon, { component: icon as never, size: 14 }) },
+  )
+}
+
+interface FieldRow {
+  key: string
+  label: string
+  value: string
+  masked?: boolean
+  href?: string
+}
+
+function fieldRows(entry: EntryView): FieldRow[] {
+  const rows: FieldRow[] = []
+  if (entry.username)
+    rows.push({ key: 'username', label: t('entry.username'), value: entry.username })
+  if (entry.password)
+    rows.push({
+      key: 'password',
+      label: t('entry.password'),
+      value: entry.password,
+      masked: !isRevealed(entry.id),
+    })
+  if (entry.email) rows.push({ key: 'email', label: t('entry.email'), value: entry.email })
+  if (entry.phone) rows.push({ key: 'phone', label: t('entry.phone'), value: entry.phone })
+  if (entry.url) rows.push({ key: 'url', label: t('entry.url'), value: entry.url, href: entry.url })
+  return rows
+}
+
+function renderExpand(row: EntryView) {
+  const blocks: ReturnType<typeof h>[] = []
+
+  if (row.notes.trim()) {
+    blocks.push(
+      h('div', {
+        class: 'md-preview',
+        innerHTML: renderMarkdown(row.notes),
+      }),
+    )
+  }
+
+  const fields = fieldRows(row)
+  if (fields.length) {
+    blocks.push(
+      h(
+        'div',
+        { class: 'mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2' },
+        fields.map((f) => {
+          const revealed = f.masked && isRevealed(row.id)
+          const controls = []
+          if (f.masked) {
+            controls.push(
+              iconBtn(
+                revealed ? EyeOff : Eye,
+                revealed ? t('entry.hide') : t('entry.show'),
+                () => togglePassword(row.id),
+              ),
+            )
+          }
+          if (f.href) controls.push(iconBtn(ExternalLink, t('entry.openUrl'), () => openUrl(f.value)))
+          controls.push(iconBtn(Copy, t('entry.copy'), () => copy(f.value)))
+
+          return h('div', { class: 'flex items-center gap-2' }, [
+            h(NText, { depth: 3, class: 'w-14 shrink-0 text-xs' }, () => f.label),
+            h(
+              NText,
+              {
+                code: true,
+                class: revealed ? 'min-w-0 flex-1 truncate' : 'min-w-0 flex-1 truncate tracking-widest',
+              },
+              () => (f.masked && !revealed ? '••••••••' : f.value),
+            ),
+            ...controls,
+          ])
+        }),
+      ),
+    )
+  }
+
+  if (row.tags.length) {
+    blocks.push(
+      h(
+        'div',
+        { class: 'mt-2 flex flex-wrap gap-1' },
+        row.tags.map((tag) =>
+          h(NTag, { size: 'small', round: true, bordered: false }, () => `#${tag}`),
+        ),
+      ),
+    )
+  }
+
+  if (!store.isTrashView) {
+    blocks.push(
+      h(
+        NButton,
+        {
+          size: 'small',
+          class: 'mt-3',
+          onClick: (e: MouseEvent) => {
+            e.stopPropagation()
+            openEdit(row)
+          },
+        },
+        {
+          default: () => t('entry.edit'),
+          icon: () => h(NIcon, { component: Pencil, size: 14 }),
+        },
+      ),
+    )
+  }
+
+  return h('div', { class: 'px-3 pb-3 pt-1' }, blocks)
+}
+
+// —— 列定义 ——
+const columns = computed<DataTableColumns<EntryView>>(() => {
+  const base: DataTableColumns<EntryView> = [
+    // 展开列：naive-ui 只在 type === 'expand' 的列上读取 renderExpand，
+    // 表格级 render-expand / expandable 不是有效 prop，展开功能因此从未生效。
+    {
+      type: 'expand',
+      width: 36,
+      renderExpand: (row) => renderExpand(row),
+    },
+    {
+      title: '',
+      key: '__fav',
+      width: 32,
+      render: (row) =>
+        row.favorite
+          ? h(NIcon, {
+              component: Star,
+              size: 14,
+              style: 'color: hsl(var(--warning))',
+            })
+          : null,
+    },
+    {
+      title: t('entry.title'),
+      key: 'title',
+      minWidth: 160,
+      ellipsis: { tooltip: true },
+      render: (row) => h(NText, { strong: true, class: 'truncate' }, () => row.title),
+    },
+    {
+      title: t('entry.category'),
+      key: 'categoryId',
+      width: 110,
+      ellipsis: { tooltip: true },
+      render: (row) => h(NText, { depth: 3, class: 'truncate' }, () => categoryName(row.categoryId)),
+    },
+    {
+      title: t('entry.username'),
+      key: 'username',
+      width: 150,
+      ellipsis: { tooltip: true },
+      render: (row) =>
+        h(NText, { class: 'truncate' }, () => row.username || '—'),
+    },
+    {
+      title: t('entry.password'),
+      key: 'password',
+      width: 150,
+      render: (row) => {
+        const revealed = isRevealed(row.id)
+        return h('div', { class: 'flex items-center gap-1' }, [
+          h(
+            NText,
+            { code: true, class: 'min-w-0 flex-1 truncate' },
+            () => (revealed ? row.password : '••••••••'),
+          ),
+          iconBtn(revealed ? EyeOff : Eye, revealed ? t('entry.hide') : t('entry.show'), () =>
+            togglePassword(row.id),
+          ),
+          iconBtn(Copy, t('entry.copy'), () => copy(row.password)),
+        ])
+      },
+    },
+    {
+      title: t('entry.notes'),
+      key: 'notes',
+      minWidth: 160,
+      ellipsis: { tooltip: true },
+      render: (row) =>
+        h(
+          'div',
+          {
+            class:
+              'line-clamp-2 cursor-pointer text-xs text-muted-foreground hover:text-foreground',
+            title: t('entry.expandNotes'),
+            onClick: (e: MouseEvent) => {
+              e.stopPropagation()
+              toggleExpand(row.id)
+            },
+          },
+          row.notes.trim() ? summary(row.notes) : '—',
+        ),
+    },
+    {
+      title: t('entry.status'),
+      key: '__status',
+      width: 84,
+      render: (row) => {
+        const issue = issueOf(row)
+        if (!issue) return null
+        const chips = []
+        if (issue.weak)
+          chips.push(
+            h(NTag, { size: 'small', type: 'warning', bordered: false, round: true }, () =>
+              t('entry.weakShort'),
+            ),
+          )
+        if (issue.duplicate)
+          chips.push(
+            h(NTag, { size: 'small', type: 'error', bordered: false, round: true }, () =>
+              t('entry.dupShort'),
+            ),
+          )
+        return h('div', { class: 'flex flex-wrap gap-1' }, chips)
+      },
+    },
+    {
+      title: t('common.actions'),
+      key: '__actions',
+      width: 96,
+      render: (row) => {
+        if (store.isTrashView) {
+          return h('div', { class: 'flex gap-1' }, [
+            h(
+              NButton,
+              { size: 'small', quaternary: true, onClick: (e: MouseEvent) => { e.stopPropagation(); restore(row) } },
+              () => t('trash.restore'),
+            ),
+            h(
+              NButton,
+              {
+                size: 'small',
+                quaternary: true,
+                type: 'error',
+                onClick: (e: MouseEvent) => { e.stopPropagation(); purge(row) },
+              },
+              () => t('trash.purge'),
+            ),
+          ])
+        }
+        return iconBtn(Pencil, t('entry.edit'), () => openEdit(row))
+      },
+    },
+  ]
+  return base
+})
+
+// —— 回收站操作 ——
 async function restore(entry: EntryView) {
   try {
     await store.restoreEntry(entry.id)
@@ -130,40 +413,6 @@ function purgeAll() {
     },
   })
 }
-
-function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
-}
-
-interface FieldRow {
-  key: string
-  label: string
-  value: string
-  masked?: boolean
-  href?: string
-}
-
-function fieldRows(entry: EntryView): FieldRow[] {
-  const rows: FieldRow[] = []
-  if (entry.username)
-    rows.push({ key: 'username', label: t('entry.username'), value: entry.username })
-  if (entry.password)
-    rows.push({
-      key: 'password',
-      label: t('entry.password'),
-      value: entry.password,
-      masked: !revealedPasswordIds.value.has(entry.id),
-    })
-  if (entry.email) rows.push({ key: 'email', label: t('entry.email'), value: entry.email })
-  if (entry.phone) rows.push({ key: 'phone', label: t('entry.phone'), value: entry.phone })
-  if (entry.url) rows.push({ key: 'url', label: t('entry.url'), value: entry.url, href: entry.url })
-  return rows
-}
-
-function formatDate(ms: number | null | undefined): string {
-  if (!ms) return ''
-  return new Date(ms).toLocaleDateString()
-}
 </script>
 
 <template>
@@ -190,174 +439,51 @@ function formatDate(ms: number | null | undefined): string {
         @update:value="(value: SortBy) => store.setSortBy(value)"
       />
 
-      <NButton
-        v-if="store.isTrashView"
-        type="error"
-        secondary
-        :disabled="store.trash.length === 0"
-        @click="purgeAll"
+      <NPopconfirm
+        v-if="store.isTrashView && store.trash.length"
+        :positive-text="t('common.confirm')"
+        :negative-text="t('common.cancel')"
+        @positive-click="purgeAll"
       >
-        <template #icon><NIcon :component="Trash2" :size="16" /></template>
-        {{ t('trash.purgeAll') }}
-      </NButton>
-      <NButton v-else type="primary" @click="openCreate">
+        <template #trigger>
+          <NButton type="error" secondary>
+            <template #icon><NIcon :component="Trash2" :size="16" /></template>
+            {{ t('trash.purgeAll') }}
+          </NButton>
+        </template>
+        {{ t('trash.purgeAllConfirm') }}
+      </NPopconfirm>
+      <NButton v-else-if="!store.isTrashView" type="primary" @click="openCreate">
         <template #icon><NIcon :component="Plus" :size="16" /></template>
         {{ t('entry.add') }}
       </NButton>
     </div>
 
     <!-- 列表 -->
-    <div class="min-h-0 flex-1 overflow-y-auto p-4">
-      <NEmpty v-if="store.visibleEntries.length === 0" :description="emptyText" class="py-16">
-        <template v-if="!store.isTrashView" #extra>
-          <NButton size="small" @click="openCreate">{{ t('entry.add') }}</NButton>
-        </template>
-      </NEmpty>
-
-      <NCard
-        v-for="entry in store.visibleEntries"
-        :key="entry.id"
+    <!-- flex-height 需要表格根节点拿到确定高度：父级给 flex 列 + 表格自身 flex-1，
+         否则表体 flex-basis:0 会整块塌成 0 高，表现就是「表格内容空白」。 -->
+    <div class="flex min-h-0 flex-1 flex-col p-4">
+      <NDataTable
+        class="min-h-0 flex-1"
+        :columns="columns"
+        :data="store.visibleEntries"
+        :row-key="(row: EntryView) => row.id"
+        :expanded-row-keys="expandedKeys"
+        :bordered="false"
+        :single-line="false"
         size="small"
-        hoverable
-        class="mb-3"
+        flex-height
+        :scroll-x="760"
+        @update:expanded-row-keys="(keys: Array<string | number>) => (expandedKeys = keys.map(String))"
       >
-        <div class="flex items-start justify-between gap-2">
-          <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-1.5">
-              <NIcon
-                v-if="entry.favorite"
-                :component="Star"
-                :size="14"
-                color="hsl(var(--warning))"
-              />
-              <NText strong class="truncate text-sm">{{ entry.title }}</NText>
-
-              <NTooltip v-if="issueOf(entry)?.weak" :show-arrow="false">
-                <template #trigger>
-                  <NTag size="small" type="warning" :bordered="false" round>
-                    {{ t('entry.weakShort') }}
-                  </NTag>
-                </template>
-                {{ t('entry.weakPassword') }}
-              </NTooltip>
-              <NTooltip v-if="issueOf(entry)?.duplicate" :show-arrow="false">
-                <template #trigger>
-                  <NTag size="small" type="error" :bordered="false" round>
-                    {{ t('entry.dupShort') }}
-                  </NTag>
-                </template>
-                {{ t('entry.duplicatePassword') }}
-              </NTooltip>
-            </div>
-
-            <NText :depth="3" class="mt-0.5 block text-xs">
-              {{ categoryName(entry.categoryId) }}
-              <span v-if="store.isTrashView">
-                · {{ t('trash.deletedAt') }} {{ formatDate(entry.deletedAt) }}
-              </span>
-            </NText>
-
-            <div v-if="entry.tags.length && !store.isTrashView" class="mt-1.5 flex flex-wrap gap-1">
-              <NTooltip v-for="tag in entry.tags" :key="tag" :show-arrow="false">
-                <template #trigger>
-                  <NTag
-                    size="small"
-                    round
-                    :bordered="false"
-                    :type="store.tagFilter === tag ? 'primary' : 'default'"
-                    class="cursor-pointer"
-                    @click="store.toggleTagFilter(tag)"
-                  >
-                    #{{ tag }}
-                  </NTag>
-                </template>
-                {{ t('entry.tagFilterHint') }}
-              </NTooltip>
-            </div>
-          </div>
-
-          <div class="flex shrink-0 items-center gap-1">
-            <template v-if="store.isTrashView">
-              <NButton size="small" quaternary @click="restore(entry)">
-                <template #icon><NIcon :component="RotateCcw" :size="14" /></template>
-                {{ t('trash.restore') }}
-              </NButton>
-              <NButton size="small" quaternary type="error" @click="purge(entry)">
-                {{ t('trash.purge') }}
-              </NButton>
+        <template #empty>
+          <NEmpty :description="emptyText" class="py-16">
+            <template v-if="!store.isTrashView" #extra>
+              <NButton size="small" @click="openCreate">{{ t('entry.add') }}</NButton>
             </template>
-            <NButton v-else size="small" quaternary @click="openEdit(entry)">
-              <template #icon><NIcon :component="Pencil" :size="14" /></template>
-              {{ t('entry.edit') }}
-            </NButton>
-          </div>
-        </div>
-
-        <!-- 回收站里不展示可复制字段，避免已删数据继续扩散 -->
-        <div v-if="!store.isTrashView" class="mt-2 space-y-1">
-          <div v-for="row in fieldRows(entry)" :key="row.key" class="flex items-center gap-2">
-            <NText :depth="3" class="w-16 shrink-0 text-xs">{{ row.label }}</NText>
-            <NText
-              code
-              class="min-w-0 flex-1 truncate"
-              :class="row.masked ? 'tracking-widest' : ''"
-            >
-              {{ row.masked ? '••••••••' : row.value }}
-            </NText>
-
-            <NTooltip v-if="row.key === 'password'" :show-arrow="false">
-              <template #trigger>
-                <NButton
-                  quaternary
-                  circle
-                  size="tiny"
-                  :aria-label="row.masked ? t('entry.show') : t('entry.hide')"
-                  @click="togglePassword(entry.id)"
-                >
-                  <template #icon>
-                    <NIcon :component="row.masked ? Eye : EyeOff" :size="14" />
-                  </template>
-                </NButton>
-              </template>
-              {{ row.masked ? t('entry.show') : t('entry.hide') }}
-            </NTooltip>
-
-            <NTooltip v-if="row.href" :show-arrow="false">
-              <template #trigger>
-                <NButton
-                  quaternary
-                  circle
-                  size="tiny"
-                  :aria-label="t('entry.openUrl')"
-                  @click="openUrl(row.value)"
-                >
-                  <template #icon><NIcon :component="ExternalLink" :size="14" /></template>
-                </NButton>
-              </template>
-              {{ t('entry.openUrl') }}
-            </NTooltip>
-
-            <NTooltip :show-arrow="false">
-              <template #trigger>
-                <NButton
-                  quaternary
-                  circle
-                  size="tiny"
-                  :aria-label="t('entry.copy')"
-                  @click="copy(row.value)"
-                >
-                  <template #icon><NIcon :component="Copy" :size="14" /></template>
-                </NButton>
-              </template>
-              {{ t('entry.copy') }}
-            </NTooltip>
-          </div>
-        </div>
-
-        <NText v-if="entry.notes.trim()" :depth="3" class="mt-2 line-clamp-2 block text-xs">
-          {{ summary(entry.notes) }}
-        </NText>
-      </NCard>
+          </NEmpty>
+        </template>
+      </NDataTable>
     </div>
 
     <EntryDialog :open="dialogOpen" :entry="editing" @close="dialogOpen = false" />

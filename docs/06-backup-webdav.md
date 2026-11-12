@@ -2,7 +2,7 @@
 
 ## 1. 数据落盘位置
 
-- 数据库单文件存于应用数据目录（Tauri 平台约定路径；便携版可为程序目录下 `data/`）。设置页"备份与恢复"区块展示实际数据目录与库文件路径。
+- 数据库单文件存于应用数据目录（Tauri 平台约定路径；便携版可为程序目录下 `data/`）。设置弹窗"备份与恢复"区块展示实际数据目录与库文件路径。
 - 目录内只放：SQLite 库文件、必要的非敏感配置；日志不含敏感数据。
 
 ## 2. 手动拷贝备份 / 迁移（R11，MVP 必做）
@@ -70,7 +70,7 @@
   }
   ```
 
-- `WebdavConfig` 结构：`base_url`、`username`、`app_password`（加密存本地配置）、`remote_path`、`enabled`；阶段 5 已落地 `mend-core/src/sync.rs`（trait `VaultSync` + `DisabledSync` 占位实现），设置页显示"未启用"，全程不发请求。
+- `WebdavConfig` 结构：`base_url`、`username`、`app_password`（加密存本地配置）、`remote_path`、`enabled`；阶段 5 已落地 `mend-core/src/sync.rs`（trait `VaultSync` + `DisabledSync` 占位实现），设置弹窗显示"未启用"，全程不发请求。
 - 同步对象：整库加密快照（密文），与本地库文件结构一致；远端不存明文、不存主密码。
 - 配置项存 `meta` 表（密码字段加密）。
 

@@ -13,4 +13,5 @@ onMounted(() => {
 
 <template>
   <!-- 仅做启动检查，不渲染可见内容 -->
+  <div v-if="false" />
 </template>

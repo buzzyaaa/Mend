@@ -3,6 +3,30 @@
     "name": "Mend",
     "tagline": "Mend the gaps of your memory"
   },
+  "titlebar": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "close": "Close"
+  },
+  "header": {
+    "settings": "Settings",
+    "language": "Language",
+    "langZh": "简体中文",
+    "langEn": "English",
+    "presets": "Presets",
+    "languageHint": "Applied immediately, then the window closes",
+    "lock": "Lock",
+    "lockHint": "Lock and return to the unlock screen"
+  },
+  "winMenu": {
+    "restore": "Restore",
+    "move": "Move",
+    "size": "Size",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restoreDown": "Restore Down",
+    "close": "Close"
+  },
   "nav": {
     "all": "All",
     "uncategorized": "Uncategorized",
@@ -52,6 +76,7 @@
     "dupShort": "dup",
     "titleRequired": "Title is required",
     "noNotes": "(no notes)",
+    "expandNotes": "Click to expand full notes",
     "notesEdit": "Edit",
     "notesPreview": "Preview",
     "notesPlaceholder": "Markdown supported: headings, lists, bold, code, links…",

@@ -50,14 +50,17 @@ Mend/
 ├── src/                      # 前端
 │   ├── main.ts
 │   ├── App.vue
-│   ├── router/               # 路由：AppShell 下挂 main / presets / settings，unlock 独立
-│   ├── stores/               # Pinia：vault、entry、preset、ui、preferences
-│   ├── views/                # UnlockView、MainView、PresetsView、SettingsView
+│   ├── router/               # 路由：AppShell 下挂 main，unlock 独立；设置/预设值/语言为弹窗，不占路由
+│   ├── stores/               # Pinia：vault、entry、preset、ui（顶栏弹窗开关）、preferences
+│   ├── views/                # UnlockView、MainView
 │   ├── components/
-│   │   ├── layout/           # AppShell（外壳）、NavRail（图标导航栏）、Sidebar、EntryList
-│   │   └── entry/            # EntryDialog：条目表单 + Markdown 备注编辑/预览
-│   ├── composables/          # useClipboard、useToast、useAutoLock
-│   ├── lib/                  # ipc 封装、markdown 安全渲染、theme 主题覆盖
+│   │   ├── layout/           # TitleBar（标题栏）、AppShell（外壳）、Sidebar、EntryList
+│   │   ├── entry/            # EntryDialog：条目表单 + Markdown 备注编辑/预览
+│   │   ├── settings/         # SettingsDialog：设置弹窗
+│   │   ├── presets/          # PresetsDialog：预设值弹窗
+│   │   └── language/         # LanguageDialog：语言选择弹窗
+│   ├── composables/          # useClipboard、useToast、useAutoLock、useUpdateChecker
+│   ├── lib/                  # ipc 封装、window 窗口控制、titlebarMenu 右键菜单、markdown 安全渲染、theme 主题覆盖
 │   ├── assets/               # main.css：浅/深两套 CSS 变量（唯一色彩来源）
 │   ├── locales/              # zh-CN.json、en.json
 │   └── types/
@@ -112,7 +115,7 @@ Mend/
 | `preset_update` | `{ id, input: PresetInput }` | `PresetView` | 保留原排序号与创建时间（已实现） |
 | `preset_delete` | `{ id }` | — | 已实现 |
 | `generator_generate` | `{ options: GeneratorOptions }` | `String` | 纯本地 CSPRNG，结果不入库（已实现） |
-| `app_paths` | — | `{ dataDir, dbPath }` | 设置页展示数据目录，便于手动拷贝库文件（已实现） |
+| `app_paths` | — | `{ dataDir, dbPath }` | 设置弹窗展示数据目录，便于手动拷贝库文件（已实现） |
 | `backup_export` | `{ path, masterPassword }` | `{ path, bytes }` | 导出加密 `.mendbak`（整库密文，已实现） |
 | `backup_import` | `{ path, masterPassword }` | `{ entries, categories, previousBackup }` | 校验临时文件后覆盖替换并锁定会话（已实现） |
 | `sync_webdav_test`（预留） | `WebdavConfig` | `{ ok }` | 阶段 5 仅定义接口，默认未启用联网 |
@@ -131,9 +134,9 @@ Mend/
 
 ## 5. 窗口约定
 
-- 主窗口：最左侧图标导航栏 + 左右布局（见 `05-mvp-spec.md`）；`/main`、`/presets`、`/settings` 共用 `components/layout/AppShell.vue` 外壳，导航栏常驻。
+- 主窗口：顶部自定义标题栏（`TitleBar.vue`）+ 下方左右布局（`Sidebar` + `EntryList`，见 `05-mvp-spec.md`）。路由只有 `/main`（解锁后唯一页面）与 `/unlock`；设置、预设值、语言选择都是标题栏触发的弹窗，共用 `components/layout/AppShell.vue` 外壳之外挂在 `App.vue` 的 Provider 内部。
 - 条目/备注编辑：MVP 优先用 **主窗口内 Dialog 弹窗**（独立浮层、可关闭）；若后续需要真正的独立系统窗口，再用 Tauri `WebviewWindow` 新开，接口与组件保持可替换。
-- 语言切换入口：导航栏左下方的语言图标，点击在中/英间切换（见 `07-i18n.md`）。
+- 语言切换入口：标题栏的语言图标，点击弹出语言选择窗口（见 `07-i18n.md`）。
 
 ## 6. 环境与命令备忘
 

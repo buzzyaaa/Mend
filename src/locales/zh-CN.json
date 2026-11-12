@@ -3,6 +3,30 @@
     "name": "Mend",
     "tagline": "修补你的记忆缺口"
   },
+  "titlebar": {
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "close": "关闭"
+  },
+  "header": {
+    "settings": "设置",
+    "language": "语言",
+    "langZh": "简体中文",
+    "langEn": "English",
+    "presets": "预设值",
+    "languageHint": "切换后立即生效并关闭窗口",
+    "lock": "锁定",
+    "lockHint": "锁定并回到解锁页"
+  },
+  "winMenu": {
+    "restore": "还原",
+    "move": "移动",
+    "size": "大小",
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restoreDown": "向下还原",
+    "close": "关闭"
+  },
   "nav": {
     "all": "全部",
     "uncategorized": "未分类",
@@ -52,6 +76,7 @@
     "dupShort": "重",
     "titleRequired": "标题不能为空",
     "noNotes": "（无备注）",
+    "expandNotes": "点击展开完整备注",
     "notesEdit": "编辑",
     "notesPreview": "预览",
     "notesPlaceholder": "支持 Markdown：标题、列表、加粗、代码、链接…",
