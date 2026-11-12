@@ -46,6 +46,8 @@ pub struct EntryView {
     pub updated_at: i64,
     /// 回收站时间戳：正常条目为 null，回收站里为删除时间。
     pub deleted_at: Option<i64>,
+    /// 归档标记：主列表恒为 false，归档列表恒为 true（与回收站正交）。
+    pub archived: bool,
 }
 
 fn validate_title(input: &EntryInput) -> MendResult<String> {
@@ -104,9 +106,13 @@ pub fn encrypt_input(
         notes_enc: encrypt_field(dek, &field_aad(id, "notes"), &input.notes)?,
         favorite: input.favorite,
         tags: validate_tags(input)?,
+        // 手动排序号不在明文入参里：新建条目由命令层按桶内 max+1 赋值（见 db.rs）。
+        sort_order: 0,
         created_at,
         updated_at,
         deleted_at: None,
+        // 新建条目一律未归档（archived 由「归档 / 取消归档」命令单独维护）。
+        archived: false,
     })
 }
 
@@ -127,6 +133,7 @@ pub fn decrypt_row(dek: &[u8; DEK_LEN], row: &EntryRowEnc) -> MendResult<EntryVi
         created_at: row.created_at,
         updated_at: row.updated_at,
         deleted_at: row.deleted_at,
+        archived: row.archived,
     })
 }
 

@@ -2,12 +2,14 @@
 // 条目编辑弹窗：字段录入、四类预设回填、强密码生成器、Markdown 备注编辑/预览。
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Star, StarOff } from 'lucide-vue-next'
 import {
   NAlert,
   NButton,
   NCard,
   NCheckbox,
   NDivider,
+  NIcon,
   NInput,
   NInputNumber,
   NModal,
@@ -371,8 +373,22 @@ function messageOf(err: unknown): string {
         <NDivider class="!my-1" />
 
         <div class="flex items-center gap-2">
-          <NCheckbox v-model:checked="form.favorite" />
-          <NText class="text-sm">{{ t('entry.favorite') }}</NText>
+          <NButton
+            quaternary
+            circle
+            :type="form.favorite ? 'warning' : 'default'"
+            :aria-label="t('entry.star')"
+            :title="form.favorite ? t('entry.unstar') : t('entry.star')"
+            @click="form.favorite = !form.favorite"
+          >
+            <template #icon>
+              <NIcon :component="form.favorite ? Star : StarOff" :size="16" />
+            </template>
+          </NButton>
+          <NText class="text-sm">{{ t('entry.star') }}</NText>
+          <NText v-if="form.favorite" :depth="3" class="text-xs">
+            {{ t('entry.starredHint') }}
+          </NText>
         </div>
 
         <div>

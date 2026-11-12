@@ -88,7 +88,7 @@ fn backup_export_import_roundtrip_restores_same_vault() {
     let (blob, expected_counts) = {
         let conn = db::open_and_migrate(&path).expect("建库");
         let keys = vault::setup(&conn, "123456").expect("设置主密码");
-        db::create_category(&conn, "cat-work", "工作").expect("建分类");
+        db::create_category(&conn, "cat-work", "工作", None, None).expect("建分类");
         let entry = entries::encrypt_input(&keys.dek_bytes(), "e-1", &sample_input(), 2000, 2000)
             .expect("加密条目");
         db::insert_entry(&conn, &entry).expect("写条目");
@@ -192,6 +192,54 @@ fn trash_soft_delete_restore_and_purge() {
     let _ = fs::remove_dir_all(path.parent().unwrap());
 }
 
+/// 归档条目用不带分类的条目，避免临时库里补建分类。
+fn archive_input() -> entries::EntryInput {
+    let mut input = sample_input();
+    input.category_id = None;
+    input
+}
+
+#[test]
+fn archive_unarchive_roundtrip_keeps_main_and_archive_lists_orthogonal() {
+    let path = temp_db("archive");
+    let conn = db::open_and_migrate(&path).expect("建库");
+    let keys = vault::setup(&conn, "123456").expect("设置主密码");
+    let dek = keys.dek_bytes();
+
+    let row = entries::encrypt_input(&dek, "a-1", &archive_input(), 1000, 1000).expect("加密");
+    db::insert_entry(&conn, &row).expect("写条目");
+    let row2 = entries::encrypt_input(&dek, "a-2", &archive_input(), 1000, 1000).expect("加密");
+    db::insert_entry(&conn, &row2).expect("写条目");
+    assert_eq!(db::list_entries(&conn, None, None).unwrap().len(), 2);
+
+    // 归档：不出现在主列表，出现在归档列表，密文仍可解密，且不进回收站
+    db::archive_entry(&conn, "a-1").expect("归档");
+    assert_eq!(db::list_entries(&conn, None, None).unwrap().len(), 1);
+    assert_eq!(db::list_entries(&conn, None, None).unwrap()[0].id, "a-2");
+    let archived = db::list_archived_entries(&conn).expect("归档列表");
+    assert_eq!(archived.len(), 1);
+    assert_eq!(archived[0].id, "a-1");
+    assert!(archived[0].archived);
+    assert!(db::list_trashed_entries(&conn).unwrap().is_empty());
+    // 归档条目不可删除（不会进入回收站）
+    assert!(db::delete_entry(&conn, "a-1").is_err());
+    assert!(db::list_trashed_entries(&conn).unwrap().is_empty());
+
+    // 取消归档：回到主列表，归档列表清空
+    db::unarchive_entry(&conn, "a-1").expect("取消归档");
+    assert_eq!(db::list_entries(&conn, None, None).unwrap().len(), 2);
+    assert!(db::list_archived_entries(&conn).unwrap().is_empty());
+    let restored = db::list_entries(&conn, None, None)
+        .expect("主列表")
+        .into_iter()
+        .find(|row| row.id == "a-1")
+        .expect("归档条目已回到主列表");
+    let view = entries::decrypt_row(&dek, &restored).expect("解密");
+    assert_eq!(view.password, "S3cret-明文");
+
+    let _ = fs::remove_dir_all(path.parent().unwrap());
+}
+
 #[test]
 fn short_master_password_policy_and_three_char_rejected() {
     let path = temp_db("policy");
@@ -216,11 +264,22 @@ fn category_and_entry_crud_survives_reopen_and_stays_encrypted() {
         let keys = vault::setup(&conn, "123456").expect("设置主密码");
         assert!(db::is_initialized(&conn).expect("查询初始化状态"));
 
-        // 2) 分类增改
-        db::create_category(&conn, "cat-work", "工作").expect("创建分类");
+        // 2) 分类增改（颜色走命令层同款校验后写入）
+        db::create_category(&conn, "cat-work", "工作", None, None).expect("创建分类");
         let cats = db::list_categories(&conn).expect("列出分类");
         assert_eq!(cats.len(), 1);
-        db::rename_category(&conn, "cat-work", "工作（内网）").expect("重命名分类");
+        let color = db::validate_category_color(&Some("#a1b2c3".into())).expect("校验颜色");
+        db::rename_category(
+            &conn,
+            "cat-work",
+            "工作（内网）",
+            color.as_deref(),
+            Some("work"),
+        )
+        .expect("重命名分类");
+        let cats = db::list_categories(&conn).expect("列出分类");
+        assert_eq!(cats[0].color.as_deref(), Some("#A1B2C3"));
+        assert_eq!(cats[0].icon.as_deref(), Some("work"));
 
         // 3) 条目新增
         let dek = keys.dek_bytes();
@@ -298,6 +357,73 @@ fn category_and_entry_crud_survives_reopen_and_stays_encrypted() {
         assert!(db::list_entries(&conn, None, None)
             .expect("全量列出")
             .is_empty());
+    }
+
+    let _ = fs::remove_dir_all(path.parent().expect("父目录"));
+}
+
+/// 手动排序落库后跨重启稳定：建库 → 插入条目（取桶内 max+1）→ 模拟拖拽重排
+/// → 重开库读回，`sort_order` 与拖拽结果一致，且重复迁移幂等。
+#[test]
+fn entry_manual_sort_order_persists_across_reopen() {
+    let path = temp_db("sort-order");
+
+    {
+        let conn = db::open_and_migrate(&path).expect("建库");
+        let keys = vault::setup(&conn, "123456").expect("设置主密码");
+        let dek = keys.dek_bytes();
+        db::create_category(&conn, "cat-work", "工作", None, None).expect("建分类");
+
+        // 新建条目：命令层按桶内 max+1 赋值，逐条递增（1/2/3）
+        for (id, title) in [("e-a", "A"), ("e-b", "B"), ("e-c", "C")] {
+            let mut input = sample_input();
+            input.title = title.into();
+            let mut row = entries::encrypt_input(&dek, id, &input, 1000, 1000).expect("加密");
+            row.sort_order = db::next_entry_sort_order(&conn, Some("cat-work")).expect("取排序号");
+            db::insert_entry(&conn, &row).expect("写条目");
+        }
+
+        let before: Vec<i64> = ["e-a", "e-b", "e-c"]
+            .iter()
+            .map(|id| {
+                db::get_entry(&conn, id)
+                    .expect("读取")
+                    .expect("存在")
+                    .sort_order
+            })
+            .collect();
+        assert_eq!(before, vec![1, 2, 3]);
+
+        // 模拟拖拽：c → a → b
+        db::reorder_entries(
+            &conn,
+            &["e-c".to_string(), "e-a".to_string(), "e-b".to_string()],
+        )
+        .expect("重排");
+    }
+
+    // 重开库：排序号已落盘且与拖拽结果一致
+    {
+        let conn = db::open_and_migrate(&path).expect("重开库");
+        let order: Vec<i64> = ["e-a", "e-b", "e-c"]
+            .iter()
+            .map(|id| {
+                db::get_entry(&conn, id)
+                    .expect("读取")
+                    .expect("存在")
+                    .sort_order
+            })
+            .collect();
+        assert_eq!(order, vec![1, 2, 0], "c=0, a=1, b=2");
+
+        // 迁移幂等：重复执行不报错、版本保持 4
+        db::migrate(&conn).expect("重复迁移");
+        assert_eq!(
+            db::meta_get(&conn, "schema_version")
+                .expect("读版本")
+                .as_deref(),
+            Some("4")
+        );
     }
 
     let _ = fs::remove_dir_all(path.parent().expect("父目录"));

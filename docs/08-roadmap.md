@@ -89,7 +89,7 @@
 - [x] 深浅色主题：跟随系统 / 浅色 / 深色，`<html class="dark">` 切换 CSS 变量，偏好存 localStorage。
 - [x] 回收站：删除写 `deleted_at` 进回收站，可恢复 / 彻底删除 / 清空；`entry_restore`、`entry_purge`、`entry_purge_all`。
 - [x] 弱密码与重复密码提示：`src/lib/security.ts` 计算（少于 8 位或字符种类单一 = 弱；同一密码被多条共用 = 重复），列表卡片显示"弱/重"标记。
-- [x] 排序（最近更新 / 名称 / 收藏优先）与收藏标记。
+- [x] 排序（最近更新 / 名称 / 星标优先 / 手动排序并落库）与星标标记。
 - [x] 备注全文检索：调用 `entry_list` 拉全量后在内存里按标题/账号/邮箱/手机/网址/备注匹配。
 - [x] 标签（多标签，2026-11-11）：迁移 v2 新增 `entries.tags`（JSON 明文列）；表单逗号分隔输入，列表展开区以 chip 展示。
   - ⚠️ 回归（2026-11-12）：列表改 `NDataTable` 时丢失了 chip 的点击过滤（`store.toggleTagFilter` 已无调用方），待修复；见下方"待办补记"。
@@ -128,6 +128,9 @@ MVP（阶段 0–6）与 CI/自动更新已完成，下面是盘点出的尚未�
 - [x] 恢复标签 chip 点击过滤（工具条显示当前过滤标签 + 可清除；回收站不提供）。
 - [x] 条目表单的标签输入补字段标题。
 - [x] 清理无引用 i18n 词条（24 个删除，2 个随标签功能复活；两份 locale 键集对称校验通过）。
+- [x] 收藏字段改造为星标（2026-11-12）：复用 `entries.favorite` 列（语义改名 star，不新增迁移、不改列名）；列表标题列前置星标图标并可点击切换（`stopPropagation`），所有排序模式下星标条目稳定置顶；侧栏新增「星标」固定桶（按 favorite 计数）；编辑弹窗收藏勾选框改为星标图标按钮；`entry.sortFavorite` 文案改为「星标优先」；新增 `nav.starred` / `entry.star` / `entry.unstar` / `entry.starredHint` 词条。
+- [x] 条目拖拽排序并落库（T9，2026-11-12）：迁移 v3 新增 `entries.sort_order INTEGER NOT NULL DEFAULT 0`（存量行默认 0）；`entry_reorder` 按拖拽结果整批写回 `0..n-1`（单事务原子，仅更新未删除条目）；新建条目取同桶 `MAX(sort_order)+1` 落在末尾；排序下拉新增「手动排序」，仅该模式且非回收站 / 星标视图启用原生 HTML5 行拖拽（lucide `GripVertical` 手柄），拖拽行半透明、目标行高亮、200ms ease-out（全局已尊重 `prefers-reduced-motion`）；store 内存维护当前桶顺序，`refresh()` 后回退后端默认序（未排序条目按 `updated_at`）。新增 `entry.sortManual` / `entry.dragHint` / `entry.reorderSaved` 词条。
+- [x] 条目归档（T10，2026-11-12）：迁移 v4 新增 `entries.archived INTEGER NOT NULL DEFAULT 0`（软状态，与 `deleted_at` 正交——归档条目不出现在主列表、不进入回收站，可取消归档恢复）；新增 `entry_archive_list` / `entry_archive` / `entry_unarchive` 三条命令，`entry_list` 默认过滤 `archived = 0`，`entry_archive_list` 返回 `archived = 1`；归档条目被 `delete_entry` 守卫拒绝（不会误入回收站）。侧栏固定桶新增「归档」（lucide `Archive`，顺序 all → starred → archive → uncategorized → trash），不显示数字计数；条目编辑按钮旁新增「归档」与「删除」，归档与删除均走 naive-ui `dialog.warning` 二次确认；归档视图操作列仅提供「取消归档」（不提供编辑 / 删除，与回收站口径一致），列表标题切换为 `nav.archive`，且禁用拖拽、隐藏排序与新增入口，归档桶固定按 `updated_at` 倒序（星标置顶不生效）。新增 `nav.archive` / `entry.archive` / `entry.archiveConfirm` / `entry.archiveConfirmContent` / `entry.archived` / `entry.unarchive` / `entry.unarchiveConfirm` / `entry.unarchiveConfirmContent` / `entry.unarchived` / `entry.archivedHint` 词条。
 
 **工程与 CI**
 

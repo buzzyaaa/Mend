@@ -100,18 +100,22 @@ Mend/
 | `vault_change_password` | `{ oldPassword, newPassword }` | — | 校验旧密码后用新 KEK 重包裹同一 DEK，事务更新 meta（已实现） |
 | `vault_status` | — | `{ initialized, unlocked }` | 启动时判断走解锁页还是主界面（已实现） |
 | `category_list` | — | `Vec<Category>` | 分类列表（含 entryCount 聚合，已实现） |
-| `category_create` | `{ input: { name } }` | `Category` | 已实现 |
-| `category_rename` | `{ id, input: { name } }` | — | 已实现 |
+| `category_create` | `{ input: CategoryInput }` | `Category` | `CategoryInput = { name, color?, icon? }`；`color` 仅接受 `#RRGGBB`（大小写不敏感，统一存大写），`icon` 为图标名（上限 64 字），两者可空（已实现） |
+| `category_rename` | `{ id, input: CategoryInput }` | — | 重命名时同步覆盖 `color` / `icon`（已实现） |
 | `category_delete` | `{ id }` | — | 删除时条目移入"未分类"（已实现） |
-| `entry_list` | `{ categoryId?, keyword? }` | `Vec<EntryView>` | 解锁态返回解密后的展示模型（已实现） |
+| `entry_list` | `{ categoryId?, keyword? }` | `Vec<EntryView>` | 解锁态返回解密后的展示模型；**默认过滤 `archived = 0`**，归档条目走 `entry_archive_list`（已实现） |
 | `entry_get` | `{ id }` | `EntryView` | 单条详情（已实现；**预留**，前端暂未调用，列表走 `entry_list`） |
 | `entry_create` | `{ input: EntryInput }` | `EntryView` | 敏感字段后端加密后落库；`EntryInput`/`EntryView` 含 `tags: string[]`（已实现） |
 | `entry_update` | `{ id, input: EntryInput }` | `EntryView` | 已实现 |
-| `entry_delete` | `{ id }` | — | 软删除：写 `deleted_at` 进回收站（已实现） |
+| `entry_delete` | `{ id }` | — | 软删除：写 `deleted_at` 进回收站；`archived = 1` 的条目被拒绝删除（已实现） |
+| `entry_archive_list` | — | `Vec<EntryView>` | 归档列表：只返回 `archived = 1 AND deleted_at IS NULL` 的条目（解密返回，含 `archived: true`，已实现） |
+| `entry_archive` | `{ id }` | — | 归档：`archived` 置 1（软状态，与 `deleted_at` 正交；不进回收站，可取消归档，已实现） |
+| `entry_unarchive` | `{ id }` | — | 取消归档：`archived` 置 0（已实现） |
 | `entry_trash_list` | — | `Vec<EntryView>` | 回收站列表（解密返回，含 `deletedAt`，已实现） |
 | `entry_restore` | `{ id }` | — | 从回收站恢复（已实现） |
 | `entry_purge` | `{ id }` | — | 彻底删除，仅接受回收站条目（已实现） |
 | `entry_purge_all` | — | `number` | 清空回收站，返回删除条数（已实现） |
+| `entry_reorder` | `{ ids: string[] }` | — | 拖拽排序：按给定顺序整批写回 `entries.sort_order = 0..n-1`（单事务原子，仅更新未删除条目）；前端在「手动排序」模式下拖拽结束后调用（已实现） |
 | `preset_list` | — | `Vec<PresetView>` | 账号/邮箱/手机号预设值，解锁态解密返回（已实现） |
 | `preset_create` | `{ input: PresetInput }` | `PresetView` | 值加密落库，排序号自动取 max+1（已实现） |
 | `preset_update` | `{ id, input: PresetInput }` | `PresetView` | 保留原排序号与创建时间（已实现） |

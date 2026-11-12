@@ -14,7 +14,7 @@ pub use rusqlite::Connection;
 
 use crate::error::{MendError, MendResult};
 
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 4;
 pub const DB_FILE_NAME: &str = "mend.db";
 
 const SCHEMA_V1: &str = r#"
@@ -65,6 +65,15 @@ CREATE INDEX IF NOT EXISTS idx_entries_deleted ON entries(deleted_at);
 /// v1 → v2：条目多标签（JSON 数组，明文，见 docs/04 §2.3）。
 const MIGRATION_V2: &str = "ALTER TABLE entries ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';";
 
+/// v2 → v3：条目手动排序号。默认 0 表示「未手动排序」，前端手动排序模式下
+/// 按 `sort_order` 升序；0 值条目回退到 `updated_at` 倒序（见 docs/04 §2.3 / §3）。
+const MIGRATION_V3: &str = "ALTER TABLE entries ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;";
+
+/// v3 → v4：条目归档标记（软状态，与 `deleted_at` 正交）。
+/// `archived = 1` 的条目不出现在主列表、也不进回收站，可通过「取消归档」恢复；
+/// 归档不写 `archived_at`，归档列表按 `updated_at` 倒序展示（见 docs/04 §2.3 / §3）。
+const MIGRATION_V4: &str = "ALTER TABLE entries ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;";
+
 pub fn db_file_path(app_data_dir: &Path) -> PathBuf {
     app_data_dir.join(DB_FILE_NAME)
 }
@@ -96,10 +105,10 @@ pub fn open_and_migrate(path: &Path) -> MendResult<Connection> {
     Ok(conn)
 }
 
-/// 在**单个事务**内完成建表 → v2 迁移 → 版本号写入：中途崩溃/掉电不会留下
+/// 在**单个事务**内完成建表 → v2 迁移 → v3 迁移 → v4 迁移 → 版本号写入：中途崩溃/掉电不会留下
 /// "列已加、版本未升"的半迁移状态（旧实现三段分开执行，坏库会导致下次启动永久失败）。
-/// 可重入：`CREATE TABLE IF NOT EXISTS` 幂等；v2 迁移前先探测 `tags` 列是否已存在，
-/// 即使历史版本崩溃留下了"列存在但版本仍为 1"的库，也能安全补齐版本号。
+/// 可重入：`CREATE TABLE IF NOT EXISTS` 幂等；各版本迁移前先探测目标列是否已存在，
+/// 即使历史版本崩溃留下了"列存在但版本未升"的库，也能安全补齐版本号。
 pub fn migrate(conn: &Connection) -> MendResult<()> {
     // unchecked_transaction：借用 &Connection 即可开启，便于在事务内复用仓储函数
     // （meta_get/meta_set 接收 &Connection，&Transaction 自动解引用传递）。
@@ -110,6 +119,12 @@ pub fn migrate(conn: &Connection) -> MendResult<()> {
         .unwrap_or(0);
     if current < 2 && !column_exists(&tx, "entries", "tags")? {
         tx.execute_batch(MIGRATION_V2).map_err(db_err)?;
+    }
+    if current < 3 && !column_exists(&tx, "entries", "sort_order")? {
+        tx.execute_batch(MIGRATION_V3).map_err(db_err)?;
+    }
+    if current < 4 && !column_exists(&tx, "entries", "archived")? {
+        tx.execute_batch(MIGRATION_V4).map_err(db_err)?;
     }
     meta_set(&tx, "schema_version", &SCHEMA_VERSION.to_string())?;
     tx.commit().map_err(db_err)?;
@@ -170,7 +185,7 @@ pub fn list_categories(conn: &Connection) -> MendResult<Vec<CategoryRow>> {
         .prepare(
             "SELECT c.id, c.name, c.color, c.icon, c.sort_order,
                     (SELECT COUNT(*) FROM entries e
-                      WHERE e.category_id = c.id AND e.deleted_at IS NULL) AS entry_count
+                      WHERE e.category_id = c.id AND e.deleted_at IS NULL AND e.archived = 0) AS entry_count
                FROM categories c
               ORDER BY c.sort_order ASC, c.created_at ASC",
         )
@@ -192,7 +207,13 @@ pub fn list_categories(conn: &Connection) -> MendResult<Vec<CategoryRow>> {
     Ok(rows)
 }
 
-pub fn create_category(conn: &Connection, id: &str, name: &str) -> MendResult<()> {
+pub fn create_category(
+    conn: &Connection,
+    id: &str,
+    name: &str,
+    color: Option<&str>,
+    icon: Option<&str>,
+) -> MendResult<()> {
     let ts = now_ms();
     let next_order: i64 = conn
         .query_row(
@@ -202,25 +223,61 @@ pub fn create_category(conn: &Connection, id: &str, name: &str) -> MendResult<()
         )
         .map_err(db_err)?;
     conn.execute(
-        "INSERT INTO categories(id, name, sort_order, created_at, updated_at)
-         VALUES(?1, ?2, ?3, ?4, ?4)",
-        params![id, name, next_order, ts],
+        "INSERT INTO categories(id, name, color, icon, sort_order, created_at, updated_at)
+         VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+        params![id, name, color, icon, next_order, ts],
     )
     .map_err(db_err)?;
     Ok(())
 }
 
-pub fn rename_category(conn: &Connection, id: &str, name: &str) -> MendResult<()> {
+pub fn rename_category(
+    conn: &Connection,
+    id: &str,
+    name: &str,
+    color: Option<&str>,
+    icon: Option<&str>,
+) -> MendResult<()> {
     let changed = conn
         .execute(
-            "UPDATE categories SET name = ?2, updated_at = ?3 WHERE id = ?1",
-            params![id, name, now_ms()],
+            "UPDATE categories SET name = ?2, color = ?3, icon = ?4, updated_at = ?5
+             WHERE id = ?1",
+            params![id, name, color, icon, now_ms()],
         )
         .map_err(db_err)?;
     if changed == 0 {
         return Err(MendError::NotFound(format!("分类 {id}")));
     }
     Ok(())
+}
+
+/// 分类颜色校验：仅接受 `#RRGGBB`（大小写不敏感），统一存大写；空值表示无色。
+/// 实现等价于正则 `^#[0-9A-Fa-f]{6}$`，不引入 regex 依赖（等价手写判定）。
+pub fn validate_category_color(color: &Option<String>) -> MendResult<Option<String>> {
+    match color.as_deref().map(str::trim) {
+        None | Some("") => Ok(None),
+        Some(value) => {
+            let body = value.strip_prefix('#').unwrap_or("");
+            if value.len() == 7 && body.len() == 6 && body.chars().all(|c| c.is_ascii_hexdigit()) {
+                Ok(Some(value.to_ascii_uppercase()))
+            } else {
+                Err(MendError::Vault("分类颜色格式应为 #RRGGBB".into()))
+            }
+        }
+    }
+}
+
+/// 分类图标校验：存图标名字符串，上限 64 字；空值表示无图标（前端回退默认文件夹）。
+pub fn validate_category_icon(icon: &Option<String>) -> MendResult<Option<String>> {
+    match icon.as_deref().map(str::trim) {
+        None | Some("") => Ok(None),
+        Some(value) => {
+            if value.chars().count() > 64 {
+                return Err(MendError::Vault("分类图标名过长（上限 64 字）".into()));
+            }
+            Ok(Some(value.to_string()))
+        }
+    }
 }
 
 /// 删除分类：其下条目归入"未分类"（category_id 置空），不级联删除条目。
@@ -258,10 +315,14 @@ pub struct EntryRowEnc {
     pub favorite: bool,
     /// 明文标签列表（JSON 落 `tags` 列，语义同分类名，见 docs/04 §2.3）。
     pub tags: Vec<String>,
+    /// 手动排序号：同桶内升序，0 = 未手动排序（手动排序模式下回退 updated_at）。
+    pub sort_order: i64,
     pub created_at: i64,
     pub updated_at: i64,
     /// 回收站时间戳：`None` = 正常条目，`Some(ms)` = 已软删除。
     pub deleted_at: Option<i64>,
+    /// 归档标记（迁移 v4 新增）：`true` = 已归档，不出现在主列表、也不进回收站。
+    pub archived: bool,
 }
 
 pub fn insert_entry(conn: &Connection, row: &EntryRowEnc) -> MendResult<()> {
@@ -269,8 +330,8 @@ pub fn insert_entry(conn: &Connection, row: &EntryRowEnc) -> MendResult<()> {
     conn.execute(
         "INSERT INTO entries(id, category_id, title, url,
                              username_enc, password_enc, email_enc, phone_enc, notes_enc,
-                             favorite, tags, created_at, updated_at)
-         VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                             favorite, tags, sort_order, archived, created_at, updated_at)
+         VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
         params![
             row.id,
             row.category_id,
@@ -283,6 +344,8 @@ pub fn insert_entry(conn: &Connection, row: &EntryRowEnc) -> MendResult<()> {
             row.notes_enc,
             row.favorite as i64,
             tags_json,
+            row.sort_order,
+            row.archived as i64,
             row.created_at,
             row.updated_at,
         ],
@@ -322,6 +385,35 @@ pub fn update_entry(conn: &Connection, row: &EntryRowEnc) -> MendResult<()> {
     Ok(())
 }
 
+/// 同桶内下一个手动排序号（分类桶按 `category_id`，`None` 桶为未分类）。
+/// 新建条目取该桶 `MAX(sort_order) + 1`，保证插入后落在手动序末尾。
+pub fn next_entry_sort_order(conn: &Connection, category_id: Option<&str>) -> MendResult<i64> {
+    let max: Option<i64> = conn
+        .query_row(
+            "SELECT MAX(sort_order) FROM entries
+              WHERE category_id IS ?1 AND deleted_at IS NULL AND archived = 0",
+            params![category_id],
+            |row| row.get(0),
+        )
+        .map_err(db_err)?;
+    Ok(max.unwrap_or(0) + 1)
+}
+
+/// 批量写入手动排序号：按给定顺序依次赋 `0..n-1`，整批在单个事务内完成。
+/// 只更新未删除条目；空数组为合法空操作。
+pub fn reorder_entries(conn: &Connection, ids: &[String]) -> MendResult<()> {
+    let tx = conn.unchecked_transaction().map_err(db_err)?;
+    for (index, id) in ids.iter().enumerate() {
+        tx.execute(
+            "UPDATE entries SET sort_order = ?2 WHERE id = ?1 AND deleted_at IS NULL AND archived = 0",
+            params![id, index as i64],
+        )
+        .map_err(db_err)?;
+    }
+    tx.commit().map_err(db_err)?;
+    Ok(())
+}
+
 fn tags_to_json(tags: &[String]) -> MendResult<String> {
     serde_json::to_string(tags).map_err(|err| MendError::Db(format!("标签序列化失败: {err}")))
 }
@@ -333,8 +425,9 @@ fn tags_from_json(raw: &str) -> MendResult<Vec<String>> {
 pub fn get_entry(conn: &Connection, id: &str) -> MendResult<Option<EntryRowEnc>> {
     conn.query_row(
         "SELECT id, category_id, title, url, username_enc, password_enc, email_enc,
-                phone_enc, notes_enc, favorite, tags, created_at, updated_at, deleted_at
-           FROM entries WHERE id = ?1 AND deleted_at IS NULL",
+                phone_enc, notes_enc, favorite, tags, created_at, updated_at, deleted_at,
+                sort_order, archived
+           FROM entries WHERE id = ?1 AND deleted_at IS NULL AND archived = 0",
         params![id],
         map_entry_row,
     )
@@ -351,9 +444,10 @@ pub fn list_entries(
     let mut stmt = conn
         .prepare(
             "SELECT id, category_id, title, url, username_enc, password_enc, email_enc,
-                    phone_enc, notes_enc, favorite, tags, created_at, updated_at, deleted_at
+                    phone_enc, notes_enc, favorite, tags, created_at, updated_at, deleted_at,
+                    sort_order, archived
                FROM entries
-              WHERE deleted_at IS NULL
+              WHERE deleted_at IS NULL AND archived = 0
                 AND (?1 IS NULL OR category_id = ?1)
                 AND (?2 IS NULL OR title LIKE '%' || ?2 || '%')
               ORDER BY updated_at DESC",
@@ -372,7 +466,8 @@ pub fn list_trashed_entries(conn: &Connection) -> MendResult<Vec<EntryRowEnc>> {
     let mut stmt = conn
         .prepare(
             "SELECT id, category_id, title, url, username_enc, password_enc, email_enc,
-                    phone_enc, notes_enc, favorite, tags, created_at, updated_at, deleted_at
+                    phone_enc, notes_enc, favorite, tags, created_at, updated_at, deleted_at,
+                    sort_order, archived
                FROM entries
               WHERE deleted_at IS NOT NULL
               ORDER BY deleted_at DESC",
@@ -386,11 +481,32 @@ pub fn list_trashed_entries(conn: &Connection) -> MendResult<Vec<EntryRowEnc>> {
     Ok(rows)
 }
 
+/// 归档列表：只返回已归档且未删除的条目，按最近更新倒序。
+pub fn list_archived_entries(conn: &Connection) -> MendResult<Vec<EntryRowEnc>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, category_id, title, url, username_enc, password_enc, email_enc,
+                    phone_enc, notes_enc, favorite, tags, created_at, updated_at, deleted_at,
+                    sort_order, archived
+               FROM entries
+              WHERE archived = 1 AND deleted_at IS NULL
+              ORDER BY updated_at DESC",
+        )
+        .map_err(db_err)?;
+    let rows = stmt
+        .query_map([], map_entry_row)
+        .map_err(db_err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(db_err)?;
+    Ok(rows)
+}
+
 /// 软删除：只打 `deleted_at`，密文原样保留，可在回收站恢复。
+/// 归档条目（`archived = 1`）不可删除，避免归档状态与回收站状态互相污染。
 pub fn delete_entry(conn: &Connection, id: &str) -> MendResult<()> {
     let changed = conn
         .execute(
-            "UPDATE entries SET deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+            "UPDATE entries SET deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL AND archived = 0",
             params![id, now_ms()],
         )
         .map_err(db_err)?;
@@ -410,6 +526,35 @@ pub fn restore_entry(conn: &Connection, id: &str) -> MendResult<()> {
         .map_err(db_err)?;
     if changed == 0 {
         return Err(MendError::NotFound(format!("回收站条目 {id}")));
+    }
+    Ok(())
+}
+
+/// 归档：把 `archived` 置 1（与 `deleted_at` 正交的软状态）。
+/// 只作用于未删除且当前未归档的条目；归档后不出现在主列表、也不进回收站。
+pub fn archive_entry(conn: &Connection, id: &str) -> MendResult<()> {
+    let changed = conn
+        .execute(
+            "UPDATE entries SET archived = 1 WHERE id = ?1 AND archived = 0 AND deleted_at IS NULL",
+            params![id],
+        )
+        .map_err(db_err)?;
+    if changed == 0 {
+        return Err(MendError::NotFound(format!("条目 {id}")));
+    }
+    Ok(())
+}
+
+/// 取消归档：把 `archived` 置 0。只作用于已归档且未删除的条目。
+pub fn unarchive_entry(conn: &Connection, id: &str) -> MendResult<()> {
+    let changed = conn
+        .execute(
+            "UPDATE entries SET archived = 0 WHERE id = ?1 AND archived = 1 AND deleted_at IS NULL",
+            params![id],
+        )
+        .map_err(db_err)?;
+    if changed == 0 {
+        return Err(MendError::NotFound(format!("归档条目 {id}")));
     }
     Ok(())
 }
@@ -553,6 +698,8 @@ fn map_entry_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EntryRowEnc> {
         created_at: row.get(11)?,
         updated_at: row.get(12)?,
         deleted_at: row.get(13)?,
+        sort_order: row.get(14)?,
+        archived: row.get::<_, i64>(15)? != 0,
     })
 }
 
@@ -572,7 +719,7 @@ mod tests {
         migrate(&conn).unwrap();
         assert_eq!(
             meta_get(&conn, "schema_version").unwrap().as_deref(),
-            Some("2")
+            Some("4")
         );
         assert!(!is_initialized(&conn).unwrap());
         assert!(list_entries(&conn, None, None).unwrap().is_empty());
@@ -590,13 +737,14 @@ mod tests {
         migrate(&conn).unwrap();
         assert_eq!(
             meta_get(&conn, "schema_version").unwrap().as_deref(),
-            Some("2")
+            Some("4")
         );
         assert!(column_exists(&conn, "entries", "tags").unwrap());
+        assert!(column_exists(&conn, "entries", "sort_order").unwrap());
     }
 
     /// 事务化迁移在文件库上可安全重入：多次启动（每次 open_and_migrate 都跑一遍）
-    /// 不报错、不重复 ALTER，版本号始终保持 2。
+    /// 不报错、不重复 ALTER，版本号始终保持 3。
     #[test]
     fn migrate_runs_in_single_transaction() {
         let conn = Connection::open_in_memory().unwrap();
@@ -607,14 +755,15 @@ mod tests {
         migrate(&conn).unwrap();
         assert_eq!(
             meta_get(&conn, "schema_version").unwrap().as_deref(),
-            Some("2")
+            Some("4")
         );
         assert!(column_exists(&conn, "entries", "tags").unwrap());
+        assert!(column_exists(&conn, "entries", "sort_order").unwrap());
     }
 
-    /// v1 旧库（无 tags 列）升级到 v2：加列成功且旧数据带默认空标签。
+    /// v1 旧库（无 tags / sort_order 列）升级到 v3：加列成功，旧数据带默认空标签与排序号 0。
     #[test]
-    fn v1_database_upgrades_to_v2_with_default_tags() {
+    fn v1_database_upgrades_to_v3_with_default_tags() {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(SCHEMA_V1).unwrap();
         conn.execute(
@@ -629,17 +778,75 @@ mod tests {
         migrate(&conn).unwrap();
         assert_eq!(
             meta_get(&conn, "schema_version").unwrap().as_deref(),
-            Some("2")
+            Some("4")
         );
         let rows = list_entries(&conn, None, None).unwrap();
         assert_eq!(rows.len(), 1);
         assert!(rows[0].tags.is_empty(), "旧条目升级后应为空标签");
+        assert_eq!(rows[0].sort_order, 0, "旧条目升级后排序号应为默认 0");
+    }
+
+    /// v2 半迁移库（tags / sort_order 已加、版本仍为 2）升级到 v3：不重复 ALTER，
+    /// 只把版本号补齐到 3。
+    #[test]
+    fn migrate_recovers_half_applied_v3_state() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA_V1).unwrap();
+        conn.execute_batch(MIGRATION_V2).unwrap();
+        conn.execute_batch(MIGRATION_V3).unwrap(); // sort_order 已加
+        meta_set(&conn, "schema_version", "2").unwrap(); // 但版本没升（模拟崩溃点）
+
+        migrate(&conn).unwrap();
+        assert_eq!(
+            meta_get(&conn, "schema_version").unwrap().as_deref(),
+            Some("4")
+        );
+        assert!(column_exists(&conn, "entries", "sort_order").unwrap());
+    }
+
+    /// sort_order 落库往返：新建条目取桶内 max+1，reorder 式批量 UPDATE 后
+    /// 读回的排序稳定且持久（重复查询不漂移，空数组重排为幂等空操作）。
+    #[test]
+    fn entry_sort_order_roundtrip_and_reorder_persists() {
+        let conn = mem_db();
+        create_category(&conn, "cat-1", "工作", None, None).unwrap();
+        for id in ["a", "b", "c"] {
+            let mut row = sample_row(id, Some("cat-1"));
+            row.sort_order = next_entry_sort_order(&conn, Some("cat-1")).unwrap();
+            insert_entry(&conn, &row).unwrap();
+        }
+
+        // 新条目排序号逐条递增（桶内 max+1）
+        let orders: Vec<i64> = ["a", "b", "c"]
+            .iter()
+            .map(|id| get_entry(&conn, id).unwrap().unwrap().sort_order)
+            .collect();
+        assert_eq!(orders, vec![1, 2, 3]);
+
+        // 模拟拖拽：按 c → a → b 重排，事务内逐条写入 0..n-1
+        reorder_entries(&conn, &["c".to_string(), "a".to_string(), "b".to_string()]).unwrap();
+        let after: Vec<i64> = ["a", "b", "c"]
+            .iter()
+            .map(|id| get_entry(&conn, id).unwrap().unwrap().sort_order)
+            .collect();
+        assert_eq!(after, vec![1, 2, 0], "c 应为 0、a 为 1、b 为 2");
+
+        // 稳定：重复查询结果一致（落库往返）
+        let again: Vec<i64> = ["a", "b", "c"]
+            .iter()
+            .map(|id| get_entry(&conn, id).unwrap().unwrap().sort_order)
+            .collect();
+        assert_eq!(again, after);
+
+        // 幂等：空数组重排不影响既有顺序
+        reorder_entries(&conn, &[]).unwrap();
+        assert_eq!(get_entry(&conn, "c").unwrap().unwrap().sort_order, 0);
     }
 
     #[test]
     fn deleting_category_keeps_entries_uncategorized() {
         let conn = mem_db();
-        create_category(&conn, "cat-1", "工作").unwrap();
+        create_category(&conn, "cat-1", "工作", None, None).unwrap();
         insert_entry(
             &conn,
             &EntryRowEnc {
@@ -654,9 +861,11 @@ mod tests {
                 notes_enc: "c".into(),
                 favorite: false,
                 tags: vec![],
+                sort_order: 0,
                 created_at: 1,
                 updated_at: 1,
                 deleted_at: None,
+                archived: false,
             },
         )
         .unwrap();
@@ -670,7 +879,7 @@ mod tests {
     #[test]
     fn entry_belongs_to_category_and_counts() {
         let conn = mem_db();
-        create_category(&conn, "cat-1", "工作").unwrap();
+        create_category(&conn, "cat-1", "工作", None, None).unwrap();
         insert_entry(&conn, &sample_row("e1", Some("cat-1"))).unwrap();
         assert_eq!(list_categories(&conn).unwrap()[0].entry_count, 1);
         assert_eq!(list_entries(&conn, Some("cat-1"), None).unwrap().len(), 1);
@@ -679,6 +888,154 @@ mod tests {
         assert!(list_entries(&conn, None, Some("不存在"))
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn category_color_validation() {
+        // 合法：#RRGGBB 大小写不敏感，统一存大写
+        assert_eq!(
+            validate_category_color(&Some("#a1b2c3".into()))
+                .unwrap()
+                .as_deref(),
+            Some("#A1B2C3")
+        );
+        assert_eq!(
+            validate_category_color(&Some("#ffffff".into()))
+                .unwrap()
+                .as_deref(),
+            Some("#FFFFFF")
+        );
+        // 空值 / 空白串：无色
+        assert_eq!(validate_category_color(&None).unwrap(), None);
+        assert_eq!(validate_category_color(&Some("   ".into())).unwrap(), None);
+        // 非法格式
+        for bad in [
+            "red", "#12345", "#1234567", "#GGGGGG", "123456", "#a1b2c", "#a1b2c3d",
+        ] {
+            assert!(
+                validate_category_color(&Some(bad.into())).is_err(),
+                "应拒绝: {bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn category_icon_validation() {
+        assert_eq!(
+            validate_category_icon(&Some("work".into()))
+                .unwrap()
+                .as_deref(),
+            Some("work")
+        );
+        assert_eq!(validate_category_icon(&None).unwrap(), None);
+        assert_eq!(validate_category_icon(&Some("".into())).unwrap(), None);
+        assert!(validate_category_icon(&Some("a".repeat(65))).is_err());
+    }
+
+    #[test]
+    fn category_color_and_icon_roundtrip() {
+        let conn = mem_db();
+        // 走命令层同款校验（颜色统一转大写）
+        let color = validate_category_color(&Some("#a1b2c3".into())).unwrap();
+        create_category(&conn, "cat-1", "工作", color.as_deref(), Some("work")).unwrap();
+        let row = list_categories(&conn).unwrap()[0].clone();
+        assert_eq!(row.color.as_deref(), Some("#A1B2C3"));
+        assert_eq!(row.icon.as_deref(), Some("work"));
+
+        // 重命名时同步更新 color/icon（None 表示清除）
+        rename_category(&conn, "cat-1", "生活", None, Some("home")).unwrap();
+        let row = list_categories(&conn).unwrap()[0].clone();
+        assert_eq!(row.name, "生活");
+        assert_eq!(row.color, None);
+        assert_eq!(row.icon.as_deref(), Some("home"));
+    }
+
+    /// v4 迁移幂等：全新库多次迁移版本保持 4，`archived` 列存在且新建条目默认未归档。
+    #[test]
+    fn schema_migration_v4_is_idempotent() {
+        let conn = mem_db();
+        migrate(&conn).unwrap();
+        assert_eq!(
+            meta_get(&conn, "schema_version").unwrap().as_deref(),
+            Some("4")
+        );
+        assert!(column_exists(&conn, "entries", "archived").unwrap());
+        insert_entry(&conn, &sample_row("e1", None)).unwrap();
+        assert!(!get_entry(&conn, "e1").unwrap().unwrap().archived);
+    }
+
+    /// 可重入：模拟"archived 列已加、版本未升"的半迁移 v4 库，migrate 只补齐版本号，
+    /// 不重复 ALTER（否则 duplicate column 报错、永久失败）。
+    #[test]
+    fn migrate_recovers_half_applied_v4_state() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA_V1).unwrap();
+        conn.execute_batch(MIGRATION_V2).unwrap();
+        conn.execute_batch(MIGRATION_V3).unwrap();
+        conn.execute_batch(MIGRATION_V4).unwrap(); // 列已加
+        meta_set(&conn, "schema_version", "3").unwrap(); // 但版本没升（模拟崩溃点）
+
+        migrate(&conn).unwrap();
+        assert_eq!(
+            meta_get(&conn, "schema_version").unwrap().as_deref(),
+            Some("4")
+        );
+        assert!(column_exists(&conn, "entries", "archived").unwrap());
+    }
+
+    /// v1 旧库（无 tags / sort_order / archived）升级到 v4：加列成功，存量条目默认未归档。
+    #[test]
+    fn v1_database_upgrades_to_v4_with_default_archived() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA_V1).unwrap();
+        conn.execute(
+            "INSERT INTO entries(id, title, username_enc, password_enc, email_enc, phone_enc,
+                                 notes_enc, favorite, created_at, updated_at)
+             VALUES('e1', 't', 'u', 'p', 'm', 'ph', 'n', 0, 1, 1)",
+            [],
+        )
+        .unwrap();
+        meta_set(&conn, "schema_version", "1").unwrap();
+
+        migrate(&conn).unwrap();
+        assert_eq!(
+            meta_get(&conn, "schema_version").unwrap().as_deref(),
+            Some("4")
+        );
+        let rows = list_entries(&conn, None, None).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(!rows[0].archived, "旧条目升级后应为未归档");
+    }
+
+    /// 归档往返与隔离：归档后不出现在主列表、只出现在归档列表、不可删除（不进回收站）；
+    /// 重复归档被守卫拒绝；取消归档后回到主列表。
+    #[test]
+    fn archive_unarchive_roundtrip_and_isolation() {
+        let conn = mem_db();
+        insert_entry(&conn, &sample_row("e1", None)).unwrap();
+        insert_entry(&conn, &sample_row("e2", None)).unwrap();
+        assert_eq!(list_entries(&conn, None, None).unwrap().len(), 2);
+
+        archive_entry(&conn, "e1").unwrap();
+        assert_eq!(list_entries(&conn, None, None).unwrap().len(), 1);
+        assert_eq!(list_entries(&conn, None, None).unwrap()[0].id, "e2");
+
+        let archived = list_archived_entries(&conn).unwrap();
+        assert_eq!(archived.len(), 1);
+        assert_eq!(archived[0].id, "e1");
+        assert!(archived[0].archived);
+
+        // 归档条目不可删除：不会进入回收站，回收站为空
+        assert!(delete_entry(&conn, "e1").is_err());
+        assert!(list_trashed_entries(&conn).unwrap().is_empty());
+
+        // 重复归档被 `archived = 0` 守卫拒绝
+        assert!(archive_entry(&conn, "e1").is_err());
+
+        unarchive_entry(&conn, "e1").unwrap();
+        assert_eq!(list_entries(&conn, None, None).unwrap().len(), 2);
+        assert!(list_archived_entries(&conn).unwrap().is_empty());
+        assert!(!get_entry(&conn, "e1").unwrap().unwrap().archived);
     }
 
     fn sample_row(id: &str, category: Option<&str>) -> EntryRowEnc {
@@ -694,9 +1051,11 @@ mod tests {
             notes_enc: "enc-notes".into(),
             favorite: false,
             tags: vec![],
+            sort_order: 0,
             created_at: 1,
             updated_at: 1,
             deleted_at: None,
+            archived: false,
         }
     }
 }

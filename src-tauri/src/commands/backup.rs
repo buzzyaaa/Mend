@@ -79,8 +79,8 @@ pub fn backup_export(
     }
 
     let source = db_path(&app)?;
-    let db_bytes = fs::read(&source)
-        .map_err(|err| MendError::Vault(format!("读取库文件失败: {err}")))?;
+    let db_bytes =
+        fs::read(&source).map_err(|err| MendError::Vault(format!("读取库文件失败: {err}")))?;
 
     let blob = backup::export(&db_bytes, &kek, &salt, kdf)?;
 
@@ -118,8 +118,8 @@ pub fn backup_import(
     }
 
     let source = PathBuf::from(path.trim());
-    let blob = fs::read(&source)
-        .map_err(|err| MendError::Vault(format!("读取备份文件失败: {err}")))?;
+    let blob =
+        fs::read(&source).map_err(|err| MendError::Vault(format!("读取备份文件失败: {err}")))?;
     if !backup::is_backup(&blob) {
         return Err(MendError::Vault("不是有效的 Mend 备份文件".into()));
     }

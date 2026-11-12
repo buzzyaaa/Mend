@@ -37,13 +37,20 @@ impl From<db::CategoryRow> for Category {
 pub fn category_list(app: AppHandle, state: State<'_, VaultState>) -> MendResult<Vec<Category>> {
     require_unlocked(&state)?;
     let conn = open_db(&app)?;
-    Ok(db::list_categories(&conn)?.into_iter().map(Into::into).collect())
+    Ok(db::list_categories(&conn)?
+        .into_iter()
+        .map(Into::into)
+        .collect())
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CategoryInput {
     pub name: String,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 #[tauri::command]
@@ -54,9 +61,11 @@ pub fn category_create(
 ) -> MendResult<Category> {
     require_unlocked(&state)?;
     let name = validate_name(&input.name)?;
+    let color = db::validate_category_color(&input.color)?;
+    let icon = db::validate_category_icon(&input.icon)?;
     let conn = open_db(&app)?;
     let id = uuid::Uuid::new_v4().to_string();
-    db::create_category(&conn, &id, &name)?;
+    db::create_category(&conn, &id, &name, color.as_deref(), icon.as_deref())?;
     let row = db::list_categories(&conn)?
         .into_iter()
         .find(|c| c.id == id)
@@ -73,8 +82,10 @@ pub fn category_rename(
 ) -> MendResult<()> {
     require_unlocked(&state)?;
     let name = validate_name(&input.name)?;
+    let color = db::validate_category_color(&input.color)?;
+    let icon = db::validate_category_icon(&input.icon)?;
     let conn = open_db(&app)?;
-    db::rename_category(&conn, &id, &name)
+    db::rename_category(&conn, &id, &name, color.as_deref(), icon.as_deref())
 }
 
 #[tauri::command]

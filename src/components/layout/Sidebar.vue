@@ -1,14 +1,16 @@
 <script setup lang="ts">
-// 分类侧栏：固定桶（全部/未分类/回收站）+ 自定义分类，支持新增、重命名、删除。
+// 分类侧栏：固定桶（全部/星标/归档/未分类/回收站）+ 自定义分类，支持新增、重命名、删除。
 import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Pencil, Trash2, Inbox, Layers, Trash, Folder } from 'lucide-vue-next'
-import { NButton, NIcon, NInput, NModal, NText, NTooltip, useDialog } from 'naive-ui'
+import { Plus, Pencil, Trash2, Archive, Inbox, Layers, Trash, Folder, Star } from 'lucide-vue-next'
+import { NButton, NColorPicker, NIcon, NInput, NModal, NText, NTooltip, useDialog } from 'naive-ui'
 import { useEntryStore, type Bucket } from '@/stores/entry'
 import { useVaultStore } from '@/stores/vault'
 import { useToast } from '@/composables/useToast'
 import { errorText } from '@/lib/errorMessage'
 import { OVERLAY_TARGET } from '@/lib/theme'
+import { categoryApi } from '@/lib/ipc'
+import { CATEGORY_ICON_OPTIONS, categoryTint, resolveCategoryIcon } from '@/lib/categoryIcons'
 import type { Category } from '@/types'
 
 const { t } = useI18n()
@@ -19,6 +21,8 @@ const dialog = useDialog()
 
 const editing = ref<{ mode: 'create' | 'rename'; category?: Category } | null>(null)
 const nameInput = ref('')
+const colorInput = ref<string | null>(null)
+const iconInput = ref('')
 const formError = ref('')
 const busy = ref(false)
 const deleting = ref<Category | null>(null)
@@ -52,12 +56,16 @@ function select(next: Bucket) {
 function openCreate() {
   editing.value = { mode: 'create' }
   nameInput.value = ''
+  colorInput.value = null
+  iconInput.value = ''
   formError.value = ''
 }
 
 function openRename(category: Category) {
   editing.value = { mode: 'rename', category }
   nameInput.value = category.name
+  colorInput.value = category.color ?? null
+  iconInput.value = category.icon ?? ''
   formError.value = ''
 }
 
@@ -67,14 +75,20 @@ async function submitCategory() {
     formError.value = t('sidebar.nameRequired')
     return
   }
+  const input = {
+    name,
+    color: colorInput.value?.trim() ? colorInput.value.trim() : null,
+    icon: iconInput.value.trim() || null,
+  }
   busy.value = true
   formError.value = ''
   try {
     if (editing.value?.mode === 'create') {
-      await entryStore.createCategory(name)
+      await categoryApi.create(input)
     } else if (editing.value?.category) {
-      await entryStore.renameCategory(editing.value.category.id, name)
+      await categoryApi.rename(editing.value.category.id, input)
     }
+    await entryStore.refresh()
     editing.value = null
   } catch (err) {
     formError.value = messageOf(err)
@@ -113,17 +127,38 @@ function messageOf(err: unknown): string {
   return errorText(err, t)
 }
 
-/** 桶行的统一渲染数据，避免三段重复模板。 */
+/** 桶行的统一渲染数据，避免三段重复模板。
+ *  顺序：全部 → 星标 → 归档 → 未分类 → 回收站（高频操作在前，回收站沉底）。 */
 const fixedBuckets = [
   { key: 'all' as const, label: 'nav.all', icon: Layers },
+  { key: 'starred' as const, label: 'nav.starred', icon: Star },
+  { key: 'archive' as const, label: 'nav.archive', icon: Archive },
   { key: 'uncategorized' as const, label: 'nav.uncategorized', icon: Inbox },
   { key: 'trash' as const, label: 'nav.trash', icon: Trash },
 ]
 
-function bucketCount(key: (typeof fixedBuckets)[number]['key']): number {
-  if (key === 'all') return entryStore.entries.length
-  if (key === 'uncategorized') return entryStore.uncategorizedCount
-  return entryStore.trash.length
+/** 图标网格：首个为「无图标」（空名字 = 回退默认文件夹），其余来自注册表。 */
+const iconOptions = [{ name: '', component: Folder }, ...CATEGORY_ICON_OPTIONS]
+
+/** 颜色快选（常见色），仍可在弹出的取色面板里自由选。 */
+const colorSwatches = [
+  '#ef4444',
+  '#f97316',
+  '#eab308',
+  '#22c55e',
+  '#06b6d4',
+  '#3b82f6',
+  '#8b5cf6',
+  '#ec4899',
+]
+
+/** 取色面板按钮：确认 + 清除（清除即回到无色）。 */
+const colorPickerActions: Array<'confirm' | 'clear'> = ['confirm', 'clear']
+
+/** 未选中且已设颜色时用 10% 背景填充；选中态交给 bg-accent 优先。 */
+function categoryRowStyle(cat: Category) {
+  if (entryStore.bucket === cat.id || !cat.color) return undefined
+  return { background: categoryTint(cat.color, 0.1) }
 }
 </script>
 
@@ -141,7 +176,7 @@ function bucketCount(key: (typeof fixedBuckets)[number]['key']): number {
         v-for="bucket in fixedBuckets"
         :key="bucket.key"
         block
-        class="!justify-start h-9"
+        class="!justify-start min-h-9"
         :type="entryStore.bucket === bucket.key ? 'primary' : 'default'"
         :quaternary="entryStore.bucket === bucket.key"
         :text="entryStore.bucket !== bucket.key"
@@ -150,8 +185,7 @@ function bucketCount(key: (typeof fixedBuckets)[number]['key']): number {
         <template #icon>
           <NIcon :component="bucket.icon" :size="16" />
         </template>
-        <span class="flex-1 text-left">{{ t(bucket.label) }}</span>
-        <NText :depth="3" class="text-xs tabular-nums">{{ bucketCount(bucket.key) }}</NText>
+        <span class="min-w-0 flex-1 truncate leading-normal text-left">{{ t(bucket.label) }}</span>
       </NButton>
 
       <div class="px-2 pb-1 pt-3">
@@ -164,23 +198,21 @@ function bucketCount(key: (typeof fixedBuckets)[number]['key']): number {
       <div
         v-for="cat in entryStore.categories"
         :key="cat.id"
-        class="group flex h-9 items-center rounded-md transition-colors hover:bg-accent"
+        class="group flex min-h-9 items-center rounded-md transition-colors hover:bg-accent"
         :class="entryStore.bucket === cat.id ? 'bg-accent' : ''"
+        :style="categoryRowStyle(cat)"
       >
         <NButton
           block
-          class="!justify-start min-w-0 flex-1 border-0 bg-transparent shadow-none"
+          class="!h-auto !justify-start min-h-9 min-w-0 flex-1 border-0 bg-transparent shadow-none"
           :type="entryStore.bucket === cat.id ? 'primary' : 'default'"
           text
           @click="select(cat.id)"
         >
           <template #icon>
-            <NIcon :component="Folder" :size="16" />
+            <NIcon :component="resolveCategoryIcon(cat.icon)" :size="16" />
           </template>
-          <span class="min-w-0 flex-1 truncate text-left">{{ cat.name }}</span>
-          <NText :depth="3" class="shrink-0 text-xs tabular-nums">
-            {{ cat.entryCount ?? 0 }}
-          </NText>
+          <span class="min-w-0 flex-1 truncate leading-normal text-left">{{ cat.name }}</span>
         </NButton>
         <div
           class="flex shrink-0 items-center pr-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
@@ -250,6 +282,40 @@ function bucketCount(key: (typeof fixedBuckets)[number]['key']): number {
         :status="formError ? 'error' : undefined"
         @keydown.enter="submitCategory"
       />
+
+      <div class="mt-3">
+        <NText :depth="3" class="mb-1 block text-xs">{{ t('sidebar.颜色') }}</NText>
+        <NColorPicker
+          v-model:value="colorInput"
+          :show-alpha="false"
+          :swatches="colorSwatches"
+          :actions="colorPickerActions"
+          size="small"
+          style="width: 100%"
+        />
+        <NText :depth="3" class="mt-1 block text-[11px]">{{ t('sidebar.颜色提示') }}</NText>
+      </div>
+
+      <div class="mt-3">
+        <NText :depth="3" class="mb-1 block text-xs">{{ t('sidebar.图标') }}</NText>
+        <div class="grid grid-cols-7 gap-1">
+          <NButton
+            v-for="opt in iconOptions"
+            :key="opt.name"
+            quaternary
+            circle
+            size="small"
+            class="!h-8 !w-8"
+            :class="iconInput === opt.name ? '!bg-primary !text-white' : ''"
+            :aria-label="opt.name || t('sidebar.无图标')"
+            :title="opt.name || t('sidebar.无图标')"
+            @click="iconInput = opt.name"
+          >
+            <template #icon><NIcon :component="opt.component" :size="16" /></template>
+          </NButton>
+        </div>
+      </div>
+
       <NText v-if="formError" type="error" class="mt-2 block text-xs">{{ formError }}</NText>
       <template #footer>
         <div class="flex justify-end gap-2">

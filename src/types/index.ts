@@ -9,6 +9,13 @@ export interface Category {
   entryCount?: number
 }
 
+/** 提交给 category_create / category_rename 的明文入参（分类名 + 可选颜色 + 可选图标）。 */
+export interface CategoryInput {
+  name: string
+  color?: string | null
+  icon?: string | null
+}
+
 export interface EntryView {
   id: string
   categoryId: string | null
@@ -26,6 +33,8 @@ export interface EntryView {
   updatedAt: number
   /** 回收站条目才有值（删除时间戳）。 */
   deletedAt?: number | null
+  /** 归档标记：主列表恒为 false，归档列表恒为 true（与回收站正交）。 */
+  archived?: boolean
 }
 
 /** 提交给 entry_create / entry_update 的明文入参（IPC 传输，不落盘）。 */

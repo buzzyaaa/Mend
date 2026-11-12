@@ -8,7 +8,6 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import {
-  KeyRound,
   Languages,
   ListChecks,
   Lock,
@@ -111,10 +110,8 @@ async function onLock() {
   >
     <!-- 品牌区（可拖拽） -->
     <div class="flex h-full min-w-0 flex-1 items-center gap-2 px-3">
-      <div
-        class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground"
-      >
-        <KeyRound :size="14" :stroke-width="2.25" />
+      <div class="h-6 w-6 shrink-0 overflow-hidden rounded-md">
+        <img src="@/assets/app-icon.png" class="h-full w-full object-contain" alt="" />
       </div>
       <span class="truncate text-sm font-semibold tracking-tight text-foreground">
         {{ t('app.name') }}

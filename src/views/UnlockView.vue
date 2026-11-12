@@ -3,7 +3,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { KeyRound, ShieldCheck } from 'lucide-vue-next'
+import { KeyRound } from 'lucide-vue-next'
 import { NAlert, NButton, NCard, NIcon, NInput, NTag, NText } from 'naive-ui'
 import { useVaultStore } from '@/stores/vault'
 import { isTauri } from '@/lib/ipc'
@@ -97,11 +97,11 @@ function messageOf(err: unknown): string {
     <div class="w-full max-w-sm">
       <NCard :bordered="true" size="large" class="shadow-sm">
         <div class="mb-5 text-center">
-          <div
-            class="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground"
-          >
-            <NIcon :component="ShieldCheck" :size="24" />
-          </div>
+          <img
+            src="@/assets/app-icon.png"
+            class="mx-auto mb-3 block h-11 w-11 rounded-2xl object-contain"
+            alt=""
+          />
           <NText strong class="block text-xl">{{ t('app.name') }}</NText>
           <NText :depth="3" class="mt-1 block text-sm">
             {{ setupMode ? t('unlock.setupSubtitle') : t('unlock.subtitle') }}

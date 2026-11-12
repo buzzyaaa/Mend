@@ -6,6 +6,7 @@ import type {
   BackupExportResult,
   BackupImportResult,
   Category,
+  CategoryInput,
   EntryView,
   GeneratorOptions,
   Preset,
@@ -45,9 +46,17 @@ export const vaultApi = {
 
 export const categoryApi = {
   list: () => invoke<Category[]>('category_list'),
-  create: (name: string) => invoke<Category>('category_create', { input: { name } }),
-  rename: (id: string, name: string) => invoke<void>('category_rename', { id, input: { name } }),
+  /** 传入完整 input（name+color+icon）；兼容旧调用仅传 name 字符串。 */
+  create: (input: CategoryInput | string) =>
+    invoke<Category>('category_create', { input: toCategoryInput(input) }),
+  rename: (id: string, input: CategoryInput | string) =>
+    invoke<void>('category_rename', { id, input: toCategoryInput(input) }),
   remove: (id: string) => invoke<void>('category_delete', { id }),
+}
+
+/** 归一分类入参：旧调用只传 name 字符串时补成完整 input。 */
+function toCategoryInput(input: CategoryInput | string): CategoryInput {
+  return typeof input === 'string' ? { name: input } : input
 }
 
 export const entryApi = {
@@ -58,11 +67,17 @@ export const entryApi = {
   create: (input: unknown) => invoke<EntryView>('entry_create', { input }),
   update: (id: string, input: unknown) => invoke<EntryView>('entry_update', { id, input }),
   remove: (id: string) => invoke<void>('entry_delete', { id }),
+  /** 拖拽排序：按给定顺序写回 `sort_order`（单事务，整批原子）。 */
+  reorder: (ids: string[]) => invoke<void>('entry_reorder', { ids }),
   /** 回收站：列表 / 恢复 / 彻底删除 / 清空。 */
   listTrash: () => invoke<EntryView[]>('entry_trash_list'),
   restore: (id: string) => invoke<void>('entry_restore', { id }),
   purge: (id: string) => invoke<void>('entry_purge', { id }),
   purgeAll: () => invoke<number>('entry_purge_all'),
+  /** 归档：列表 / 归档 / 取消归档。 */
+  archiveList: () => invoke<EntryView[]>('entry_archive_list'),
+  archive: (id: string) => invoke<void>('entry_archive', { id }),
+  unarchive: (id: string) => invoke<void>('entry_unarchive', { id }),
 }
 
 /** 预设值：值在 Rust 侧加密落库，前端只见解密后的展示模型。 */
