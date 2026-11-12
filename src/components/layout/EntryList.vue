@@ -40,7 +40,7 @@ import { markdownSummary, renderMarkdown } from '@/lib/markdown'
 import { errorText } from '@/lib/errorMessage'
 import { isTauri } from '@/lib/ipc'
 import { OVERLAY_TARGET } from '@/lib/theme'
-import { categoryTint, resolveCategoryIcon } from '@/lib/categoryIcons'
+import { resolveCategoryIcon } from '@/lib/categoryIcons'
 import EntryDialog from '@/components/entry/EntryDialog.vue'
 import NotesDialog from '@/components/entry/NotesDialog.vue'
 import type { Category, EntryView } from '@/types'
@@ -582,17 +582,20 @@ const columns = computed<DataTableColumns<EntryView>>(() => {
             ellipsis: { tooltip: true },
             render: (row: EntryView) => {
               const cat = categoryOf(row.categoryId)
-              const tint = cat?.color ? categoryTint(cat.color, 0.1) : undefined
               return h(
                 'div',
                 {
                   class: 'flex min-w-0 items-center gap-1 rounded px-1.5 py-0.5',
-                  style: tint ? { background: tint } : undefined,
                 },
                 [
                   h(NIcon, { component: resolveCategoryIcon(cat?.icon), size: 14 }),
-                  h(NText, { depth: 3, class: 'min-w-0 flex-1 truncate' }, () =>
-                    categoryName(row.categoryId),
+                  h(
+                    NText,
+                    {
+                      class: 'min-w-0 flex-1 truncate',
+                      style: cat?.color ? { color: cat.color } : undefined,
+                    },
+                    () => categoryName(row.categoryId),
                   ),
                 ],
               )
@@ -888,7 +891,7 @@ function confirmDeleteArchived(entry: EntryView) {
     <!-- flex-height 需要表格根节点拿到确定高度：父级给 flex 列 + 表格自身 flex-1，
          否则表体 flex-basis:0 会整块塌成 0 高，表现就是「表格内容空白」。 -->
     <div class="flex min-h-0 flex-1 flex-col p-4">
-      <div ref="tableWrapRef">
+      <div ref="tableWrapRef" class="flex min-h-0 flex-1">
         <NDataTable
           class="min-h-0 flex-1"
           :columns="columns"

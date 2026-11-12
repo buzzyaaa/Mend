@@ -10,7 +10,7 @@ import { useToast } from '@/composables/useToast'
 import { errorText } from '@/lib/errorMessage'
 import { OVERLAY_TARGET } from '@/lib/theme'
 import { categoryApi } from '@/lib/ipc'
-import { CATEGORY_ICON_OPTIONS, categoryTint, resolveCategoryIcon } from '@/lib/categoryIcons'
+import { CATEGORY_ICON_OPTIONS, resolveCategoryIcon } from '@/lib/categoryIcons'
 import type { Category } from '@/types'
 
 const { t } = useI18n()
@@ -155,12 +155,6 @@ const colorSwatches = [
 /** 取色面板按钮：确认 + 清除（清除即回到无色）。 */
 const colorPickerActions: Array<'confirm' | 'clear'> = ['confirm', 'clear']
 
-/** 未选中且已设颜色时用 10% 背景填充；选中态交给 bg-accent 优先。 */
-function categoryRowStyle(cat: Category) {
-  if (entryStore.bucket === cat.id || !cat.color) return undefined
-  return { background: categoryTint(cat.color, 0.1) }
-}
-
 /**
  * 颜色规范化（防御性）：把取色器可能返回的 `rgb()` / `rgba()` / 任意大小写 hex
  * 统一转成后端 `validate_category_color` 要求的 `#RRGGBB`（大写）。
@@ -236,7 +230,6 @@ function normalizeColor(color: string | null | undefined): string | null {
         :key="cat.id"
         class="group flex min-h-9 items-center rounded-md transition-all duration-200 ease-out hover:bg-accent"
         :class="entryStore.bucket === cat.id ? 'bg-accent' : ''"
-        :style="categoryRowStyle(cat)"
       >
         <NButton
           block
