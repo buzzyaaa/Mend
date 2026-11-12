@@ -31,6 +31,8 @@ export interface EntryView {
   tags: string[]
   createdAt: number
   updatedAt: number
+  /** 手动排序号（同桶内升序，0 = 未手动排序）；「手动排序」模式据此在 refresh 后重建顺序。 */
+  sortOrder: number
   /** 回收站条目才有值（删除时间戳）。 */
   deletedAt?: number | null
   /** 归档标记：主列表恒为 false，归档列表恒为 true（与回收站正交）。 */

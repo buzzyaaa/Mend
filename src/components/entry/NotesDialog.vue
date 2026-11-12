@@ -129,8 +129,12 @@ async function save() {
       <!-- 编辑态：编辑 / 预览切换口径与 EntryDialog 备注 Tabs 一致 -->
       <div v-else>
         <NTabs v-model:value="notesTab" type="segment" size="small" class="mb-2">
-          <NTabPane name="edit" :tab="t('entry.notesEdit')" />
-          <NTabPane name="preview" :tab="t('entry.notesPreview')" />
+          <NTabPane name="edit">
+            <template #tab>{{ t('entry.notesEdit') }}</template>
+          </NTabPane>
+          <NTabPane name="preview">
+            <template #tab>{{ t('entry.notesPreview') }}</template>
+          </NTabPane>
         </NTabs>
         <NInput
           v-if="notesTab === 'edit'"

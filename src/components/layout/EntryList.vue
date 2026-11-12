@@ -100,12 +100,130 @@ const sortOptions = computed(() => [
   { label: t('entry.sortFavorite'), value: 'favorite' },
   { label: t('entry.sortManual'), value: 'manual' },
 ])
-/** 拖拽手柄列宽：手动排序时出现，因此同步抬高横向滚动阈值。 */
-const dragHandleWidth = 34
-const scrollX = computed(() => {
-  const extra = dragEnabled.value ? dragHandleWidth : 0
-  return store.selectedCategoryId ? 1180 + extra : 1312 + extra
+
+// —— 响应式列宽：按表格容器宽度分档，小屏收窄 / 隐藏次要列，避免固定 scrollX
+// 把表格撑到 1300+ 导致最右侧操作列被挤出视口、无法点击。
+type WidthTier = 'normal' | 'compact' | 'tiny'
+
+interface TierWidths {
+  drag: number
+  expand: number
+  title: number
+  username: number
+  email: number
+  phone: number
+  password: number
+  category: number
+  notes: number
+  status: number
+  actions: number
+}
+
+const TIER_WIDTHS: Record<WidthTier, TierWidths> = {
+  // 正常档沿用现有列宽，宽屏行为不变。
+  normal: {
+    drag: 34,
+    expand: 36,
+    title: 160,
+    username: 150,
+    email: 160,
+    phone: 140,
+    password: 170,
+    category: 132,
+    notes: 160,
+    status: 84,
+    actions: 128,
+  },
+  // 紧凑档（700-1023）：内容列收窄（默认值之和已控制在 700 内）；
+  // 操作列按「三个图标按钮 / 回收站两个文字按钮」中更宽者留足宽度。
+  compact: {
+    drag: 30,
+    expand: 30,
+    title: 72,
+    username: 60,
+    email: 64,
+    phone: 48,
+    password: 80,
+    category: 66,
+    notes: 64,
+    status: 46,
+    // 操作列需容纳三个图标按钮；回收站视图是两个文字按钮（更宽），故留余量。
+    actions: 112,
+  },
+  // 极窄档（<700）：隐藏 email / phone / notes 三个低频字段列（内容仍可在
+  // 展开行查看），其余列进一步收窄，保证操作列始终可见。
+  tiny: {
+    drag: 28,
+    expand: 30,
+    title: 64,
+    username: 56,
+    email: 0,
+    phone: 0,
+    password: 76,
+    category: 62,
+    notes: 0,
+    status: 44,
+    // 操作列在极窄档仍需容纳回收站视图的两个文字按钮（比图标按钮宽）。
+    actions: 128,
+  },
+}
+
+/**
+ * 表格容器宽度：ResizeObserver 监听（兜底 window resize），驱动列宽档位与 scrollX。
+ * 初始值先按窗口宽度估算（侧栏 w-60 + 列表左右 p-4 ≈ 272px），mount 后由
+ * ResizeObserver 校正，避免首帧误落 tiny 档导致列闪烁。
+ */
+const tableWidth = ref(
+  typeof window !== 'undefined' ? Math.max(480, window.innerWidth - 272) : 1280,
+)
+let resizeObserver: ResizeObserver | null = null
+
+const tier = computed<WidthTier>(() => {
+  const w = tableWidth.value
+  if (w >= 1024) return 'normal'
+  if (w >= 700) return 'compact'
+  return 'tiny'
 })
+
+/** compact / tiny 档：列宽取 TIER_WIDTHS 中对应档位。 */
+const tierWidths = computed(() => TIER_WIDTHS[tier.value])
+
+/** tiny 档隐藏的低频字段列（email / phone / notes）；展开行仍可查看完整内容。 */
+const hideEmail = computed(() => tier.value === 'tiny')
+const hidePhone = computed(() => tier.value === 'tiny')
+const hideNotes = computed(() => tier.value === 'tiny')
+
+/** 当前档位实际渲染的列宽之和（作为 scrollX 的内容最小宽度兜底）。 */
+const tierColumnSum = computed(() => {
+  const w = tierWidths.value
+  const hideCategory = store.selectedCategoryId !== null
+  return (
+    w.expand +
+    w.title +
+    w.username +
+    (hideEmail.value ? 0 : w.email) +
+    (hidePhone.value ? 0 : w.phone) +
+    w.password +
+    (hideCategory ? 0 : w.category) +
+    (hideNotes.value ? 0 : w.notes) +
+    w.status +
+    w.actions
+  )
+})
+
+const scrollX = computed(() => {
+  const w = tierWidths.value
+  const extra = dragEnabled.value ? w.drag : 0
+  if (tier.value === 'normal') {
+    // 宽屏沿用既有固定阈值，保持当前行为不变。
+    return store.selectedCategoryId ? 1180 + extra : 1312 + extra
+  }
+  // 小屏以容器宽度为准（不低于内容最小宽度）：表格铺满容器、列按 minWidth 收缩，
+  // 不再强制出现横向滚动，最右侧操作列始终落在视口右边缘。
+  const minWidth = tierColumnSum.value + extra
+  return tableWidth.value ? Math.max(minWidth, tableWidth.value) : minWidth
+})
+
 const emptyText = computed(() => {
   if (store.isTrashView) return t('trash.empty')
   if (store.isArchiveView) return t('entry.archivedHint')
@@ -233,8 +351,37 @@ function destroySortable() {
   sortableInstance = null
 }
 
-onMounted(() => nextTick(setupSortable))
-onBeforeUnmount(destroySortable)
+function syncTableWidth() {
+  if (tableWrapRef.value) tableWidth.value = tableWrapRef.value.clientWidth
+}
+
+function handleWindowResize() {
+  syncTableWidth()
+}
+
+onMounted(() => {
+  nextTick(() => {
+    setupSortable()
+    syncTableWidth()
+    if (typeof ResizeObserver !== 'undefined' && tableWrapRef.value) {
+      resizeObserver = new ResizeObserver((entries) => {
+        const entry = entries[0]
+        if (entry) tableWidth.value = entry.contentRect.width
+      })
+      resizeObserver.observe(tableWrapRef.value)
+    } else {
+      // 兜底：环境不支持 ResizeObserver 时监听窗口尺寸。
+      window.addEventListener('resize', handleWindowResize)
+    }
+  })
+})
+
+onBeforeUnmount(() => {
+  destroySortable()
+  resizeObserver?.disconnect()
+  resizeObserver = null
+  window.removeEventListener('resize', handleWindowResize)
+})
 
 watch(dragEnabled, (enabled) => {
   if (enabled) nextTick(setupSortable)
@@ -435,7 +582,7 @@ const columns = computed<DataTableColumns<EntryView>>(() => {
           {
             title: '',
             key: '__drag',
-            width: dragHandleWidth,
+            width: tierWidths.value.drag,
             className: 'text-center',
             render: () =>
               h(
@@ -455,13 +602,13 @@ const columns = computed<DataTableColumns<EntryView>>(() => {
     // 表格级 render-expand / expandable 不是有效 prop，展开功能因此从未生效。
     {
       type: 'expand',
-      width: 36,
+      width: tierWidths.value.expand,
       renderExpand: (row) => renderExpand(row),
     },
     {
       title: t('entry.title'),
       key: 'title',
-      minWidth: 160,
+      minWidth: tierWidths.value.title,
       ellipsis: { tooltip: true },
       // 标题不做整格点击复制（保留整行展开 / 编辑交互），仅列尾挂复制按钮。
       render: (row) => {
@@ -522,28 +669,38 @@ const columns = computed<DataTableColumns<EntryView>>(() => {
     {
       title: t('entry.username'),
       key: 'username',
-      width: 150,
+      width: tierWidths.value.username,
       ellipsis: { tooltip: true },
       render: (row) => copyableCell(row.username),
     },
-    {
-      title: t('entry.email'),
-      key: 'email',
-      width: 160,
-      ellipsis: { tooltip: true },
-      render: (row) => copyableCell(row.email),
-    },
-    {
-      title: t('entry.phone'),
-      key: 'phone',
-      width: 140,
-      ellipsis: { tooltip: true },
-      render: (row) => copyableCell(row.phone),
-    },
+    // 极窄档隐藏 email / phone（内容仍可在展开行查看）：这两列在极窄容器下
+    // 几乎放不下有效字符，保留只会逼出横向滚动条、把操作列挤出视口。
+    ...(hideEmail.value
+      ? []
+      : [
+          {
+            title: t('entry.email'),
+            key: 'email',
+            width: tierWidths.value.email,
+            ellipsis: { tooltip: true },
+            render: (row) => copyableCell(row.email),
+          } satisfies DataTableColumns<EntryView>[number],
+        ]),
+    ...(hidePhone.value
+      ? []
+      : [
+          {
+            title: t('entry.phone'),
+            key: 'phone',
+            width: tierWidths.value.phone,
+            ellipsis: { tooltip: true },
+            render: (row) => copyableCell(row.phone),
+          } satisfies DataTableColumns<EntryView>[number],
+        ]),
     {
       title: t('entry.password'),
       key: 'password',
-      width: 170,
+      width: tierWidths.value.password,
       render: (row) => {
         const revealed = isRevealed(row.id)
         // 点击单元格空白处复制明文；eye 按钮经 iconBtn 已 stopPropagation，显隐与复制共存。
@@ -578,7 +735,7 @@ const columns = computed<DataTableColumns<EntryView>>(() => {
           {
             title: t('entry.category'),
             key: 'categoryId',
-            width: 132,
+            width: tierWidths.value.category,
             ellipsis: { tooltip: true },
             render: (row: EntryView) => {
               const cat = categoryOf(row.categoryId)
@@ -588,7 +745,12 @@ const columns = computed<DataTableColumns<EntryView>>(() => {
                   class: 'flex min-w-0 items-center gap-1 rounded px-1.5 py-0.5',
                 },
                 [
-                  h(NIcon, { component: resolveCategoryIcon(cat?.icon), size: 14 }),
+                  // 分类图标跟随分类文字颜色（分类自定义色时图标同色）。
+                  h(NIcon, {
+                    component: resolveCategoryIcon(cat?.icon),
+                    size: 14,
+                    style: cat?.color ? { color: cat.color } : undefined,
+                  }),
                   h(
                     NText,
                     {
@@ -602,31 +764,36 @@ const columns = computed<DataTableColumns<EntryView>>(() => {
             },
           } satisfies DataTableColumns<EntryView>[number],
         ]),
-    {
-      title: t('entry.notes'),
-      key: 'notes',
-      minWidth: 160,
-      ellipsis: { tooltip: true },
-      // 点击备注单元格直接打开备注弹窗（展开行仍可由最左侧展开箭头触发）。
-      render: (row) =>
-        h(
-          'div',
+    // 极窄档隐藏备注列：完整内容始终可在展开行查看，保留窄列只会挤压主字段。
+    ...(hideNotes.value
+      ? []
+      : [
           {
-            class:
-              'line-clamp-2 cursor-pointer text-xs text-muted-foreground hover:text-foreground',
-            title: t('entry.viewNotes'),
-            onClick: (e: MouseEvent) => {
-              e.stopPropagation()
-              openNotes(row)
-            },
-          },
-          row.notes.trim() ? summary(row.notes) : '—',
-        ),
-    },
+            title: t('entry.notes'),
+            key: 'notes',
+            minWidth: tierWidths.value.notes,
+            ellipsis: { tooltip: true },
+            // 点击备注单元格直接打开备注弹窗（展开行仍可由最左侧展开箭头触发）。
+            render: (row) =>
+              h(
+                'div',
+                {
+                  class:
+                    'line-clamp-2 cursor-pointer text-xs text-muted-foreground hover:text-foreground',
+                  title: t('entry.viewNotes'),
+                  onClick: (e: MouseEvent) => {
+                    e.stopPropagation()
+                    openNotes(row)
+                  },
+                },
+                row.notes.trim() ? summary(row.notes) : '—',
+              ),
+          } satisfies DataTableColumns<EntryView>[number],
+        ]),
     {
       title: t('entry.status'),
       key: '__status',
-      width: 84,
+      width: tierWidths.value.status,
       render: (row) => {
         const issue = issueOf(row)
         if (!issue) return null
@@ -649,7 +816,7 @@ const columns = computed<DataTableColumns<EntryView>>(() => {
     {
       title: t('common.actions'),
       key: '__actions',
-      minWidth: 128,
+      minWidth: tierWidths.value.actions,
       render: (row) => {
         if (store.isTrashView) {
           return h('div', { class: 'flex items-center gap-1 whitespace-nowrap' }, [

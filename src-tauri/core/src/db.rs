@@ -399,17 +399,95 @@ pub fn next_entry_sort_order(conn: &Connection, category_id: Option<&str>) -> Me
     Ok(max.unwrap_or(0) + 1)
 }
 
-/// 批量写入手动排序号：按给定顺序依次赋 `0..n-1`，整批在单个事务内完成。
-/// 只更新未删除条目；空数组为合法空操作。
+/// 批量写入手动排序号：整批在单个事务内完成。
+///
+/// 排序号只在条目所属桶（分类 / 未分类）内有意义，因此这里**按 `category_id` 分组**，
+/// 每个桶独立赋 `0..n-1`：既避免「全部」桶拖拽时把多个分类串成一条全局序列，
+/// 也避免分类 A 重排时覆盖分类 B 的排序号（`next_entry_sort_order` 同样按分类取
+/// `MAX+1`，两者口径一致）。
+///
+/// 前端传入的是当前视图里**可见**的条目 id（可能被关键字 / 标签筛选成子集）。
+/// 对每个桶先取该桶全部条目按现有 `sort_order` 排序，再把可见条目按给定顺序填回
+/// 它们原来占据的位置，未可见条目留在原位——既尊重可见拖拽结果，又保证同桶内
+/// 排序号仍是完整且不重复的 `0..n-1`（不会出现重复 / 空洞）。
+///
+/// 只更新未删除未归档条目；不存在的 id 静默跳过；空数组为合法空操作。
 pub fn reorder_entries(conn: &Connection, ids: &[String]) -> MendResult<()> {
     let tx = conn.unchecked_transaction().map_err(db_err)?;
-    for (index, id) in ids.iter().enumerate() {
-        tx.execute(
-            "UPDATE entries SET sort_order = ?2 WHERE id = ?1 AND deleted_at IS NULL AND archived = 0",
-            params![id, index as i64],
-        )
-        .map_err(db_err)?;
+
+    // 1) 按 category_id 分组，保持传入顺序。
+    let mut groups: Vec<(Option<String>, Vec<String>)> = Vec::new();
+    for id in ids {
+        let category_id: Option<String> = tx
+            .query_row(
+                "SELECT category_id FROM entries
+                   WHERE id = ?1 AND deleted_at IS NULL AND archived = 0",
+                params![id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(db_err)?;
+        let Some(category_id) = category_id else {
+            continue;
+        };
+        let key = Some(category_id.clone());
+        match groups.iter_mut().find(|(existing, _)| *existing == key) {
+            Some((_, list)) => list.push(id.clone()),
+            None => groups.push((key, vec![id.clone()])),
+        }
     }
+
+    // 2) 每个桶：可见条目按给定顺序填回原位，未可见条目留在原位，整体赋 0..n-1。
+    for (category_id, provided) in groups {
+        let full: Vec<String> = {
+            let mut stmt = tx
+                .prepare(
+                    "SELECT id FROM entries
+                       WHERE category_id IS ?1 AND deleted_at IS NULL AND archived = 0
+                       ORDER BY sort_order ASC, updated_at ASC, id ASC",
+                )
+                .map_err(db_err)?;
+            let rows = stmt
+                .query_map(params![category_id], |row| row.get::<_, String>(0))
+                .map_err(db_err)?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(db_err)?
+        };
+
+        let provided_set: std::collections::HashSet<&str> =
+            provided.iter().map(|id| id.as_str()).collect();
+        // 可见条目当前占据的下标，按现有顺序。
+        let slots: Vec<usize> = full
+            .iter()
+            .enumerate()
+            .filter(|(_, id)| provided_set.contains(id.as_str()))
+            .map(|(index, _)| index)
+            .collect();
+
+        let mut new_order = full.clone();
+        let mut placed = vec![false; provided.len()];
+        for (position, slot) in slots.iter().enumerate() {
+            if position < provided.len() {
+                new_order[*slot] = provided[position].clone();
+                placed[position] = true;
+            }
+        }
+        // 传入集合里若出现该桶当前不存在的 id（正常不会），追加到末尾。
+        for (index, id) in provided.iter().enumerate() {
+            if !placed[index] {
+                new_order.push(id.clone());
+            }
+        }
+
+        for (index, id) in new_order.iter().enumerate() {
+            tx.execute(
+                "UPDATE entries SET sort_order = ?2
+                   WHERE id = ?1 AND deleted_at IS NULL AND archived = 0",
+                params![id, index as i64],
+            )
+            .map_err(db_err)?;
+        }
+    }
+
     tx.commit().map_err(db_err)?;
     Ok(())
 }
@@ -844,6 +922,67 @@ mod tests {
         assert_eq!(get_entry(&conn, "c").unwrap().unwrap().sort_order, 0);
     }
 
+    /// 拖拽落库按 `category_id` 分桶：一次调用里混入多个分类的 id 时，
+    /// 每个分类各自得到连续的 `0..n-1`，互不覆盖（旧实现会把所有 id 串成
+    /// 一条全局序列，导致跨分类排序号互相踩踏）。
+    #[test]
+    fn reorder_entries_scopes_sort_order_per_category() {
+        let conn = mem_db();
+        create_category(&conn, "cat-1", "工作", None, None).unwrap();
+        create_category(&conn, "cat-2", "金融", None, None).unwrap();
+
+        let row_for = |id: &str, category: &str| {
+            let mut row = sample_row(id, Some(category));
+            row.sort_order = next_entry_sort_order(&conn, Some(category)).unwrap();
+            row
+        };
+        // cat-1: a=1, b=2；cat-2: c=1, d=2
+        insert_entry(&conn, &row_for("a", "cat-1")).unwrap();
+        insert_entry(&conn, &row_for("b", "cat-1")).unwrap();
+        insert_entry(&conn, &row_for("c", "cat-2")).unwrap();
+        insert_entry(&conn, &row_for("d", "cat-2")).unwrap();
+
+        // 跨分类混排：a 与 c 分别回到各自分类的顶部。
+        reorder_entries(&conn, &["a".to_string(), "c".to_string()]).unwrap();
+
+        assert_eq!(get_entry(&conn, "a").unwrap().unwrap().sort_order, 0);
+        assert_eq!(get_entry(&conn, "c").unwrap().unwrap().sort_order, 0);
+        // 各自分类内部紧凑重排：b/d 只在自己桶里顺延，不会被另一个分类的 id 覆盖。
+        assert_eq!(get_entry(&conn, "b").unwrap().unwrap().sort_order, 1);
+        assert_eq!(get_entry(&conn, "d").unwrap().unwrap().sort_order, 1);
+
+        assert_eq!(ordered_ids(&conn, Some("cat-1")), vec!["a", "b"]);
+        assert_eq!(ordered_ids(&conn, Some("cat-2")), vec!["c", "d"]);
+    }
+
+    /// 前端只提交当前可见桶的 id（关键字 / 标签筛选后可能只是子集）：
+    /// 未出现在 `ids` 里的同桶条目留在原相对位置，落库后同桶排序号依旧完整不重复。
+    #[test]
+    fn reorder_entries_preserves_hidden_entries_in_bucket() {
+        let conn = mem_db();
+        create_category(&conn, "cat-1", "工作", None, None).unwrap();
+        let row_for = |id: &str| {
+            let mut row = sample_row(id, Some("cat-1"));
+            row.sort_order = next_entry_sort_order(&conn, Some("cat-1")).unwrap();
+            row
+        };
+        insert_entry(&conn, &row_for("a")).unwrap();
+        insert_entry(&conn, &row_for("b")).unwrap();
+        insert_entry(&conn, &row_for("c")).unwrap();
+        // 初始 a=1, b=2, c=3
+
+        // 模拟筛选后只提交 [c, a]（b 不可见）。
+        reorder_entries(&conn, &["c".to_string(), "a".to_string()]).unwrap();
+
+        // b 未参与重排：仍留在 a 与 c 之间的相对位置；整桶排序号紧凑不重复。
+        assert_eq!(ordered_ids(&conn, Some("cat-1")), vec!["c", "b", "a"]);
+        let orders: Vec<i64> = ["a", "b", "c"]
+            .iter()
+            .map(|id| get_entry(&conn, id).unwrap().unwrap().sort_order)
+            .collect();
+        assert_eq!(orders, vec![2, 1, 0]);
+    }
+
     #[test]
     fn deleting_category_keeps_entries_uncategorized() {
         let conn = mem_db();
@@ -1049,6 +1188,13 @@ mod tests {
         assert_eq!(list_entries(&conn, None, None).unwrap().len(), 2);
         assert!(list_archived_entries(&conn).unwrap().is_empty());
         assert!(!get_entry(&conn, "e1").unwrap().unwrap().archived);
+    }
+
+    /// 按 `sort_order` 升序返回某分类（或未分类桶）的条目 id，用于断言手动序。
+    fn ordered_ids(conn: &Connection, category: Option<&str>) -> Vec<String> {
+        let mut rows = list_entries(conn, category, None).unwrap();
+        rows.sort_by_key(|row| row.sort_order);
+        rows.into_iter().map(|row| row.id).collect()
     }
 
     fn sample_row(id: &str, category: Option<&str>) -> EntryRowEnc {

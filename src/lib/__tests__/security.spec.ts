@@ -18,6 +18,7 @@ function entry(id: string, password: string): EntryView {
     tags: [],
     createdAt: 0,
     updatedAt: 0,
+    sortOrder: 0,
   }
 }
 

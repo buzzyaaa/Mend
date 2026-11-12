@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { categoryApi, entryApi, isTauri } from '@/lib/ipc'
 import { analyzePasswords, type PasswordIssue } from '@/lib/security'
+import { buildManualOrders } from '@/lib/manualOrder'
 import type { Category, EntryInput, EntryView } from '@/types'
 
 /** 侧栏选中的桶：全部 / 星标 / 归档 / 未分类 / 回收站 / 某个分类 id */
@@ -25,8 +26,8 @@ export const useEntryStore = defineStore('entry', () => {
   const loading = ref(false)
   /**
    * 手动排序的本地顺序：bucket → 按拖拽结果排列的条目 id。
-   * 后端不返回 `sort_order`（见 docs/03 §3 / docs/04 §2.3），因此拖拽顺序只在内存里
-   * 维护，与 `entries` 合并展示；`refresh()` 后清空，回到后端默认序（0 值按 updatedAt）。
+   * `EntryView.sortOrder` 由后端下发（同桶内升序），`refresh()` 时据此重建各桶顺序，
+   * 使拖拽结果跨刷新 / 重启仍然生效（见 docs/04 §2.3 / docs/03 §3）。
    */
   const manualOrders = ref<Record<string, string[]>>({})
 
@@ -83,9 +84,9 @@ export const useEntryStore = defineStore('entry', () => {
     const sorted = [...list]
     if (sortBy.value === 'manual') {
       // 手动排序：按当前桶的拖拽顺序升序；不在顺序表里的条目（新建 / 未拖拽）按
-      // updatedAt 排在最后，避免与已固定的手动序混排。该顺序是后端 `sort_order`
-      // 在内存中的镜像（后端不返回该列，见 docs/03 §3）。归档桶禁用拖拽，
-      // 正常不会进入该分支，兜底仍按 updatedAt。
+      // updatedAt 排在最后，避免与已固定的手动序混排。该顺序镜像后端 `sort_order`
+      // （`EntryView.sortOrder` 随列表下发，refresh 后据此重建，见 docs/04 §2.3）。
+      // 归档桶禁用拖拽，正常不会进入该分支，兜底仍按 updatedAt。
       const order = manualOrders.value[bucket.value] ?? []
       const rank = (id: string) => {
         const index = order.indexOf(id)
@@ -148,8 +149,9 @@ export const useEntryStore = defineStore('entry', () => {
       entries.value = list
       trash.value = trashList
       archived.value = archiveList
-      // 后端默认序：清空本地拖拽顺序，回到 `sort_order = 0` 的条目按 updatedAt 排序。
-      manualOrders.value = {}
+      // 后端 `entry_list` 固定按 updated_at 返回，这里用下发的 `sortOrder` 重建各桶
+      // 手动序，使拖拽顺序跨刷新 / 重启保留。
+      manualOrders.value = buildManualOrders(list, cats)
     } finally {
       loading.value = false
     }

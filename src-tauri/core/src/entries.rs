@@ -44,6 +44,9 @@ pub struct EntryView {
     pub tags: Vec<String>,
     pub created_at: i64,
     pub updated_at: i64,
+    /// 手动排序号（同桶内升序，0 = 未手动排序）。随 `EntryView` 下发，前端「手动排序」
+    /// 模式据此在 `refresh()` 后重建各桶顺序，使拖拽结果跨刷新 / 重启仍然生效。
+    pub sort_order: i64,
     /// 回收站时间戳：正常条目为 null，回收站里为删除时间。
     pub deleted_at: Option<i64>,
     /// 归档标记：主列表恒为 false，归档列表恒为 true（与回收站正交）。
@@ -132,6 +135,7 @@ pub fn decrypt_row(dek: &[u8; DEK_LEN], row: &EntryRowEnc) -> MendResult<EntryVi
         tags: row.tags.clone(),
         created_at: row.created_at,
         updated_at: row.updated_at,
+        sort_order: row.sort_order,
         deleted_at: row.deleted_at,
         archived: row.archived,
     })

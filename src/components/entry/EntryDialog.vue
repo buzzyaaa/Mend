@@ -87,7 +87,8 @@ function presetOptions(list: Preset[]): SelectOption[] {
 }
 
 function fillFrom(entry: EntryView | null) {
-  form.categoryId = entry?.categoryId ?? ''
+  // 新建时默认沿用当前列表打开的分类；编辑时保留条目自身的分类。
+  form.categoryId = entry ? (entry.categoryId ?? '') : (store.selectedCategoryId ?? '')
   form.title = entry?.title ?? ''
   form.url = entry?.url ?? null
   form.username = entry?.username ?? ''
@@ -398,8 +399,12 @@ function messageOf(err: unknown): string {
 
         <div>
           <NTabs v-model:value="notesTab" type="segment" size="small" class="mb-2">
-            <NTabPane name="edit" :tab="t('entry.notesEdit')" />
-            <NTabPane name="preview" :tab="t('entry.notesPreview')" />
+            <NTabPane name="edit">
+              <template #tab>{{ t('entry.notesEdit') }}</template>
+            </NTabPane>
+            <NTabPane name="preview">
+              <template #tab>{{ t('entry.notesPreview') }}</template>
+            </NTabPane>
           </NTabs>
           <NInput
             v-if="notesTab === 'edit'"

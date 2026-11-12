@@ -115,7 +115,7 @@ Mend/
 | `entry_restore` | `{ id }` | — | 从回收站恢复（已实现） |
 | `entry_purge` | `{ id }` | — | 彻底删除，仅接受回收站条目（已实现） |
 | `entry_purge_all` | — | `number` | 清空回收站，返回删除条数（已实现） |
-| `entry_reorder` | `{ ids: string[] }` | — | 拖拽排序：按给定顺序整批写回 `entries.sort_order = 0..n-1`（单事务原子，仅更新未删除条目）；前端在「手动排序」模式下拖拽结束后调用（已实现） |
+| `entry_reorder` | `{ ids: string[] }` | — | 拖拽排序：**按 `category_id` 分组**写回 `entries.sort_order`（单事务原子，只更新未删除未归档条目；可见子集按给定顺序填回原位，同桶紧凑 `0..n-1`，避免跨分类覆盖或重复 / 空洞）；前端在「手动排序」模式下拖拽结束后调用（已实现） |
 | `preset_list` | — | `Vec<PresetView>` | 账号/邮箱/手机号预设值，解锁态解密返回（已实现） |
 | `preset_create` | `{ input: PresetInput }` | `PresetView` | 值加密落库，排序号自动取 max+1（已实现） |
 | `preset_update` | `{ id, input: PresetInput }` | `PresetView` | 保留原排序号与创建时间（已实现） |
