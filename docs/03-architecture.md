@@ -88,7 +88,9 @@ Mend/
 
 ## 3. IPC 命令约定（阶段 2 起逐步实现）
 
-命名：`<domain>_<action>`，入参/出参均为 serde 结构体；统一错误类型 `MendError`，前端映射为可提示的消息。
+命名：`<domain>_<action>`，入参/出参均为 serde 结构体；统一错误类型 `MendError`。
+
+**错误返回契约**：命令失败时 IPC  rejects 一个结构化对象 `{ "code": "...", "message": "..." }`（`MendError` 的 `Serialize` 实现）。`code` 是稳定的 snake_case 码——`vault` / `db` / `crypto` / `not_found` / `locked`——前端按码映射 i18n 词条（见 `07-i18n.md` §5）；`message` 为中文兜底文案，仅供日志/未知码降级展示，**不得**对其做子串匹配。`locked` 专用于会话守卫（库未解锁），前端应据此跳回解锁页而非弹错误提示。
 
 | 命令 | 入参 | 出参 | 说明 |
 | --- | --- | --- | --- |
@@ -102,7 +104,7 @@ Mend/
 | `category_rename` | `{ id, input: { name } }` | — | 已实现 |
 | `category_delete` | `{ id }` | — | 删除时条目移入"未分类"（已实现） |
 | `entry_list` | `{ categoryId?, keyword? }` | `Vec<EntryView>` | 解锁态返回解密后的展示模型（已实现） |
-| `entry_get` | `{ id }` | `EntryView` | 单条详情（已实现） |
+| `entry_get` | `{ id }` | `EntryView` | 单条详情（已实现；**预留**，前端暂未调用，列表走 `entry_list`） |
 | `entry_create` | `{ input: EntryInput }` | `EntryView` | 敏感字段后端加密后落库；`EntryInput`/`EntryView` 含 `tags: string[]`（已实现） |
 | `entry_update` | `{ id, input: EntryInput }` | `EntryView` | 已实现 |
 | `entry_delete` | `{ id }` | — | 软删除：写 `deleted_at` 进回收站（已实现） |
@@ -118,7 +120,9 @@ Mend/
 | `app_paths` | — | `{ dataDir, dbPath }` | 设置弹窗展示数据目录，便于手动拷贝库文件（已实现） |
 | `backup_export` | `{ path, masterPassword }` | `{ path, bytes }` | 导出加密 `.mendbak`（整库密文，已实现） |
 | `backup_import` | `{ path, masterPassword }` | `{ entries, categories, previousBackup }` | 校验临时文件后覆盖替换并锁定会话（已实现） |
-| `sync_webdav_test`（预留） | `WebdavConfig` | `{ ok }` | 阶段 5 仅定义接口，默认未启用联网 |
+| `sync_webdav_test`（预留，**未注册**） | `WebdavConfig` | — | 仅 `mend-core` 定义 trait（`DisabledSync` 调用一律报"WebDAV 同步尚未启用"），无 IPC 命令、默认未启用联网 |
+
+Locked 迁移说明：全部"库未解锁"守卫（`vault` / `category` / `entry` / `preset` / `backup` 命令与 `mend-core` 的 `session.rs`）统一使用 `MendError::Locked`（码 `locked`），前端可据此跳转解锁页。
 
 ### 3.1 前后端类型对齐
 
@@ -144,3 +148,22 @@ Mend/
 - 版本、安装取舍与已知遗留见 `09-env-setup.md`。
 - 开发：`npm run tauri dev`（Vite + Rust 二进制 + WebView）；前端单独调试：`npm run dev`；类型检查：`npm run typecheck`；构建：`npm run build` / `npm run tauri build`。
 - VS Code：`.vscode/tasks.json` 已把上述命令配成中文任务（`运行任务` 或 `Ctrl+Shift+B` 唤起），每条都先执行 `scripts/dev-env.ps1` 再跑目标命令，无需手动准备 PATH。
+
+## 7. 内容安全策略（CSP）
+
+`src-tauri/tauri.conf.json` 的 `app.security.csp` 取值：
+
+```
+default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://github.com
+```
+
+逐项理由（本项目离线优先，策略从紧，仅开必要口子）：
+
+| 指令 | 取值 | 理由 |
+| --- | --- | --- |
+| `default-src` / `script-src` | `'self'` | 无外部脚本；打包后的前端资源全部同源。保持最严格的脚本来源限制，兜住 XSS→IPC 调用链 |
+| `style-src` | `'self' 'unsafe-inline'` | naive-ui 运行时注入 `<style>` 标签与内联 style 属性，去掉 `'unsafe-inline'` 组件样式会整体失效；这是当前框架约束下的已知让步 |
+| `img-src` / `font-src` | `'self' data:` | 图标/字体内联（data URI）场景需要 `data:`；不引用任何外部图片与字体 |
+| `connect-src` | `'self' ipc: http://ipc.localhost https://github.com` | Tauri IPC 在 Windows WebView2 走 `http://ipc.localhost`（`ipc:` 为其余平台的 scheme 兜底）；`https://github.com` 仅供 updater 检查 `latest.json`（见 `10-release-update.md`） |
+
+> **注意**：该策略尚未经真机验证，需 `npm run tauri dev` 冒烟确认；若界面样式异常（naive-ui 弹层/图标丢失）或 IPC 报 CSP 违规，优先检查本项取值并按 WebView 控制台报错收紧/放行对应指令。

@@ -65,7 +65,12 @@ pub fn import(blob: &[u8], master_password: &str) -> MendResult<Vec<u8>> {
     salt.copy_from_slice(&blob[8..8 + SALT_LEN]);
 
     let read_u32 = |offset: usize| -> u32 {
-        u32::from_le_bytes([blob[offset], blob[offset + 1], blob[offset + 2], blob[offset + 3]])
+        u32::from_le_bytes([
+            blob[offset],
+            blob[offset + 1],
+            blob[offset + 2],
+            blob[offset + 3],
+        ])
     };
     let kdf = KdfParams {
         memory_kib: read_u32(8 + SALT_LEN),

@@ -9,9 +9,7 @@ export const OVERLAY_TARGET = '#mend-overlays'
 
 /** 读取当前主题下的 CSS 变量并转成 seemly 可解析的具体颜色。 */
 function token(name: string): string {
-  const raw = getComputedStyle(document.documentElement)
-    .getPropertyValue(`--${name}`)
-    .trim()
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(`--${name}`).trim()
   const parts = raw.split(/\s+/)
   // 变量存的是 "220 24% 98%"；seemly 只认 "hsl(220, 24%, 98%)"
   return parts.length === 3 ? `hsl(${parts[0]}, ${parts[1]}, ${parts[2]})` : raw

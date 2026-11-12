@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 条目列表（Data Table 版）：搜索 / 排序 / 备注缩略 + 展开看完整 Markdown / 随时编辑。
-import { computed, h, ref } from 'vue'
+import { computed, h, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   Copy,
@@ -23,18 +23,23 @@ import {
   NSelect,
   NTag,
   NText,
+  NTooltip,
   useDialog,
   type DataTableColumns,
 } from 'naive-ui'
 import { useEntryStore, type SortBy } from '@/stores/entry'
+import { useVaultStore } from '@/stores/vault'
 import { useClipboard } from '@/composables/useClipboard'
 import { useToast } from '@/composables/useToast'
 import { markdownSummary, renderMarkdown } from '@/lib/markdown'
+import { errorText } from '@/lib/errorMessage'
+import { OVERLAY_TARGET } from '@/lib/theme'
 import EntryDialog from '@/components/entry/EntryDialog.vue'
 import type { EntryView } from '@/types'
 
 const { t } = useI18n()
 const store = useEntryStore()
+const vault = useVaultStore()
 const { copy } = useClipboard()
 const toast = useToast()
 const dialog = useDialog()
@@ -43,6 +48,23 @@ const dialogOpen = ref(false)
 const editing = ref<EntryView | null>(null)
 const revealedPasswordIds = ref<Set<string>>(new Set())
 const expandedKeys = ref<string[]>([])
+
+// 锁定（手动 / 空闲自动）后清掉本地明文残留：已显示密码的条目集合与展开行。
+// store 侧的 entries / trash / presets 由 vault.lock() 统一 reset。
+watch(
+  () => vault.status.unlocked,
+  (unlocked) => {
+    if (unlocked) return
+    revealedPasswordIds.value = new Set()
+    expandedKeys.value = []
+    dialogOpen.value = false
+    editing.value = null
+  },
+)
+
+function clearTagFilter() {
+  if (store.tagFilter) store.toggleTagFilter(store.tagFilter)
+}
 
 const listTitle = computed(() => (store.isTrashView ? t('nav.trash') : t('entry.listTitle')))
 const sortOptions = computed(() => [
@@ -94,7 +116,8 @@ function issueOf(entry: EntryView) {
 }
 
 function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
+  // 后端 MendError 为 { code, message } 结构，统一走 errorText 映射（docs/07 §5）。
+  return errorText(err, t)
 }
 
 // —— 展开行（完整 Markdown 备注 + 字段 + 标签 + 编辑）——
@@ -170,14 +193,13 @@ function renderExpand(row: EntryView) {
           const controls = []
           if (f.masked) {
             controls.push(
-              iconBtn(
-                revealed ? EyeOff : Eye,
-                revealed ? t('entry.hide') : t('entry.show'),
-                () => togglePassword(row.id),
+              iconBtn(revealed ? EyeOff : Eye, revealed ? t('entry.hide') : t('entry.show'), () =>
+                togglePassword(row.id),
               ),
             )
           }
-          if (f.href) controls.push(iconBtn(ExternalLink, t('entry.openUrl'), () => openUrl(f.value)))
+          if (f.href)
+            controls.push(iconBtn(ExternalLink, t('entry.openUrl'), () => openUrl(f.value)))
           controls.push(iconBtn(Copy, t('entry.copy'), () => copy(f.value)))
 
           return h('div', { class: 'flex items-center gap-2' }, [
@@ -186,7 +208,9 @@ function renderExpand(row: EntryView) {
               NText,
               {
                 code: true,
-                class: revealed ? 'min-w-0 flex-1 truncate' : 'min-w-0 flex-1 truncate tracking-widest',
+                class: revealed
+                  ? 'min-w-0 flex-1 truncate'
+                  : 'min-w-0 flex-1 truncate tracking-widest',
               },
               () => (f.masked && !revealed ? '••••••••' : f.value),
             ),
@@ -198,13 +222,36 @@ function renderExpand(row: EntryView) {
   }
 
   if (row.tags.length) {
+    // 回收站视图不提供标签过滤入口（与「回收站不可编辑/复制」口径一致）。
+    const filterable = !store.isTrashView
     blocks.push(
       h(
         'div',
         { class: 'mt-2 flex flex-wrap gap-1' },
-        row.tags.map((tag) =>
-          h(NTag, { size: 'small', round: true, bordered: false }, () => `#${tag}`),
-        ),
+        row.tags.map((tag) => {
+          const active = filterable && store.tagFilter === tag
+          return h(
+            NTag,
+            {
+              size: 'small',
+              round: true,
+              // 过滤中的标签用语义 type + 描边区分，不写死颜色
+              type: active ? 'primary' : 'default',
+              bordered: active,
+              ...(filterable
+                ? {
+                    class: 'cursor-pointer',
+                    title: t('entry.tagFilterHint'),
+                    onClick: (e: MouseEvent) => {
+                      e.stopPropagation()
+                      store.toggleTagFilter(tag)
+                    },
+                  }
+                : {}),
+            },
+            () => `#${tag}`,
+          )
+        }),
       ),
     )
   }
@@ -267,15 +314,15 @@ const columns = computed<DataTableColumns<EntryView>>(() => {
       key: 'categoryId',
       width: 110,
       ellipsis: { tooltip: true },
-      render: (row) => h(NText, { depth: 3, class: 'truncate' }, () => categoryName(row.categoryId)),
+      render: (row) =>
+        h(NText, { depth: 3, class: 'truncate' }, () => categoryName(row.categoryId)),
     },
     {
       title: t('entry.username'),
       key: 'username',
       width: 150,
       ellipsis: { tooltip: true },
-      render: (row) =>
-        h(NText, { class: 'truncate' }, () => row.username || '—'),
+      render: (row) => h(NText, { class: 'truncate' }, () => row.username || '—'),
     },
     {
       title: t('entry.password'),
@@ -284,10 +331,8 @@ const columns = computed<DataTableColumns<EntryView>>(() => {
       render: (row) => {
         const revealed = isRevealed(row.id)
         return h('div', { class: 'flex items-center gap-1' }, [
-          h(
-            NText,
-            { code: true, class: 'min-w-0 flex-1 truncate' },
-            () => (revealed ? row.password : '••••••••'),
+          h(NText, { code: true, class: 'min-w-0 flex-1 truncate' }, () =>
+            revealed ? row.password : '••••••••',
           ),
           iconBtn(revealed ? EyeOff : Eye, revealed ? t('entry.hide') : t('entry.show'), () =>
             togglePassword(row.id),
@@ -348,7 +393,14 @@ const columns = computed<DataTableColumns<EntryView>>(() => {
           return h('div', { class: 'flex gap-1' }, [
             h(
               NButton,
-              { size: 'small', quaternary: true, onClick: (e: MouseEvent) => { e.stopPropagation(); restore(row) } },
+              {
+                size: 'small',
+                quaternary: true,
+                onClick: (e: MouseEvent) => {
+                  e.stopPropagation()
+                  restore(row)
+                },
+              },
               () => t('trash.restore'),
             ),
             h(
@@ -357,7 +409,10 @@ const columns = computed<DataTableColumns<EntryView>>(() => {
                 size: 'small',
                 quaternary: true,
                 type: 'error',
-                onClick: (e: MouseEvent) => { e.stopPropagation(); purge(row) },
+                onClick: (e: MouseEvent) => {
+                  e.stopPropagation()
+                  purge(row)
+                },
               },
               () => t('trash.purge'),
             ),
@@ -421,6 +476,27 @@ function purgeAll() {
     <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-3">
       <NText strong class="mr-1 shrink-0 text-base">{{ listTitle }}</NText>
 
+      <!-- 标签过滤状态徽标：关闭即清除过滤（复用 toggleTagFilter 的“再点一次取消”语义） -->
+      <NTooltip
+        v-if="store.tagFilter && !store.isTrashView"
+        :show-arrow="false"
+        :to="OVERLAY_TARGET"
+      >
+        <template #trigger>
+          <NTag
+            type="primary"
+            size="small"
+            round
+            closable
+            :aria-label="t('entry.tags')"
+            @close="clearTagFilter"
+          >
+            {{ t('entry.tags') }}: #{{ store.tagFilter }}
+          </NTag>
+        </template>
+        {{ t('entry.tagFilterHint') }}
+      </NTooltip>
+
       <NInput
         :value="store.keyword"
         clearable
@@ -474,7 +550,9 @@ function purgeAll() {
         size="small"
         flex-height
         :scroll-x="760"
-        @update:expanded-row-keys="(keys: Array<string | number>) => (expandedKeys = keys.map(String))"
+        @update:expanded-row-keys="
+          (keys: Array<string | number>) => (expandedKeys = keys.map(String))
+        "
       >
         <template #empty>
           <NEmpty :description="emptyText" class="py-16">

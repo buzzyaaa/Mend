@@ -17,6 +17,15 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+      # fmt / clippy 质量门禁：当前 core 代码尚未完全满足（另有并行改动正在进行），
+      # 先以 continue-on-error 落地为"警告不拦截"，待 core 代码稳定、本地
+      # `cargo fmt --check` 与 `cargo clippy -- -D warnings` 均通过后，删除 continue-on-error 收紧为硬门禁。
+      - name: Check formatting (cargo fmt)
+        continue-on-error: true
+        run: cargo fmt --check --manifest-path src-tauri/core/Cargo.toml
+      - name: Check lints (cargo clippy)
+        continue-on-error: true
+        run: cargo clippy --manifest-path src-tauri/core/Cargo.toml -- -D warnings
       - name: Run core tests
         run: cargo test --manifest-path src-tauri/core/Cargo.toml
 
@@ -31,6 +40,10 @@ jobs:
       - run: npm ci
       - name: Type check
         run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Format check
+        run: npx prettier --check .
       - name: Build
         run: npm run build
 

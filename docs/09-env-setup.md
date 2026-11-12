@@ -11,8 +11,8 @@
 | Rust | `rustc`/`cargo` 1.99.1，host `x86_64-pc-windows-gnu` | `%USERPROFILE%\.cargo`、`%USERPROFILE%\.rustup` | 不在系统 PATH |
 | MinGW-w64 | gcc 16.2.0（MSYS2 发行） | `%USERPROFILE%\tools\msys64\mingw64` | C 编译器 + 链接器 + 头文件/CRT |
 | MSYS2 | — | `%USERPROFILE%\tools\msys64` | pacman 包管理；镜像源首选清华 tuna |
-| git | 2.55.0 | `C:\Program Files\Git\cmd` | 不在新会话 PATH |
-| gh CLI | — | `C:\Program Files\GitHub CLI` | 不在新会话 PATH |
+| git | 2.55.0 | Git for Windows 默认安装位置（`Program Files\Git\cmd`） | 不在新会话 PATH |
+| gh CLI | — | GitHub CLI 默认安装位置（`Program Files\GitHub CLI`） | 不在新会话 PATH |
 | WebView2 | 随 Edge 运行时 | 系统 | Tauri WebView 宿主 |
 
 ## 2. 每个新会话的初始化
@@ -48,7 +48,7 @@ cargo build        # Rust debug 构建
 
 ## 4. 已知遗留
 
-- 未配置 ESLint / Prettier（路线图阶段 1 待补，不阻塞构建）。
+- ESLint / Prettier 已配置（2026-11-11）：flat config（`eslint.config.js`，eslint-plugin-vue + typescript-eslint）+ `.prettierrc.json`，脚本 `npm run lint` / `npm run format`。
 - 主 crate 的 `cargo test` 不可用（见 §3），单元测试统一放在 `mend-core`。
 - Rust 工具链与 MSYS2 未做开机持久 PATH，依赖 `dev-env.ps1` 会话级初始化。
-- debug 构建产物 `mend.exe` 约 216MB（未优化 + 调试信息），属正常；release 构建会显著缩小。
+- debug 构建产物 `mend.exe` 约 284MB（未优化 + 调试信息），属正常；release 构建会显著缩小。

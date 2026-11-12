@@ -83,7 +83,8 @@ fn db_err(err: rusqlite::Error) -> MendError {
 /// 打开（必要时创建）数据库文件，并保证 schema 已迁移到最新版本。
 pub fn open_and_migrate(path: &Path) -> MendResult<Connection> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|err| MendError::Db(format!("创建数据目录失败: {err}")))?;
+        fs::create_dir_all(parent)
+            .map_err(|err| MendError::Db(format!("创建数据目录失败: {err}")))?;
     }
     let conn = Connection::open(path).map_err(db_err)?;
     // 单文件库：不用 WAL，便于整库拷贝备份（见 docs/06）
@@ -95,15 +96,35 @@ pub fn open_and_migrate(path: &Path) -> MendResult<Connection> {
     Ok(conn)
 }
 
+/// 在**单个事务**内完成建表 → v2 迁移 → 版本号写入：中途崩溃/掉电不会留下
+/// "列已加、版本未升"的半迁移状态（旧实现三段分开执行，坏库会导致下次启动永久失败）。
+/// 可重入：`CREATE TABLE IF NOT EXISTS` 幂等；v2 迁移前先探测 `tags` 列是否已存在，
+/// 即使历史版本崩溃留下了"列存在但版本仍为 1"的库，也能安全补齐版本号。
 pub fn migrate(conn: &Connection) -> MendResult<()> {
-    conn.execute_batch(SCHEMA_V1).map_err(db_err)?;
-    let current: i64 = meta_get(conn, "schema_version")?
+    // unchecked_transaction：借用 &Connection 即可开启，便于在事务内复用仓储函数
+    // （meta_get/meta_set 接收 &Connection，&Transaction 自动解引用传递）。
+    let tx = conn.unchecked_transaction().map_err(db_err)?;
+    tx.execute_batch(SCHEMA_V1).map_err(db_err)?;
+    let current: i64 = meta_get(&tx, "schema_version")?
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
-    if current < 2 {
-        conn.execute_batch(MIGRATION_V2).map_err(db_err)?;
+    if current < 2 && !column_exists(&tx, "entries", "tags")? {
+        tx.execute_batch(MIGRATION_V2).map_err(db_err)?;
     }
-    meta_set(conn, "schema_version", &SCHEMA_VERSION.to_string())
+    meta_set(&tx, "schema_version", &SCHEMA_VERSION.to_string())?;
+    tx.commit().map_err(db_err)?;
+    Ok(())
+}
+
+fn column_exists(conn: &Connection, table: &str, column: &str) -> MendResult<bool> {
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info(?1) WHERE name = ?2",
+            params![table, column],
+            |row| row.get(0),
+        )
+        .map_err(db_err)?;
+    Ok(count > 0)
 }
 
 // ---------- meta ----------
@@ -520,16 +541,15 @@ fn map_entry_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EntryRowEnc> {
         phone_enc: row.get(7)?,
         notes_enc: row.get(8)?,
         favorite: row.get::<_, i64>(9)? != 0,
-        tags: row
-            .get::<_, String>(10)
-            .and_then(|raw| {
-                tags_from_json(&raw)
-                    .map_err(|err| rusqlite::Error::FromSqlConversionFailure(
-                        10,
-                        rusqlite::types::Type::Text,
-                        Box::new(err),
-                    ))
-            })?,
+        tags: row.get::<_, String>(10).and_then(|raw| {
+            tags_from_json(&raw).map_err(|err| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    10,
+                    rusqlite::types::Type::Text,
+                    Box::new(err),
+                )
+            })
+        })?,
         created_at: row.get(11)?,
         updated_at: row.get(12)?,
         deleted_at: row.get(13)?,
@@ -556,6 +576,40 @@ mod tests {
         );
         assert!(!is_initialized(&conn).unwrap());
         assert!(list_entries(&conn, None, None).unwrap().is_empty());
+    }
+
+    /// 可重入：模拟"列已加、版本未升"的半迁移库（旧实现崩溃后的坏状态），
+    /// migrate 不得再次 ALTER（否则 duplicate column 报错、永久失败），而是补齐版本号。
+    #[test]
+    fn migrate_recovers_half_applied_v2_state() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA_V1).unwrap();
+        conn.execute_batch(MIGRATION_V2).unwrap(); // 列加了
+        meta_set(&conn, "schema_version", "1").unwrap(); // 但版本没升（模拟崩溃点）
+
+        migrate(&conn).unwrap();
+        assert_eq!(
+            meta_get(&conn, "schema_version").unwrap().as_deref(),
+            Some("2")
+        );
+        assert!(column_exists(&conn, "entries", "tags").unwrap());
+    }
+
+    /// 事务化迁移在文件库上可安全重入：多次启动（每次 open_and_migrate 都跑一遍）
+    /// 不报错、不重复 ALTER，版本号始终保持 2。
+    #[test]
+    fn migrate_runs_in_single_transaction() {
+        let conn = Connection::open_in_memory().unwrap();
+        // 全新库：migrate 成功前不应有任何已提交痕迹；成功后一次性到位
+        migrate(&conn).unwrap();
+        // 重入（模拟启动时再次执行）仍保持幂等
+        migrate(&conn).unwrap();
+        migrate(&conn).unwrap();
+        assert_eq!(
+            meta_get(&conn, "schema_version").unwrap().as_deref(),
+            Some("2")
+        );
+        assert!(column_exists(&conn, "entries", "tags").unwrap());
     }
 
     /// v1 旧库（无 tags 列）升级到 v2：加列成功且旧数据带默认空标签。
@@ -622,7 +676,9 @@ mod tests {
         assert_eq!(list_entries(&conn, Some("cat-1"), None).unwrap().len(), 1);
         assert!(list_entries(&conn, Some("cat-2"), None).unwrap().is_empty());
         assert_eq!(list_entries(&conn, None, Some("邮")).unwrap().len(), 1);
-        assert!(list_entries(&conn, None, Some("不存在")).unwrap().is_empty());
+        assert!(list_entries(&conn, None, Some("不存在"))
+            .unwrap()
+            .is_empty());
     }
 
     fn sample_row(id: &str, category: Option<&str>) -> EntryRowEnc {

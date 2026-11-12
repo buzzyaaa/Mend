@@ -18,11 +18,7 @@ import {
   Square,
   X,
 } from 'lucide-vue-next'
-import {
-  NButton,
-  NIcon,
-  NTooltip,
-} from 'naive-ui'
+import { NButton, NIcon, NTooltip } from 'naive-ui'
 import { isTauri } from '@/lib/ipc'
 import { OVERLAY_TARGET } from '@/lib/theme'
 import { useUiStore } from '@/stores/ui'

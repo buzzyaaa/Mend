@@ -89,8 +89,8 @@ fn backup_export_import_roundtrip_restores_same_vault() {
         let conn = db::open_and_migrate(&path).expect("建库");
         let keys = vault::setup(&conn, "123456").expect("设置主密码");
         db::create_category(&conn, "cat-work", "工作").expect("建分类");
-        let entry =
-            entries::encrypt_input(&keys.dek_bytes(), "e-1", &sample_input(), 2000, 2000).expect("加密条目");
+        let entry = entries::encrypt_input(&keys.dek_bytes(), "e-1", &sample_input(), 2000, 2000)
+            .expect("加密条目");
         db::insert_entry(&conn, &entry).expect("写条目");
 
         let (salt, kdf) = vault::read_salt_and_kdf(&conn).expect("读 salt/kdf");
@@ -224,7 +224,8 @@ fn category_and_entry_crud_survives_reopen_and_stays_encrypted() {
 
         // 3) 条目新增
         let dek = keys.dek_bytes();
-        let row = entries::encrypt_input(&dek, "entry-1", &sample_input(), 1000, 1000).expect("加密");
+        let row =
+            entries::encrypt_input(&dek, "entry-1", &sample_input(), 1000, 1000).expect("加密");
         db::insert_entry(&conn, &row).expect("写入条目");
 
         // 4) 列表 + 分类/关键字过滤（前端同款调用：先全量，再本地过滤）
@@ -272,7 +273,10 @@ fn category_and_entry_crud_survives_reopen_and_stays_encrypted() {
     // 8) 重开应用：错误密码被拒，正确密码解锁后能读回新密码
     {
         let conn = db::open_and_migrate(&path).expect("重开库");
-        assert!(vault::unlock(&conn, "wrong-pass").is_err(), "错误密码应被拒绝");
+        assert!(
+            vault::unlock(&conn, "wrong-pass").is_err(),
+            "错误密码应被拒绝"
+        );
         let keys = vault::unlock(&conn, "123456").expect("正确密码解锁");
         let list = db::list_entries(&conn, None, None).expect("全量列出");
         assert_eq!(list.len(), 1);
@@ -291,7 +295,9 @@ fn category_and_entry_crud_survives_reopen_and_stays_encrypted() {
         assert!(db::list_categories(&conn).expect("列出分类").is_empty());
 
         db::delete_entry(&conn, "entry-1").expect("删除条目");
-        assert!(db::list_entries(&conn, None, None).expect("全量列出").is_empty());
+        assert!(db::list_entries(&conn, None, None)
+            .expect("全量列出")
+            .is_empty());
     }
 
     let _ = fs::remove_dir_all(path.parent().expect("父目录"));

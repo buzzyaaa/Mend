@@ -24,6 +24,7 @@ import { usePresetStore } from '@/stores/preset'
 import { generatorApi } from '@/lib/ipc'
 import { OVERLAY_TARGET } from '@/lib/theme'
 import { renderMarkdown } from '@/lib/markdown'
+import { errorText } from '@/lib/errorMessage'
 import type { EntryInput, EntryView, GeneratorOptions, Preset, PresetFieldType } from '@/types'
 
 const props = defineProps<{
@@ -207,7 +208,8 @@ function remove() {
 }
 
 function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
+  // 后端 MendError 为 { code, message } 结构，统一走 errorText 映射（docs/07 §5）。
+  return errorText(err, t)
 }
 </script>
 
@@ -216,7 +218,11 @@ function messageOf(err: unknown): string {
     :show="open"
     :to="OVERLAY_TARGET"
     :mask-closable="false"
-    @update:show="(show: boolean) => { if (!show) emit('close') }"
+    @update:show="
+      (show: boolean) => {
+        if (!show) emit('close')
+      }
+    "
   >
     <NCard
       :title="heading"
@@ -226,7 +232,12 @@ function messageOf(err: unknown): string {
       :content-style="{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }"
     >
       <div class="grid gap-3 pr-1">
-        <NInput v-model:value="form.title" :placeholder="t('entry.title')" :maxlength="120" show-count />
+        <NInput
+          v-model:value="form.title"
+          :placeholder="t('entry.title')"
+          :maxlength="120"
+          show-count
+        />
 
         <div class="grid grid-cols-2 gap-3">
           <NSelect
@@ -259,7 +270,12 @@ function messageOf(err: unknown): string {
           <div>
             <NText :depth="3" class="mb-1 block text-xs">{{ t('entry.password') }}</NText>
             <div class="flex gap-1">
-              <NInput v-model:value="form.password" type="text" autocomplete="off" class="min-w-0 flex-1" />
+              <NInput
+                v-model:value="form.password"
+                type="text"
+                autocomplete="off"
+                class="min-w-0 flex-1"
+              />
               <NSelect
                 v-if="presetStore.grouped.password.length"
                 :value="null"
@@ -306,7 +322,9 @@ function messageOf(err: unknown): string {
               </div>
 
               <NInput :value="generated" readonly size="small" class="font-mono" placeholder="—" />
-              <NAlert v-if="generatorError" type="error" :show-icon="false">{{ generatorError }}</NAlert>
+              <NAlert v-if="generatorError" type="error" :show-icon="false">{{
+                generatorError
+              }}</NAlert>
 
               <div class="flex justify-end gap-2">
                 <NButton size="small" @click="generate">{{ t('generator.regenerate') }}</NButton>
@@ -357,7 +375,10 @@ function messageOf(err: unknown): string {
           <NText class="text-sm">{{ t('entry.favorite') }}</NText>
         </div>
 
-        <NInput v-model:value="tagsText" :placeholder="t('entry.tagsPlaceholder')" />
+        <div>
+          <NText :depth="3" class="mb-1 block text-xs">{{ t('entry.tags') }}</NText>
+          <NInput v-model:value="tagsText" :placeholder="t('entry.tagsPlaceholder')" />
+        </div>
 
         <div>
           <NTabs v-model:value="notesTab" type="segment" size="small" class="mb-2">

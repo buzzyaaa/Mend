@@ -68,7 +68,7 @@ pub fn backup_export(
     master_password: String,
 ) -> MendResult<ExportResult> {
     if !state.is_unlocked() {
-        return Err(MendError::Vault("库未解锁".into()));
+        return Err(MendError::Locked);
     }
 
     let conn = open_db(&app)?;
@@ -103,6 +103,9 @@ pub fn backup_export(
 }
 
 /// 从 `.mendbak` 恢复。成功后必定锁定会话，前端需跳回解锁页用原主密码解锁。
+///
+/// 前置守卫：恢复是覆盖性破坏操作（整库替换），要求显式解锁态——
+/// 防止锁屏状态下被误触发或被他人/脚本触库；与 `backup_export` 守卫口径一致。
 #[tauri::command]
 pub fn backup_import(
     app: AppHandle,
@@ -110,6 +113,10 @@ pub fn backup_import(
     path: String,
     master_password: String,
 ) -> MendResult<ImportResult> {
+    if !state.is_unlocked() {
+        return Err(MendError::Locked);
+    }
+
     let source = PathBuf::from(path.trim());
     let blob = fs::read(&source)
         .map_err(|err| MendError::Vault(format!("读取备份文件失败: {err}")))?;

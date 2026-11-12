@@ -179,6 +179,17 @@ export const useEntryStore = defineStore('entry', () => {
     keyword.value = value
   }
 
+  /** 锁定清空：丢弃内存里全部解密后的明文（条目 / 回收站 / 分类随带的名称不算敏感），视图状态一并归零。 */
+  function reset() {
+    categories.value = []
+    entries.value = []
+    trash.value = []
+    bucket.value = 'all'
+    keyword.value = ''
+    tagFilter.value = null
+    sortBy.value = 'updated'
+  }
+
   return {
     categories,
     entries,
@@ -209,5 +220,6 @@ export const useEntryStore = defineStore('entry', () => {
     selectBucket,
     setKeyword,
     toggleTagFilter,
+    reset,
   }
 })

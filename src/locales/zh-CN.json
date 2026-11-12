@@ -1,7 +1,6 @@
 {
   "app": {
-    "name": "Mend",
-    "tagline": "修补你的记忆缺口"
+    "name": "Mend"
   },
   "titlebar": {
     "minimize": "最小化",
@@ -9,14 +8,11 @@
     "close": "关闭"
   },
   "header": {
-    "settings": "设置",
     "language": "语言",
     "langZh": "简体中文",
     "langEn": "English",
-    "presets": "预设值",
     "languageHint": "切换后立即生效并关闭窗口",
-    "lock": "锁定",
-    "lockHint": "锁定并回到解锁页"
+    "lock": "锁定"
   },
   "winMenu": {
     "restore": "还原",
@@ -31,15 +27,10 @@
     "all": "全部",
     "uncategorized": "未分类",
     "trash": "回收站",
-    "search": "搜索",
     "categories": "分类",
     "addCategory": "新增分类",
-    "home": "条目",
     "presets": "预设值",
-    "settings": "设置",
-    "language": "语言",
-    "languageHint": "切换到 English",
-    "lock": "锁定"
+    "settings": "设置"
   },
   "entry": {
     "title": "标题",
@@ -50,7 +41,6 @@
     "url": "网址",
     "notes": "备注",
     "copy": "复制",
-    "copied": "已复制",
     "edit": "编辑",
     "delete": "删除",
     "empty": "暂无条目，点击「新增条目」创建第一条密码",
@@ -70,9 +60,7 @@
     "sortUpdated": "最近更新",
     "sortTitle": "按名称",
     "sortFavorite": "收藏优先",
-    "weakPassword": "密码较弱：少于 8 位或字符种类太少",
     "weakShort": "弱",
-    "duplicatePassword": "与其他条目使用了相同密码",
     "dupShort": "重",
     "titleRequired": "标题不能为空",
     "noNotes": "（无备注）",
@@ -95,11 +83,9 @@
     "nameRequired": "分类名称不能为空"
   },
   "unlock": {
-    "title": "解锁 Mend",
     "subtitle": "输入主密码以访问你的密码库",
     "password": "主密码",
     "unlock": "解锁",
-    "setupTitle": "创建主密码",
     "setupSubtitle": "首次使用，请设置一个主密码。主密码丢失将无法找回数据。",
     "confirm": "确认主密码",
     "create": "创建并进入",
@@ -119,7 +105,6 @@
     }
   },
   "generator": {
-    "title": "密码生成器",
     "length": "长度",
     "uppercase": "大写",
     "lowercase": "小写",
@@ -142,7 +127,6 @@
     "labelPlaceholder": "例如：论坛通用",
     "value": "值",
     "choose": "选择预设",
-    "save": "保存预设",
     "deleteConfirm": "确定删除该预设？",
     "types": {
       "username": "账号",
@@ -151,14 +135,8 @@
       "password": "常用密码"
     }
   },
-  "notes": {
-    "edit": "编辑备注",
-    "preview": "预览",
-    "write": "编辑"
-  },
   "trash": {
     "empty": "回收站是空的",
-    "deletedAt": "删除于",
     "restore": "恢复",
     "purge": "彻底删除",
     "purgeConfirm": "彻底删除「{title}」？此操作不可恢复。",
@@ -175,12 +153,10 @@
     "import": "恢复备份",
     "dataDir": "数据目录",
     "dataDirHint": "手动备份：先锁定或退出，再把库文件拷到 U 盘 / 移动硬盘；换机器后用同一主密码解锁",
-    "filePath": "备份文件路径",
     "pickHint": "点“选择保存位置 / 选择备份文件”会弹出系统文件选择窗口，从系统弹窗里选，不用手动填路径。",
     "chooseExport": "选择保存位置",
     "chooseImport": "选择备份文件",
     "noLocation": "未选择",
-    "masterPassword": "主密码",
     "passwordPlaceholder": "导出/恢复时验证身份",
     "exportAction": "导出",
     "importAction": "恢复并覆盖",
@@ -234,6 +210,13 @@
     "failed": "操作失败：{message}",
     "autoLocked": "已因长时间无操作自动锁定"
   },
+  "error": {
+    "locked": "密码库未解锁",
+    "crypto": "解密失败，请确认主密码或备份文件是否正确",
+    "db": "数据读写失败",
+    "notFound": "目标不存在",
+    "vault": "操作失败"
+  },
   "common": {
     "save": "保存",
     "cancel": "取消",
@@ -241,7 +224,6 @@
     "delete": "删除",
     "rename": "重命名",
     "close": "关闭",
-    "deleteConfirm": "确定删除该条目？",
     "actions": "操作"
   }
 }

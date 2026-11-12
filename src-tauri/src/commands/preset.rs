@@ -56,7 +56,7 @@ pub fn preset_update(
 #[tauri::command]
 pub fn preset_delete(app: AppHandle, state: State<'_, VaultState>, id: String) -> MendResult<()> {
     if !state.is_unlocked() {
-        return Err(MendError::Vault("库未解锁".into()));
+        return Err(MendError::Locked);
     }
     let conn = open_db(&app)?;
     db::delete_preset(&conn, &id)

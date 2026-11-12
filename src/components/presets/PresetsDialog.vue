@@ -24,7 +24,9 @@ import {
   type SelectOption,
 } from 'naive-ui'
 import { usePresetStore } from '@/stores/preset'
+import { useVaultStore } from '@/stores/vault'
 import { useToast } from '@/composables/useToast'
+import { errorText } from '@/lib/errorMessage'
 import { OVERLAY_TARGET } from '@/lib/theme'
 import type { Preset, PresetFieldType } from '@/types'
 
@@ -36,6 +38,7 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 
 const { t } = useI18n()
 const presetStore = usePresetStore()
+const vault = useVaultStore()
 const toast = useToast()
 const dialog = useDialog()
 
@@ -77,6 +80,17 @@ watch(
   { immediate: true },
 )
 
+// 锁定后 vault.lock() 已清空 preset 缓存；这里顺带收起弹窗，避免停留在空的解密视图上
+watch(
+  () => vault.status.unlocked,
+  (unlocked) => {
+    if (!unlocked && props.open) {
+      emit('close')
+      resetForm()
+    }
+  },
+)
+
 // 新增态下表单类型跟随当前 Tab，编辑态保持原类型
 watch(activeTab, (type) => {
   if (!editId.value) form.fieldType = type
@@ -113,7 +127,7 @@ async function submit() {
     activeTab.value = form.fieldType
     resetForm()
   } catch (err) {
-    formError.value = err instanceof Error ? err.message : String(err)
+    formError.value = errorText(err, t)
   } finally {
     busy.value = false
   }
@@ -131,7 +145,7 @@ function remove(preset: Preset) {
         toast.success(t('toast.deleted'))
         if (editId.value === preset.id) resetForm()
       } catch (err) {
-        toast.error(t('toast.failed', { message: err instanceof Error ? err.message : String(err) }))
+        toast.error(t('toast.failed', { message: errorText(err, t) }))
       }
     },
   })
@@ -173,10 +187,8 @@ const columns = computed<DataTableColumns<Preset>>(() => [
     render: (row) =>
       h(NSpace, { size: 'small', wrap: false }, () => [
         h(NButton, { size: 'small', onClick: () => startEdit(row) }, () => t('common.rename')),
-        h(
-          NButton,
-          { size: 'small', type: 'error', ghost: true, onClick: () => remove(row) },
-          () => t('common.delete'),
+        h(NButton, { size: 'small', type: 'error', ghost: true, onClick: () => remove(row) }, () =>
+          t('common.delete'),
         ),
       ]),
   },
@@ -188,7 +200,11 @@ const columns = computed<DataTableColumns<Preset>>(() => [
     :show="open"
     :to="OVERLAY_TARGET"
     :mask-closable="false"
-    @update:show="(show: boolean) => { if (!show) emit('close') }"
+    @update:show="
+      (show: boolean) => {
+        if (!show) emit('close')
+      }
+    "
   >
     <NCard
       :title="t('preset.title')"
@@ -236,7 +252,11 @@ const columns = computed<DataTableColumns<Preset>>(() => [
           :maxlength="40"
           style="width: 180px"
         />
-        <NInput v-model:value="form.value" :placeholder="t('preset.value')" class="min-w-0 flex-1" />
+        <NInput
+          v-model:value="form.value"
+          :placeholder="t('preset.value')"
+          class="min-w-0 flex-1"
+        />
         <NButton type="primary" :loading="busy" @click="submit">
           {{ editId ? t('common.save') : t('preset.add') }}
         </NButton>

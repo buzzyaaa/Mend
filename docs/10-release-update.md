@@ -25,14 +25,23 @@
 
 ### 2.3 发版步骤（每次发版照做）
 
-1. 本地把版本号在三处改成同一值（如 `0.3.0`）：
+1. **推荐：跑发版脚本**（仓库根目录，一条命令同步三处版本号）：
+
+   ```powershell
+   .\scripts\release.ps1 -Version 0.4.0 -Tag
+   ```
+
+   - 脚本先按 `^\d+\.\d+\.\d+$` 校验版本号，再用正则精确替换 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 三处的 `version` 字段（不引入 JSON 库依赖），替换后打印三处当前值供确认。
+   - 带 `-Tag`：自动执行 `git commit -am "chore: release v0.4.0"` → `git tag v0.4.0` → `git push origin main` → 推送 tag。
+   - 不带 `-Tag`（默认）：只改文件并打印后续手动命令，便于先本地验证（`npm run build` + core 测试）再提交。
+2. **兜底：手工三步**（脚本不可用时）——把版本号在三处改成同一值（如 `0.4.0`）：
    - `src-tauri/tauri.conf.json` → `version`
    - `src-tauri/Cargo.toml` → `version`
    - `package.json` → `version`
-2. 提交并推送 `main`：`git commit -am "chore: release v0.3.0" && git push origin main`
-3. 打 tag 并推送：`git tag v0.3.0 && git push origin v0.3.0`
-4. 在 GitHub Actions 观察 `Release` 工作流；成功后到 Releases 页确认安装包、`*.sig`、`latest.json` 已发布。
-5. 在已安装旧版的应用里验证：启动 → 若到了检查间隔会提示更新；或在设置弹窗"立即检查更新"。
+
+   然后提交推送并打 tag：`git commit -am "chore: release v0.4.0" && git push origin main`，再 `git tag v0.4.0 && git push origin v0.4.0`。
+3. 在 GitHub Actions 观察 `Release` 工作流；成功后到 Releases 页确认安装包、`*.sig`、`latest.json` 已发布。
+4. 在已安装旧版的应用里验证：启动 → 若到了检查间隔会提示更新；或在设置弹窗"立即检查更新"。
 
 > tag 名必须与版本号对应（`v` + 版本号），`release.yml` 的 `tagName` 直接使用 `github.ref_name`。
 

@@ -60,7 +60,7 @@ impl VaultState {
             .map_err(|_| MendError::Vault("会话状态锁已损坏".into()))?;
         match guard.as_ref() {
             Some(session) => f(&session.dek),
-            None => Err(MendError::Vault("库未解锁".into())),
+            None => Err(MendError::Locked),
         }
     }
 }
@@ -88,7 +88,10 @@ mod tests {
         let state = VaultState::new();
         state.set_session(session()).expect("装载会话");
         assert!(state.is_unlocked());
-        assert_eq!(state.with_dek(|dek| Ok(*dek)).expect("读取 DEK"), [9u8; DEK_LEN]);
+        assert_eq!(
+            state.with_dek(|dek| Ok(*dek)).expect("读取 DEK"),
+            [9u8; DEK_LEN]
+        );
 
         state.lock().expect("锁定");
         assert!(!state.is_unlocked(), "锁定后不应再处于解锁态");

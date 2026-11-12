@@ -97,7 +97,7 @@ pub fn vault_change_password(
     new_password: String,
 ) -> MendResult<()> {
     if !state.is_unlocked() {
-        return Err(MendError::Vault("库未解锁".into()));
+        return Err(MendError::Locked);
     }
     let conn = open_db(&app)?;
     mend_core::vault::change_password(&conn, &old_password, &new_password)?;

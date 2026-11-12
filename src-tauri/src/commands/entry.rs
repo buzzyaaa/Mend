@@ -28,6 +28,7 @@ pub fn entry_list(
     })
 }
 
+/// 预留：单条详情查询，当前前端列表走 entry_list。
 #[tauri::command]
 pub fn entry_get(
     app: AppHandle,
@@ -75,7 +76,7 @@ pub fn entry_update(
 #[tauri::command]
 pub fn entry_delete(app: AppHandle, state: State<'_, VaultState>, id: String) -> MendResult<()> {
     if !state.is_unlocked() {
-        return Err(MendError::Vault("库未解锁".into()));
+        return Err(MendError::Locked);
     }
     let conn = open_db(&app)?;
     db::delete_entry(&conn, &id)
@@ -99,7 +100,7 @@ pub fn entry_trash_list(
 #[tauri::command]
 pub fn entry_restore(app: AppHandle, state: State<'_, VaultState>, id: String) -> MendResult<()> {
     if !state.is_unlocked() {
-        return Err(MendError::Vault("库未解锁".into()));
+        return Err(MendError::Locked);
     }
     let conn = open_db(&app)?;
     db::restore_entry(&conn, &id)
@@ -108,7 +109,7 @@ pub fn entry_restore(app: AppHandle, state: State<'_, VaultState>, id: String) -
 #[tauri::command]
 pub fn entry_purge(app: AppHandle, state: State<'_, VaultState>, id: String) -> MendResult<()> {
     if !state.is_unlocked() {
-        return Err(MendError::Vault("库未解锁".into()));
+        return Err(MendError::Locked);
     }
     let conn = open_db(&app)?;
     db::purge_entry(&conn, &id)
@@ -117,7 +118,7 @@ pub fn entry_purge(app: AppHandle, state: State<'_, VaultState>, id: String) -> 
 #[tauri::command]
 pub fn entry_purge_all(app: AppHandle, state: State<'_, VaultState>) -> MendResult<usize> {
     if !state.is_unlocked() {
-        return Err(MendError::Vault("库未解锁".into()));
+        return Err(MendError::Locked);
     }
     let conn = open_db(&app)?;
     db::purge_all_trashed(&conn)

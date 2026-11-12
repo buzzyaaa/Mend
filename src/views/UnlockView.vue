@@ -7,6 +7,7 @@ import { KeyRound, ShieldCheck } from 'lucide-vue-next'
 import { NAlert, NButton, NCard, NIcon, NInput, NTag, NText } from 'naive-ui'
 import { useVaultStore } from '@/stores/vault'
 import { isTauri } from '@/lib/ipc'
+import { normalizeError, errorText } from '@/lib/errorMessage'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -80,10 +81,14 @@ async function submit() {
 }
 
 function messageOf(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err)
-  if (raw.includes('主密码错误')) return t('unlock.errors.wrongPassword')
-  if (raw.includes('浏览器预览')) return t('unlock.errors.preview')
-  return raw
+  // 契约见 docs/07 §5：后端 MendError 序列化为 { code, message }，按 code 映射词条。
+  const { code, message } = normalizeError(err)
+  // 解锁认证失败（AEAD 解包失败）→ 主密码错误。
+  // code=crypto 是目标契约；消息匹配是后端尚未带码时的兼容兜底，真机验证后可移除。
+  if (code === 'crypto' || message.includes('主密码错误')) return t('unlock.errors.wrongPassword')
+  // 浏览器预览是 ipc.ts 抛的前端本地 Error，不是后端错误。
+  if (message.includes('仅在 Tauri 运行时可用')) return t('unlock.errors.preview')
+  return errorText(err, t)
 }
 </script>
 
@@ -142,13 +147,7 @@ function messageOf(err: unknown): string {
 
           <NAlert v-if="error" type="error" :show-icon="false">{{ error }}</NAlert>
 
-          <NButton
-            type="primary"
-            block
-            attr-type="submit"
-            :loading="vault.busy"
-            class="mt-1"
-          >
+          <NButton type="primary" block attr-type="submit" :loading="vault.busy" class="mt-1">
             {{ setupMode ? t('unlock.create') : t('unlock.unlock') }}
           </NButton>
         </form>

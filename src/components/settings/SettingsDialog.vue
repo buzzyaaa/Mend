@@ -4,22 +4,21 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Download, FolderOpen, KeyRound, LockKeyhole, Palette, RefreshCw, Upload } from 'lucide-vue-next'
 import {
-  NAlert,
-  NButton,
-  NCard,
-  NIcon,
-  NInput,
-  NModal,
-  NSelect,
-  NText,
-  useDialog,
-} from 'naive-ui'
+  Download,
+  FolderOpen,
+  KeyRound,
+  LockKeyhole,
+  Palette,
+  RefreshCw,
+  Upload,
+} from 'lucide-vue-next'
+import { NAlert, NButton, NCard, NIcon, NInput, NModal, NSelect, NText, useDialog } from 'naive-ui'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useVaultStore } from '@/stores/vault'
 import { useToast } from '@/composables/useToast'
 import { backupApi, isTauri } from '@/lib/ipc'
+import { errorText } from '@/lib/errorMessage'
 import { getAppVersion } from '@/lib/update'
 import { useUpdateChecker } from '@/composables/useUpdateChecker'
 import { OVERLAY_TARGET } from '@/lib/theme'
@@ -102,7 +101,7 @@ async function chooseExportPath(): Promise<string | null> {
       return path
     }
   } catch (err) {
-    backupError.value = err instanceof Error ? err.message : String(err)
+    backupError.value = errorText(err, t)
   }
   return null
 }
@@ -121,7 +120,7 @@ async function chooseImportPath(): Promise<string | null> {
       return picked
     }
   } catch (err) {
-    backupError.value = err instanceof Error ? err.message : String(err)
+    backupError.value = errorText(err, t)
   }
   return null
 }
@@ -144,7 +143,7 @@ async function exportBackup() {
     toast.success(t('backup.exported', { path: result.path, size: formatSize(result.bytes) }))
     exportPassword.value = ''
   } catch (err) {
-    backupError.value = err instanceof Error ? err.message : String(err)
+    backupError.value = errorText(err, t)
   } finally {
     backupBusy.value = false
   }
@@ -178,7 +177,7 @@ function importBackup() {
         )
         await router.push('/unlock')
       } catch (err) {
-        backupError.value = err instanceof Error ? err.message : String(err)
+        backupError.value = errorText(err, t)
       } finally {
         backupBusy.value = false
       }
@@ -234,7 +233,7 @@ async function changePassword() {
     pwForm.confirm = ''
     toast.success(t('settings.passwordChanged'))
   } catch (err) {
-    pwError.value = err instanceof Error ? err.message : String(err)
+    pwError.value = errorText(err, t)
   } finally {
     pwBusy.value = false
   }
@@ -246,7 +245,11 @@ async function changePassword() {
     :show="open"
     :to="OVERLAY_TARGET"
     :mask-closable="false"
-    @update:show="(show: boolean) => { if (!show) emit('close') }"
+    @update:show="
+      (show: boolean) => {
+        if (!show) emit('close')
+      }
+    "
   >
     <NCard
       :title="t('nav.settings')"
@@ -334,7 +337,9 @@ async function changePassword() {
               <NText strong>{{ t('settings.changePassword') }}</NText>
             </div>
           </template>
-          <NText :depth="3" class="mb-3 block text-xs">{{ t('settings.changePasswordHint') }}</NText>
+          <NText :depth="3" class="mb-3 block text-xs">{{
+            t('settings.changePasswordHint')
+          }}</NText>
 
           <div class="grid max-w-md gap-2">
             <NInput
@@ -360,7 +365,9 @@ async function changePassword() {
               autocomplete="new-password"
               :placeholder="t('settings.confirmPassword')"
             />
-            <NAlert v-if="pwError" type="error" :show-icon="false" class="mt-1">{{ pwError }}</NAlert>
+            <NAlert v-if="pwError" type="error" :show-icon="false" class="mt-1">{{
+              pwError
+            }}</NAlert>
             <div class="flex justify-end">
               <NButton
                 type="primary"
@@ -387,7 +394,12 @@ async function changePassword() {
           <div class="mb-4 grid gap-2">
             <div class="flex items-center gap-2">
               <NText :depth="3" class="w-20 shrink-0 text-xs">{{ t('backup.dataDir') }}</NText>
-              <NInput :value="paths?.dataDir ?? ''" readonly size="small" class="font-mono min-w-0 flex-1" />
+              <NInput
+                :value="paths?.dataDir ?? ''"
+                readonly
+                size="small"
+                class="font-mono min-w-0 flex-1"
+              />
             </div>
             <NText :depth="3" class="block text-xs">{{ t('backup.dataDirHint') }}</NText>
             <NText :depth="3" class="block text-xs">{{ t('backup.pickHint') }}</NText>
@@ -398,11 +410,20 @@ async function changePassword() {
               <NText strong class="mb-2 block text-sm">{{ t('backup.export') }}</NText>
               <div class="grid gap-2">
                 <div class="flex items-center gap-2">
-                  <NButton size="small" :disabled="backupBusy" class="shrink-0" @click="chooseExportPath">
+                  <NButton
+                    size="small"
+                    :disabled="backupBusy"
+                    class="shrink-0"
+                    @click="chooseExportPath"
+                  >
                     <template #icon><NIcon :component="FolderOpen" :size="14" /></template>
                     {{ t('backup.chooseExport') }}
                   </NButton>
-                  <div class="min-w-0 flex-1 truncate font-mono text-xs text-[var(--n-text-color-3,#999)]">{{ exportPath || t('backup.noLocation') }}</div>
+                  <div
+                    class="min-w-0 flex-1 truncate font-mono text-xs text-[var(--n-text-color-3,#999)]"
+                  >
+                    {{ exportPath || t('backup.noLocation') }}
+                  </div>
                 </div>
                 <NInput
                   v-model:value="exportPassword"
@@ -423,11 +444,20 @@ async function changePassword() {
               <NText strong class="mb-2 block text-sm">{{ t('backup.import') }}</NText>
               <div class="grid gap-2">
                 <div class="flex items-center gap-2">
-                  <NButton size="small" :disabled="backupBusy" class="shrink-0" @click="chooseImportPath">
+                  <NButton
+                    size="small"
+                    :disabled="backupBusy"
+                    class="shrink-0"
+                    @click="chooseImportPath"
+                  >
                     <template #icon><NIcon :component="FolderOpen" :size="14" /></template>
                     {{ t('backup.chooseImport') }}
                   </NButton>
-                  <div class="min-w-0 flex-1 truncate font-mono text-xs text-[var(--n-text-color-3,#999)]">{{ importPath || t('backup.noLocation') }}</div>
+                  <div
+                    class="min-w-0 flex-1 truncate font-mono text-xs text-[var(--n-text-color-3,#999)]"
+                  >
+                    {{ importPath || t('backup.noLocation') }}
+                  </div>
                 </div>
                 <NInput
                   v-model:value="importPassword"

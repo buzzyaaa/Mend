@@ -91,8 +91,13 @@ pub fn derive_kek(
     salt: &[u8],
     params: KdfParams,
 ) -> MendResult<Zeroizing<[u8; DEK_LEN]>> {
-    let argon_params = Params::new(params.memory_kib, params.iterations, params.parallelism, Some(DEK_LEN))
-        .map_err(|err| MendError::Crypto(format!("Argon2 参数非法: {err}")))?;
+    let argon_params = Params::new(
+        params.memory_kib,
+        params.iterations,
+        params.parallelism,
+        Some(DEK_LEN),
+    )
+    .map_err(|err| MendError::Crypto(format!("Argon2 参数非法: {err}")))?;
     let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, argon_params);
 
     let mut kek = Zeroizing::new([0u8; DEK_LEN]);

@@ -99,6 +99,6 @@ fn require_unlocked(state: &State<'_, VaultState>) -> MendResult<()> {
     if state.is_unlocked() {
         Ok(())
     } else {
-        Err(MendError::Vault("库未解锁".into()))
+        Err(MendError::Locked)
     }
 }

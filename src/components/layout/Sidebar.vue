@@ -1,24 +1,19 @@
 <script setup lang="ts">
 // 分类侧栏：固定桶（全部/未分类/回收站）+ 自定义分类，支持新增、重命名、删除。
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Plus, Pencil, Trash2, Inbox, Layers, Trash, Folder } from 'lucide-vue-next'
-import {
-  NButton,
-  NIcon,
-  NInput,
-  NModal,
-  NText,
-  NTooltip,
-  useDialog,
-} from 'naive-ui'
+import { NButton, NIcon, NInput, NModal, NText, NTooltip, useDialog } from 'naive-ui'
 import { useEntryStore, type Bucket } from '@/stores/entry'
+import { useVaultStore } from '@/stores/vault'
 import { useToast } from '@/composables/useToast'
+import { errorText } from '@/lib/errorMessage'
 import { OVERLAY_TARGET } from '@/lib/theme'
 import type { Category } from '@/types'
 
 const { t } = useI18n()
 const entryStore = useEntryStore()
+const vault = useVaultStore()
 const toast = useToast()
 const dialog = useDialog()
 
@@ -28,14 +23,27 @@ const formError = ref('')
 const busy = ref(false)
 const deleting = ref<Category | null>(null)
 
-onMounted(async () => {
+async function load() {
   try {
     await entryStore.refresh()
   } catch (err) {
-    // 未解锁或浏览器预览下静默，避免打断界面
+    // 未解锁或浏览器预览下静默，避免打断界面（err 只是错误消息，不含明文数据）
     console.warn('[sidebar] 加载数据失败', err)
   }
+}
+
+onMounted(() => {
+  if (vault.status.unlocked) void load()
 })
+
+// 锁定会清空 store 缓存；重新解锁时（无论组件是否重新挂载）都要把列表拉回来，
+// 否则「锁定 → 解锁」后主界面会是空列表。
+watch(
+  () => vault.status.unlocked,
+  (unlocked) => {
+    if (unlocked) void load()
+  },
+)
 
 function select(next: Bucket) {
   entryStore.selectBucket(next)
@@ -101,7 +109,8 @@ async function confirmDelete() {
 }
 
 function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
+  // 后端 MendError 为 { code, message } 结构，统一走 errorText 映射（docs/07 §5）。
+  return errorText(err, t)
 }
 
 /** 桶行的统一渲染数据，避免三段重复模板。 */
@@ -173,7 +182,9 @@ function bucketCount(key: (typeof fixedBuckets)[number]['key']): number {
             {{ cat.entryCount ?? 0 }}
           </NText>
         </NButton>
-        <div class="flex shrink-0 items-center pr-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        <div
+          class="flex shrink-0 items-center pr-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+        >
           <NTooltip :show-arrow="false">
             <template #trigger>
               <NButton
@@ -225,7 +236,11 @@ function bucketCount(key: (typeof fixedBuckets)[number]['key']): number {
       :title="editing?.mode === 'create' ? t('sidebar.new') : t('sidebar.rename')"
       style="width: min(420px, calc(100vw - 32px))"
       :bordered="false"
-      @update:show="(show: boolean) => { if (!show) editing = null }"
+      @update:show="
+        (show: boolean) => {
+          if (!show) editing = null
+        }
+      "
     >
       <NText :depth="3" class="mb-1 block text-xs">{{ t('sidebar.nameLabel') }}</NText>
       <NInput

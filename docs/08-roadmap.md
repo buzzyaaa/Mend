@@ -24,7 +24,7 @@
 
 - [x] 初始化前端工程（Vue + TS + Vite），配置目录结构（见 `03-architecture.md`）。
 - [x] 接入 TailwindCSS、基础主题令牌（浅色/暗色变量预留）；早期 `cn()` 工具与 shadcn-vue 原语已随 naive-ui 迁移移除。
-- [x] 接入 vue-i18n：`zh-CN`/`en` 词条骨架、顶部栏语言切换（软件名右侧）、偏好持久化。
+- [x] 接入 vue-i18n：`zh-CN`/`en` 词条骨架、语言切换入口（现为顶部标题栏右侧语言图标按钮，弹窗选择）、偏好持久化。
 - [x] 路由与页面骨架：解锁页占位、主界面左右布局占位、设置弹窗占位。
 - [x] Pinia store 骨架（vault / entry / preferences）。
 - [x] 前端构建脚本：`dev`、`build`（vue-tsc + vite）、`typecheck`。
@@ -77,7 +77,7 @@
 
 - [x] 应用内加密导出 `.mendbak` / 导入恢复（完整性校验、临时位置校验后替换）：`mend-core/src/backup.rs` + `commands/backup.rs`，覆盖恢复且旧库自动留底。
 - [x] 设置弹窗展示数据目录；文档说明手动拷贝库文件到 U 盘及恢复步骤（见 `06`）。
-- [x] Rust `sync/` trait 与 `WebdavConfig` 结构落地（`mend-core/src/sync.rs`，`DisabledSync` 占位）；设置弹窗留"未启用"占位；不发起真实请求。
+- [x] Rust `sync/` trait 与 `WebdavConfig` 结构落地（`mend-core/src/sync.rs`，`DisabledSync` 占位）；不发起真实请求。（设置弹窗的"未启用"占位后来随导航改版移除，见阶段 6）
 - [x] 备份格式版本号与认证标签（魔数 `MENDBK01` + KDF 参数 + XChaCha20-Poly1305 认证密文），为未来版本兼容留口。
 
 **验收**：导出备份 → 删除/清空 → 从备份恢复，条目与分类一致；手动拷贝库到另一目录/机器可恢复；代码中 WebDAV 仅有 trait/配置，无默认联网。
@@ -91,7 +91,8 @@
 - [x] 弱密码与重复密码提示：`src/lib/security.ts` 计算（少于 8 位或字符种类单一 = 弱；同一密码被多条共用 = 重复），列表卡片显示"弱/重"标记。
 - [x] 排序（最近更新 / 名称 / 收藏优先）与收藏标记。
 - [x] 备注全文检索：调用 `entry_list` 拉全量后在内存里按标题/账号/邮箱/手机/网址/备注匹配。
-- [x] 标签（多标签，2026-11-11）：迁移 v2 新增 `entries.tags`（JSON 明文列）；表单逗号分隔输入，卡片 chip 展示并可点击过滤。
+- [x] 标签（多标签，2026-11-11）：迁移 v2 新增 `entries.tags`（JSON 明文列）；表单逗号分隔输入，列表展开区以 chip 展示。
+  - ⚠️ 回归（2026-11-12）：列表改 `NDataTable` 时丢失了 chip 的点击过滤（`store.toggleTagFilter` 已无调用方），待修复；见下方"待办补记"。
 - [x] 修改主密码（2026-11-11）：`vault_change_password`；core 校验旧密码后用新 salt/KEK 重包裹同一 DEK，事务更新 `meta`，历史密文无需重加密。
 - [x] ESLint + Prettier（2026-11-11）：flat config（eslint-plugin-vue + typescript-eslint），脚本 `npm run lint` / `npm run format`。
 - [x] 导航与页面结构改造（2026-11-11 引入最左侧 `NavRail`；2026-11-12 改为顶部标题栏）：`NavRail` 已移除。语言切换、预设值、设置全部收进顶部标题栏右侧的图标按钮；主界面（`MainView`）保持左右两列（分类侧栏 + 条目列表）；未实现的 WebDAV 占位从设置弹窗移除。
@@ -109,6 +110,39 @@
   4. **设置 / 语言选择 / 预设值改为弹窗**——删除 `PresetsView` / `SettingsView` 两个路由页，迁为 `PresetsDialog` / `SettingsDialog` / `LanguageDialog`（开关在 `src/stores/ui.ts`），顶栏改为语言 / 预设值 / 设置 / 锁定四个图标按钮；路由只剩 `/main` 与 `/unlock`。同时修掉展开行从未生效的问题（`renderExpand` 必须挂在 `type: 'expand'` 的列上，不能当表格级 prop 传）。
 
 **验收**：浅/深两套主题下控件颜色一致、浮层继承主题、无原生控件与硬编码文案；预设下拉选中的是值而不是 ID；生成器长度可改。（2026-11-11 GUI 走查逐项通过，结论见 `local/DEVLOG.md`。2026-11-12 的窗口控制与右键菜单真机行为待 `npm run tauri dev` 复验。）
+
+## 待办补记（2026-11-12 盘点）
+
+MVP（阶段 0–6）与 CI/自动更新已完成，下面是盘点出的尚未完成项，按建议批次排序；明细与证据见本地私有 `local/BACKLOG.md`。
+
+**P0 · 安全与架构**（2026-11-12 批次已完成，随 0.3.1 发布）
+
+- [x] 锁定/自动锁定时清空前端缓存的明文（`entry`/`preset` store 增加 `reset()`，`vault.lock()` 成功后调用；列表组件同步清显隐/展开状态与编辑弹窗）。
+- [x] 错误码契约：`MendError` 序列化为 `{ code, message }`（`vault`/`db`/`crypto`/`not_found`/`locked`），前端 `src/lib/errorMessage.ts` 按 code 映射 `error.*` 词条；全部"库未解锁"守卫统一 `MendError::Locked`。
+- [x] `db::migrate()` 事务化（单事务 + `column_exists` 探测可重入，半迁移库可自愈）。
+- [x] `backup_import` 补 `state.is_unlocked()` 守卫（与导出口径一致）。
+- [x] 设置 `app.security.csp`（同源脚本/资源 + naive-ui 样式注入 + IPC/更新端点；**待真机冒烟**）。
+
+**功能回归与清理**
+
+- [x] 恢复标签 chip 点击过滤（工具条显示当前过滤标签 + 可清除；回收站不提供）。
+- [x] 条目表单的标签输入补字段标题。
+- [x] 清理无引用 i18n 词条（24 个删除，2 个随标签功能复活；两份 locale 键集对称校验通过）。
+
+**工程与 CI**
+
+- [x] CI 补 `npm run lint`、`prettier --check`（硬门禁）与 `cargo fmt --check`、`cargo clippy`（软门禁，core 稳定后收紧）。
+- [x] 前端单测（vitest）：`markdown.ts` XSS 用例 25 项 + `security.ts` 判定 11 项。
+- [x] `vite build` 拆 chunk（vendor-naive-ui 400 kB / vendor-vue 203 kB / vendor-tauri 28 kB，主包警告消除）。
+- [x] 补 `.vscode/extensions.json` 与 `launch.json`；补 `CHANGELOG.md`。
+- [x] `entry_get` 处置：保留为预留命令，命令与前端封装均已标注。
+
+**交付与文档**
+
+- [x] 版本号三处同步 0.3.1（`scripts/release.ps1` 完成，**tag 与 push 待用户确认**）。
+- [x] 文档漂移回写：`01`/`02`/`03`/`04`/`06`/`07`/`09` 已与实现一致。
+- [ ] 替换占位图标（`src-tauri/icons/source.png` 为灰底白 M 占位图；需设计稿）。
+- [ ] 真机验证：窗口控制与标题栏右键菜单、CSP 冒烟、自动更新端到端（装旧版 → 发新版 → 提示 → 安装 → 重启）、0.3.0 后的新 UI 走查。
 
 ## 后续路线（非 MVP，按需排期）
 

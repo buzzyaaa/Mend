@@ -53,6 +53,7 @@ export const categoryApi = {
 export const entryApi = {
   list: (categoryId?: string | null, keyword?: string | null) =>
     invoke<EntryView[]>('entry_list', { categoryId: categoryId ?? null, keyword: keyword ?? null }),
+  /** 预留：后端 entry_get 命令已实现，列表当前走 entry_list 全量拉取。 */
   get: (id: string) => invoke<EntryView>('entry_get', { id }),
   create: (input: unknown) => invoke<EntryView>('entry_create', { input }),
   update: (id: string, input: unknown) => invoke<EntryView>('entry_update', { id, input }),

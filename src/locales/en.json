@@ -1,7 +1,6 @@
 {
   "app": {
-    "name": "Mend",
-    "tagline": "Mend the gaps of your memory"
+    "name": "Mend"
   },
   "titlebar": {
     "minimize": "Minimize",
@@ -9,14 +8,11 @@
     "close": "Close"
   },
   "header": {
-    "settings": "Settings",
     "language": "Language",
     "langZh": "简体中文",
     "langEn": "English",
-    "presets": "Presets",
     "languageHint": "Applied immediately, then the window closes",
-    "lock": "Lock",
-    "lockHint": "Lock and return to the unlock screen"
+    "lock": "Lock"
   },
   "winMenu": {
     "restore": "Restore",
@@ -31,15 +27,10 @@
     "all": "All",
     "uncategorized": "Uncategorized",
     "trash": "Trash",
-    "search": "Search",
     "categories": "Categories",
     "addCategory": "Add category",
-    "home": "Entries",
     "presets": "Presets",
-    "settings": "Settings",
-    "language": "Language",
-    "languageHint": "Switch to 中文",
-    "lock": "Lock"
+    "settings": "Settings"
   },
   "entry": {
     "title": "Title",
@@ -50,7 +41,6 @@
     "url": "URL",
     "notes": "Notes",
     "copy": "Copy",
-    "copied": "Copied",
     "edit": "Edit",
     "delete": "Delete",
     "empty": "No entries yet. Use “Add entry” to create your first password.",
@@ -70,9 +60,7 @@
     "sortUpdated": "Recently updated",
     "sortTitle": "By name",
     "sortFavorite": "Favorites first",
-    "weakPassword": "Weak password: under 8 characters or too few character classes",
     "weakShort": "weak",
-    "duplicatePassword": "Same password as another entry",
     "dupShort": "dup",
     "titleRequired": "Title is required",
     "noNotes": "(no notes)",
@@ -95,11 +83,9 @@
     "nameRequired": "Category name is required"
   },
   "unlock": {
-    "title": "Unlock Mend",
     "subtitle": "Enter your master password to access your vault",
     "password": "Master password",
     "unlock": "Unlock",
-    "setupTitle": "Create master password",
     "setupSubtitle": "First time here? Set a master password. It cannot be recovered if lost.",
     "confirm": "Confirm master password",
     "create": "Create and enter",
@@ -119,7 +105,6 @@
     }
   },
   "generator": {
-    "title": "Password generator",
     "length": "Length",
     "uppercase": "A-Z",
     "lowercase": "a-z",
@@ -142,7 +127,6 @@
     "labelPlaceholder": "e.g. forum default",
     "value": "Value",
     "choose": "Pick a preset",
-    "save": "Save preset",
     "deleteConfirm": "Delete this preset?",
     "types": {
       "username": "Username",
@@ -151,14 +135,8 @@
       "password": "Common password"
     }
   },
-  "notes": {
-    "edit": "Edit notes",
-    "preview": "Preview",
-    "write": "Write"
-  },
   "trash": {
     "empty": "Trash is empty",
-    "deletedAt": "deleted on",
     "restore": "Restore",
     "purge": "Delete forever",
     "purgeConfirm": "Permanently delete \"{title}\"? This cannot be undone.",
@@ -175,12 +153,10 @@
     "import": "Restore backup",
     "dataDir": "Data directory",
     "dataDirHint": "Manual backup: lock or quit first, then copy the vault file to a USB drive; unlock with the same master password on another machine.",
-    "filePath": "Backup file path",
     "pickHint": "Click “Choose save location / Choose backup file” to open the system file dialog — pick from the OS dialog, no manual path typing.",
     "chooseExport": "Choose save location",
     "chooseImport": "Choose backup file",
     "noLocation": "Not selected",
-    "masterPassword": "Master password",
     "passwordPlaceholder": "Verify identity for export/restore",
     "exportAction": "Export",
     "importAction": "Restore & overwrite",
@@ -234,6 +210,13 @@
     "failed": "Action failed: {message}",
     "autoLocked": "Vault locked after inactivity"
   },
+  "error": {
+    "locked": "Vault is locked",
+    "crypto": "Decryption failed — check the master password or backup file.",
+    "db": "Database error.",
+    "notFound": "Not found.",
+    "vault": "Operation failed."
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",
@@ -241,7 +224,6 @@
     "delete": "Delete",
     "rename": "Rename",
     "close": "Close",
-    "deleteConfirm": "Delete this entry?",
     "actions": "Actions"
   }
 }

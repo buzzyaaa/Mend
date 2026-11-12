@@ -75,16 +75,15 @@ pub fn unlock(conn: &Connection, master_password: &str) -> MendResult<VaultKeys>
         return Err(MendError::Vault("库尚未初始化".into()));
     }
 
-    let salt_b64 = db::meta_get(conn, META_SALT)?
-        .ok_or_else(|| MendError::Db("缺少 salt".into()))?;
+    let salt_b64 =
+        db::meta_get(conn, META_SALT)?.ok_or_else(|| MendError::Db("缺少 salt".into()))?;
     let salt = B64
         .decode(salt_b64)
         .map_err(|_| MendError::Db("salt 数据损坏".into()))?;
     let params = db::meta_get(conn, META_KDF)?
         .ok_or_else(|| MendError::Db("缺少 KDF 参数".into()))
         .and_then(|value| KdfParams::from_meta_value(&value))?;
-    let wrapped = db::meta_get(conn, META_DEK)?
-        .ok_or_else(|| MendError::Db("缺少 DEK".into()))?;
+    let wrapped = db::meta_get(conn, META_DEK)?.ok_or_else(|| MendError::Db("缺少 DEK".into()))?;
 
     let kek = crypto::derive_kek(master_password, &salt, params)?;
     let dek = crypto::unwrap_dek(&kek, &wrapped)?;
@@ -120,16 +119,18 @@ pub fn change_password(
     db::meta_set(&tx, META_SALT, &B64.encode(new_salt))?;
     db::meta_set(&tx, META_KDF, &new_params.to_meta_value())?;
     db::meta_set(&tx, META_DEK, &wrapped)?;
-    tx.commit()
-        .map_err(|err| MendError::Db(err.to_string()))?;
+    tx.commit().map_err(|err| MendError::Db(err.to_string()))?;
 
-    Ok(VaultKeys { dek, kdf: new_params })
+    Ok(VaultKeys {
+        dek,
+        kdf: new_params,
+    })
 }
 
 /// 读取库内 salt 与 KDF 参数：导出备份时写进 `.mendbak` 头部，导入端据此派生密钥。
 pub fn read_salt_and_kdf(conn: &Connection) -> MendResult<([u8; crypto::SALT_LEN], KdfParams)> {
-    let salt_b64 = db::meta_get(conn, META_SALT)?
-        .ok_or_else(|| MendError::Db("缺少 salt".into()))?;
+    let salt_b64 =
+        db::meta_get(conn, META_SALT)?.ok_or_else(|| MendError::Db("缺少 salt".into()))?;
     let raw = B64
         .decode(salt_b64)
         .map_err(|_| MendError::Db("salt 数据损坏".into()))?;
@@ -150,13 +151,17 @@ pub fn read_salt_and_kdf(conn: &Connection) -> MendResult<([u8; crypto::SALT_LEN
 pub fn derive_kek_and_unwrap(
     conn: &Connection,
     master_password: &str,
-) -> MendResult<(Zeroizing<[u8; DEK_LEN]>, Zeroizing<[u8; DEK_LEN]>, [u8; crypto::SALT_LEN], KdfParams)> {
+) -> MendResult<(
+    Zeroizing<[u8; DEK_LEN]>,
+    Zeroizing<[u8; DEK_LEN]>,
+    [u8; crypto::SALT_LEN],
+    KdfParams,
+)> {
     if master_password.is_empty() {
         return Err(MendError::Vault("主密码不能为空".into()));
     }
     let (salt, params) = read_salt_and_kdf(conn)?;
-    let wrapped = db::meta_get(conn, META_DEK)?
-        .ok_or_else(|| MendError::Db("缺少 DEK".into()))?;
+    let wrapped = db::meta_get(conn, META_DEK)?.ok_or_else(|| MendError::Db("缺少 DEK".into()))?;
     let kek = crypto::derive_kek(master_password, &salt, params)?;
     let dek = crypto::unwrap_dek(&kek, &wrapped)?;
     Ok((kek, dek, salt, params))
@@ -170,7 +175,8 @@ mod tests {
     use super::*;
 
     fn temp_db(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("mend-core-vault-{}-{}", name, std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("mend-core-vault-{}-{}", name, std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("创建临时目录");
         dir.join(db::DB_FILE_NAME)
@@ -184,7 +190,11 @@ mod tests {
         let created = setup(&conn, "correct horse battery staple").expect("初始化");
         let opened = unlock(&conn, "correct horse battery staple").expect("解锁");
 
-        assert_eq!(created.dek_bytes(), opened.dek_bytes(), "同一主密码应解出同一 DEK");
+        assert_eq!(
+            created.dek_bytes(),
+            opened.dek_bytes(),
+            "同一主密码应解出同一 DEK"
+        );
         assert!(db::is_initialized(&conn).expect("查询初始化状态"));
 
         let _ = fs::remove_dir_all(path.parent().expect("父目录"));
@@ -196,7 +206,10 @@ mod tests {
         let conn = db::open_and_migrate(&path).expect("建库");
         setup(&conn, "right-password").expect("初始化");
 
-        assert!(unlock(&conn, "wrong-password").is_err(), "错误主密码必须失败");
+        assert!(
+            unlock(&conn, "wrong-password").is_err(),
+            "错误主密码必须失败"
+        );
 
         let _ = fs::remove_dir_all(path.parent().expect("父目录"));
     }
@@ -237,7 +250,8 @@ mod tests {
         let conn = db::open_and_migrate(&path).expect("建库");
 
         let original = setup(&conn, "old-password-1234").expect("初始化");
-        let changed = change_password(&conn, "old-password-1234", "new-password-5678").expect("改密");
+        let changed =
+            change_password(&conn, "old-password-1234", "new-password-5678").expect("改密");
 
         assert_eq!(
             original.dek_bytes(),
@@ -246,7 +260,10 @@ mod tests {
         );
         let reopened = unlock(&conn, "new-password-5678").expect("新密码解锁");
         assert_eq!(original.dek_bytes(), reopened.dek_bytes());
-        assert!(unlock(&conn, "old-password-1234").is_err(), "旧密码必须失效");
+        assert!(
+            unlock(&conn, "old-password-1234").is_err(),
+            "旧密码必须失效"
+        );
 
         let _ = fs::remove_dir_all(path.parent().expect("父目录"));
     }
@@ -266,7 +283,10 @@ mod tests {
         let path = temp_db("changepw-short");
         let conn = db::open_and_migrate(&path).expect("建库");
         setup(&conn, "old-password-1234").expect("初始化");
-        assert!(change_password(&conn, "old-password-1234", "abc").is_err(), "新密码 3 位应被拒绝");
+        assert!(
+            change_password(&conn, "old-password-1234", "abc").is_err(),
+            "新密码 3 位应被拒绝"
+        );
 
         let _ = fs::remove_dir_all(path.parent().expect("父目录"));
     }
@@ -282,7 +302,8 @@ mod tests {
 
         let raw = fs::read(&path).expect("读库文件");
         assert!(
-            !raw.windows(password.len()).any(|w| w == password.as_bytes()),
+            !raw.windows(password.len())
+                .any(|w| w == password.as_bytes()),
             "库文件中不应出现主密码明文"
         );
 

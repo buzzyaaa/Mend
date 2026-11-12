@@ -45,5 +45,10 @@ export const usePresetStore = defineStore('preset', () => {
     await refresh()
   }
 
-  return { presets, grouped, loading, refresh, create, update, remove, byType }
+  /** 锁定清空：预设值（含常用密码明文）不得留在内存。 */
+  function reset() {
+    presets.value = []
+  }
+
+  return { presets, grouped, loading, refresh, create, update, remove, byType, reset }
 })

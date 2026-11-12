@@ -34,7 +34,11 @@ function choose(locale: Locale) {
     :show="open"
     :to="OVERLAY_TARGET"
     :mask-closable="false"
-    @update:show="(show: boolean) => { if (!show) emit('close') }"
+    @update:show="
+      (show: boolean) => {
+        if (!show) emit('close')
+      }
+    "
   >
     <NCard
       :title="t('header.language')"

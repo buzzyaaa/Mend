@@ -38,7 +38,7 @@
 
 | 位置 | 使用的 naive-ui 能力 |
 | --- | --- |
-| `src/App.vue` | `NConfigProvider` + `NGlobalStyle` + `NMessageProvider` + `NDialogProvider` + `TitleBar`；全局 `contextmenu` 监听（抑制默认右键菜单，标题栏弹出原生菜单）；挂载设置 / 预设值 / 语言三个弹窗 |
+| `src/App.vue` | `NConfigProvider` + `NGlobalStyle` + `NMessageProvider` + `NDialogProvider` + `TitleBar`；全局 `contextmenu` 监听（抑制默认右键菜单，标题栏弹出原生菜单）；挂载设置 / 预设值 / 语言三个弹窗与 `UpdateChecker`（启动按间隔检查更新，无可见 UI） |
 | `src/components/layout/TitleBar.vue` | 自定义标题栏：`@mousedown` 拖拽 + 窗口控制（`@tauri-apps/api/window`，`src/lib/window.ts`）+ 语言 / 预设值 / 设置 / 锁定四个图标按钮（弹窗开关走 `src/stores/ui.ts`） |
 | `src/lib/titlebarMenu.ts` | 标题栏右键菜单：`@tauri-apps/api/menu` 构建 Windows 风格菜单并 `popup` 到光标处；每次右键重建，保证语言切换后文案最新 |
 | `src/stores/ui.ts` | 顶栏弹窗开关状态（设置 / 预设值 / 语言），三个弹窗组件都挂在 `App.vue` |
@@ -53,7 +53,7 @@
 
 ## 4. 当前前端依赖
 
-`vue`、`vue-router`、`pinia`、`vue-i18n`、`naive-ui`、`lucide-vue-next`、`@tauri-apps/plugin-dialog`。
+`vue`、`vue-router`、`pinia`、`vue-i18n`、`naive-ui`、`lucide-vue-next`、`@tauri-apps/plugin-dialog`、`@tauri-apps/plugin-updater`、`@tauri-apps/plugin-process`。
 开发期：`tailwindcss` / `postcss` / `autoprefixer`、`vite`、`typescript` / `vue-tsc`、`eslint` / `prettier`。
 Tailwind 只作为布局工具保留；`src/lib/utils.ts`（`cn()`）与 `src/components/ui/ToastHost.vue` 已删除。
 

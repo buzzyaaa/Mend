@@ -21,7 +21,9 @@ export function useUpdateChecker() {
   const checking = ref(false)
 
   function isDue(): boolean {
-    return Date.now() - preferences.lastUpdateCheckTs >= preferences.updateCheckIntervalDays * DAY_MS
+    return (
+      Date.now() - preferences.lastUpdateCheckTs >= preferences.updateCheckIntervalDays * DAY_MS
+    )
   }
 
   /**
@@ -45,7 +47,9 @@ export function useUpdateChecker() {
     } catch (err) {
       // 自动检查失败静默处理；手动失败给明确反馈
       if (manual) {
-        toast.error(t('update.checkFailed', { message: err instanceof Error ? err.message : String(err) }))
+        toast.error(
+          t('update.checkFailed', { message: err instanceof Error ? err.message : String(err) }),
+        )
       }
     } finally {
       checking.value = false
@@ -65,7 +69,11 @@ export function useUpdateChecker() {
           await update.install()
           // 安装后会自动退出并重启，不会执行到这里
         } catch (err) {
-          toast.error(t('update.installFailed', { message: err instanceof Error ? err.message : String(err) }))
+          toast.error(
+            t('update.installFailed', {
+              message: err instanceof Error ? err.message : String(err),
+            }),
+          )
         }
       },
     })

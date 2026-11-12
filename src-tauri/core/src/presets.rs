@@ -43,7 +43,9 @@ fn validate(input: &PresetInput) -> MendResult<(String, String, String)> {
         return Err(MendError::Vault("预设名称不能为空".into()));
     }
     if label.chars().count() > LABEL_MAX {
-        return Err(MendError::Vault(format!("预设名称过长（上限 {LABEL_MAX} 字）")));
+        return Err(MendError::Vault(format!(
+            "预设名称过长（上限 {LABEL_MAX} 字）"
+        )));
     }
     let value = input.value.trim();
     if value.is_empty() {
@@ -130,7 +132,10 @@ mod tests {
     fn preset_rejects_bad_input() {
         let mut bad = input();
         bad.field_type = "creditcard".into();
-        assert!(encrypt_input(&DEK, "p2", &bad, 1, 1).is_err(), "未知类型拒绝");
+        assert!(
+            encrypt_input(&DEK, "p2", &bad, 1, 1).is_err(),
+            "未知类型拒绝"
+        );
 
         let mut bad = input();
         bad.label = "  ".into();
