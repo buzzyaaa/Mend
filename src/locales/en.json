@@ -61,6 +61,7 @@
     "hide": "Hide",
     "openUrl": "Open",
     "deleteConfirm": "Delete this entry? It can be restored from the trash.",
+    "archiveDeleteConfirm": "Delete '{title}'? It will move to the trash and can be restored.",
     "archive": "Archive",
     "archiveConfirm": "Archive \"{title}\"?",
     "archiveConfirmContent": "\"{title}\" will leave the main list; you can restore it from the archive.",

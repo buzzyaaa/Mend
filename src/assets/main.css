@@ -217,3 +217,21 @@
   color: hsl(var(--text-1));
   font-weight: 600;
 }
+
+/* SortableJS 拖拽排序视觉：语义色走 CSS 变量，深浅色自动适配。
+   注意 naive-ui 的 td 自带不透明背景，tr 上的背景会被遮住，
+   故 chosen 态需同时作用于 td 才能看到高亮。 */
+.mend-drag-ghost {
+  opacity: 0.4;
+}
+.mend-drag-chosen,
+.mend-drag-chosen td {
+  background: hsl(var(--accent));
+}
+.mend-drag-dragging {
+  opacity: 0.5;
+}
+/* 拖拽启用时给数据行一个可拖拽的指针提示（手柄列另有 cursor-grab）。 */
+.mend-drag-row {
+  cursor: move;
+}

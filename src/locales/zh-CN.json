@@ -61,6 +61,7 @@
     "hide": "隐藏",
     "openUrl": "打开",
     "deleteConfirm": "删除该条目？删除后可在回收站恢复。",
+    "archiveDeleteConfirm": "确定删除「{title}」？删除后移入回收站，可恢复。",
     "archive": "归档",
     "archiveConfirm": "确定归档「{title}」？",
     "archiveConfirmContent": "「{title}」将移出主列表，可在归档桶中取消归档恢复。",

@@ -502,11 +502,12 @@ pub fn list_archived_entries(conn: &Connection) -> MendResult<Vec<EntryRowEnc>> 
 }
 
 /// 软删除：只打 `deleted_at`，密文原样保留，可在回收站恢复。
-/// 归档条目（`archived = 1`）不可删除，避免归档状态与回收站状态互相污染。
+/// 允许删除任意未删除条目，包括已归档条目；归档条目软删后进入回收站，
+/// 恢复（`deleted_at` 置 NULL）后仍保持归档态，归档与回收站是互相正交的软状态。
 pub fn delete_entry(conn: &Connection, id: &str) -> MendResult<()> {
     let changed = conn
         .execute(
-            "UPDATE entries SET deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL AND archived = 0",
+            "UPDATE entries SET deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL",
             params![id, now_ms()],
         )
         .map_err(db_err)?;
@@ -1007,8 +1008,8 @@ mod tests {
         assert!(!rows[0].archived, "旧条目升级后应为未归档");
     }
 
-    /// 归档往返与隔离：归档后不出现在主列表、只出现在归档列表、不可删除（不进回收站）；
-    /// 重复归档被守卫拒绝；取消归档后回到主列表。
+    /// 归档往返与隔离：归档后不出现在主列表、只出现在归档列表；归档条目可软删除
+    /// （软删后进回收站，恢复后仍保持归档态）；重复归档被守卫拒绝；取消归档后回到主列表。
     #[test]
     fn archive_unarchive_roundtrip_and_isolation() {
         let conn = mem_db();
@@ -1025,9 +1026,21 @@ mod tests {
         assert_eq!(archived[0].id, "e1");
         assert!(archived[0].archived);
 
-        // 归档条目不可删除：不会进入回收站，回收站为空
-        assert!(delete_entry(&conn, "e1").is_err());
+        // 归档条目可软删除：软删后进入回收站，归档列表清空
+        delete_entry(&conn, "e1").unwrap();
+        let trashed = list_trashed_entries(&conn).unwrap();
+        assert_eq!(trashed.len(), 1);
+        assert_eq!(trashed[0].id, "e1");
+        assert!(trashed[0].deleted_at.is_some());
+        assert!(list_archived_entries(&conn).unwrap().is_empty());
+
+        // 恢复后回到归档态，不回到主列表
+        restore_entry(&conn, "e1").unwrap();
         assert!(list_trashed_entries(&conn).unwrap().is_empty());
+        let archived = list_archived_entries(&conn).unwrap();
+        assert_eq!(archived.len(), 1);
+        assert_eq!(archived[0].id, "e1");
+        assert_eq!(list_entries(&conn, None, None).unwrap().len(), 1);
 
         // 重复归档被 `archived = 0` 守卫拒绝
         assert!(archive_entry(&conn, "e1").is_err());

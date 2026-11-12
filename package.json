@@ -1,6 +1,6 @@
 {
   "name": "mend",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": true,
   "type": "module",
   "description": "Local offline encrypted password manager (Tauri + Vue 3 + TypeScript)",
@@ -16,12 +16,14 @@
   },
   "dependencies": {
     "@tauri-apps/plugin-dialog": "^2.8.4",
+    "@tauri-apps/plugin-opener": "^2.7.3",
     "@tauri-apps/plugin-process": "^2.4.0",
     "@tauri-apps/plugin-updater": "^2.14.1",
     "@vicons/material": "^0.13.0",
     "lucide-vue-next": "^0.577.0",
     "naive-ui": "^2.45.3",
     "pinia": "^2.3.0",
+    "sortablejs": "^1.15.7",
     "vue": "^3.5.13",
     "vue-i18n": "^10.0.5",
     "vue-router": "^4.5.0"
@@ -29,6 +31,7 @@
   "devDependencies": {
     "@tauri-apps/api": "^2.1.1",
     "@tauri-apps/cli": "^2.1.0",
+    "@types/sortablejs": "^1.15.9",
     "@vitejs/plugin-vue": "^5.2.1",
     "@vue/eslint-config-typescript": "^14.9.0",
     "autoprefixer": "^10.4.20",

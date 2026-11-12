@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // 条目列表（Data Table 版）：搜索 / 排序 / 备注缩略 + 展开看完整 Markdown / 随时编辑。
-import { computed, h, ref, watch } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import Sortable from 'sortablejs'
 import {
   Archive,
   ArchiveRestore,
@@ -37,6 +38,7 @@ import { useClipboard } from '@/composables/useClipboard'
 import { useToast } from '@/composables/useToast'
 import { markdownSummary, renderMarkdown } from '@/lib/markdown'
 import { errorText } from '@/lib/errorMessage'
+import { isTauri } from '@/lib/ipc'
 import { OVERLAY_TARGET } from '@/lib/theme'
 import { categoryTint, resolveCategoryIcon } from '@/lib/categoryIcons'
 import EntryDialog from '@/components/entry/EntryDialog.vue'
@@ -57,17 +59,15 @@ const notesOpen = ref(false)
 const notesEntry = ref<EntryView | null>(null)
 const revealedPasswordIds = ref<Set<string>>(new Set())
 const expandedKeys = ref<string[]>([])
+/** 表格根节点：SortableJS 需要拿到 naive-ui 内部真实渲染的 `<tbody>`，故包一层 ref。 */
+const tableWrapRef = ref<HTMLElement | null>(null)
 
-// —— 手动排序拖拽（HTML5 原生 DnD，行由 naive-ui 渲染，故经 row-props 注入事件）——
+// —— 手动排序拖拽（SortableJS，直接操作 naive-ui 渲染出的真实 `<tbody>`）——
 // 仅「手动排序」且非回收站 / 星标 / 归档视图时启用；拖拽顺序是后端 `sort_order` 的内存镜像。
 const dragEnabled = computed(
   () =>
     store.sortBy === 'manual' && !store.isTrashView && !store.isArchiveView && !store.isStarredView,
 )
-const draggingId = ref<string | null>(null)
-const dropTargetId = ref<string | null>(null)
-/** 行/手柄共用的动效类：150–250ms ease-out；全局已按 prefers-reduced-motion 降速。 */
-const DRAG_TRANSITION = 'transition-colors transition-opacity duration-200 ease-out'
 
 // 锁定（手动 / 空闲自动）后清掉本地明文残留：已显示密码的条目集合与展开行。
 // store 侧的 entries / trash / presets 由 vault.lock() 统一 reset。
@@ -151,11 +151,19 @@ function summary(text: string): string {
   return markdownSummary(text, 120)
 }
 
-function openUrl(url: string) {
+async function openUrl(url: string) {
+  if (!url) return
   // 无 scheme 的网址（如 example.com）直接打开会被解析成相对应用自身 origin 的路径，
   // 统一补 https://；与展开区 ExternalLink 按钮共用同一打开机制。
-  const target = /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`
-  window.open(target, '_blank', 'noopener,noreferrer')
+  const normalized = /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`
+  if (isTauri()) {
+    // Tauri 生产环境经 opener 插件唤起系统浏览器（跨平台，不受 WebView 限制）。
+    const { openUrl } = await import('@tauri-apps/plugin-opener')
+    await openUrl(normalized)
+  } else {
+    // 浏览器预览环境无 opener 插件，回退原生 window.open。
+    window.open(normalized, '_blank', 'noopener,noreferrer')
+  }
 }
 
 function issueOf(entry: EntryView) {
@@ -179,89 +187,59 @@ async function toggleStar(entry: EntryView) {
   }
 }
 
-// —— 拖拽排序（原生 HTML5 DnD；naive-ui 行由其内部渲染，故经 row-props 注入事件）——
+// —— 拖拽排序（SortableJS）：直接绑定 naive-ui 渲染出的真实 `<tbody>`，绕开 rowProps 事件转发不可靠问题 ——
 
-/** 当前桶渲染顺序的 id 列表（与 `store.visibleEntries` 一一对应）。 */
-function visibleIds(): string[] {
-  return store.visibleEntries.map((row) => row.id)
-}
-
-function onDragStart(event: DragEvent, row: EntryView) {
-  if (!dragEnabled.value) {
-    event.preventDefault()
-    return
-  }
-  draggingId.value = row.id
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move'
-    // Chromium WebView 需 setData 才会显示可拖拽光标
-    event.dataTransfer.setData('text/plain', row.id)
-  }
-}
-
-/** 悬停即交换：把拖拽行移动到目标行位置，实时反映在列表与内存顺序里。 */
-function onDragOver(event: DragEvent, target: EntryView) {
-  if (!dragEnabled.value || !draggingId.value) return
-  event.preventDefault()
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
-  dropTargetId.value = target.id
-  if (draggingId.value === target.id) return
-  const ids = visibleIds()
-  const from = ids.indexOf(draggingId.value)
-  const to = ids.indexOf(target.id)
-  if (from < 0 || to < 0) return
-  const [moved] = ids.splice(from, 1)
-  ids.splice(to, 0, moved)
-  store.setManualOrder(ids)
-}
-
-/** 落库：把内存里的最终顺序写回后端 `sort_order`（单事务），并复位拖拽状态。 */
-let finalizing = false
-async function finalizeDrag() {
-  if (finalizing) return
-  finalizing = true
-  try {
-    const ids = visibleIds()
-    await store.reorder(ids)
-    toast.success(t('entry.reorderSaved'))
-  } catch (err) {
-    toast.error(t('toast.failed', { message: messageOf(err) }))
-  } finally {
-    finalizing = false
-    draggingId.value = null
-    dropTargetId.value = null
-  }
-}
-
-function onDrop(event: DragEvent) {
-  if (!dragEnabled.value || !draggingId.value) return
-  event.preventDefault()
-  void finalizeDrag()
-}
-
-/** 松手必然触发：即使落在行外的空白处（没有 onDrop）也按最终顺序落库。 */
-function onDragEnd() {
-  if (draggingId.value) void finalizeDrag()
-}
-
-/** naive-ui row-props：仅手动排序时给 <tr> 注入拖拽事件与高亮/降透类。 */
+/**
+ * naive-ui row-props：**始终**给 <tr> 打 `data-id`，Sortable 据此把 DOM 行映射回条目 id；
+ * 拖拽启用时附加行高亮类（拖拽中的视觉由 Sortable 的 ghost/chosen/drag 类负责）。
+ */
 function rowProps(row: EntryView) {
-  if (!dragEnabled.value) return {}
-  const dragging = draggingId.value === row.id
-  const isTarget = dropTargetId.value === row.id && !dragging
   return {
-    class: [
-      dragging ? 'opacity-50' : '',
-      isTarget ? 'bg-primary/10 ring-1 ring-primary' : '',
-      DRAG_TRANSITION,
-    ]
-      .filter(Boolean)
-      .join(' '),
-    onDragover: (event: DragEvent) => onDragOver(event, row),
-    onDrop: (event: DragEvent) => onDrop(event),
-    onDragend: onDragEnd,
+    'data-id': row.id,
+    ...(dragEnabled.value ? { class: 'mend-drag-row' } : {}),
   }
 }
+
+let sortableInstance: Sortable | null = null
+
+function setupSortable() {
+  if (!dragEnabled.value) return
+  const tbody = tableWrapRef.value?.querySelector('tbody')
+  if (!tbody || sortableInstance) return
+  sortableInstance = Sortable.create(tbody, {
+    handle: '.drag-handle',
+    animation: 200,
+    ghostClass: 'mend-drag-ghost',
+    chosenClass: 'mend-drag-chosen',
+    dragClass: 'mend-drag-dragging',
+    onEnd: () => {
+      const ids = Array.from(tbody!.querySelectorAll('tr[data-id]'))
+        .map((tr) => tr.getAttribute('data-id'))
+        .filter(Boolean) as string[]
+      if (ids.length) {
+        store
+          .reorder(ids)
+          .then(() => toast.success(t('entry.reorderSaved')))
+          .catch((err: unknown) => {
+            toast.error(t('toast.failed', { message: messageOf(err) }))
+          })
+      }
+    },
+  })
+}
+
+function destroySortable() {
+  sortableInstance?.destroy()
+  sortableInstance = null
+}
+
+onMounted(() => nextTick(setupSortable))
+onBeforeUnmount(destroySortable)
+
+watch(dragEnabled, (enabled) => {
+  if (enabled) nextTick(setupSortable)
+  else destroySortable()
+})
 
 // —— 展开行（完整 Markdown 备注 + 字段 + 标签 + 编辑）——
 
@@ -459,16 +437,14 @@ const columns = computed<DataTableColumns<EntryView>>(() => {
             key: '__drag',
             width: dragHandleWidth,
             className: 'text-center',
-            render: (row: EntryView) =>
+            render: () =>
               h(
                 'span',
                 {
                   class:
-                    'inline-flex cursor-grab items-center justify-center text-muted-foreground transition-colors duration-200 ease-out hover:text-foreground active:cursor-grabbing',
-                  draggable: true,
+                    'drag-handle inline-flex cursor-grab items-center justify-center text-muted-foreground transition-colors duration-200 ease-out hover:text-foreground active:cursor-grabbing',
                   title: t('entry.dragHint'),
                   'aria-label': t('entry.dragHint'),
-                  onDragstart: (event: DragEvent) => onDragStart(event, row),
                 },
                 [h(NIcon, { component: GripVertical, size: 14 })],
               ),
@@ -670,10 +646,10 @@ const columns = computed<DataTableColumns<EntryView>>(() => {
     {
       title: t('common.actions'),
       key: '__actions',
-      width: 112,
+      minWidth: 128,
       render: (row) => {
         if (store.isTrashView) {
-          return h('div', { class: 'flex gap-1' }, [
+          return h('div', { class: 'flex items-center gap-1 whitespace-nowrap' }, [
             h(
               NButton,
               {
@@ -702,11 +678,14 @@ const columns = computed<DataTableColumns<EntryView>>(() => {
           ])
         }
         if (store.isArchiveView) {
-          // 归档视图只读：仅提供「取消归档」，不提供编辑 / 删除（与回收站口径一致）。
-          return iconBtn(ArchiveRestore, t('entry.unarchive'), () => unarchiveEntry(row))
+          // 归档视图：提供「取消归档」与「删除」（删除走二次确认，软删进回收站可恢复）。
+          return h('div', { class: 'flex items-center gap-1 whitespace-nowrap' }, [
+            iconBtn(ArchiveRestore, t('entry.unarchive'), () => unarchiveEntry(row)),
+            iconBtn(Trash2, t('common.delete'), () => confirmDeleteArchived(row)),
+          ])
         }
         // 普通视图：编辑 / 归档 / 删除。归档与删除均走二次确认。
-        return h('div', { class: 'flex gap-1' }, [
+        return h('div', { class: 'flex items-center gap-1 whitespace-nowrap' }, [
           iconBtn(Pencil, t('entry.edit'), () => openEdit(row)),
           iconBtn(Archive, t('entry.archive'), () => archiveEntry(row)),
           iconBtn(Trash2, t('common.delete'), () => confirmDelete(row)),
@@ -816,6 +795,24 @@ function confirmDelete(entry: EntryView) {
     },
   })
 }
+
+/** 归档视图删除二次确认：软删除进回收站，可恢复（后端已移除归档守卫）。 */
+function confirmDeleteArchived(entry: EntryView) {
+  dialog.warning({
+    title: t('common.delete'),
+    content: t('entry.archiveDeleteConfirm', { title: entry.title }),
+    positiveText: t('common.delete'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: async () => {
+      try {
+        await store.deleteEntry(entry.id)
+        toast.success(t('toast.deleted'))
+      } catch (err) {
+        toast.error(t('toast.failed', { message: messageOf(err) }))
+      }
+    },
+  })
+}
 </script>
 
 <template>
@@ -891,30 +888,32 @@ function confirmDelete(entry: EntryView) {
     <!-- flex-height 需要表格根节点拿到确定高度：父级给 flex 列 + 表格自身 flex-1，
          否则表体 flex-basis:0 会整块塌成 0 高，表现就是「表格内容空白」。 -->
     <div class="flex min-h-0 flex-1 flex-col p-4">
-      <NDataTable
-        class="min-h-0 flex-1"
-        :columns="columns"
-        :data="store.visibleEntries"
-        :row-key="(row: EntryView) => row.id"
-        :row-props="rowProps"
-        :expanded-row-keys="expandedKeys"
-        :bordered="false"
-        :single-line="false"
-        size="small"
-        flex-height
-        :scroll-x="scrollX"
-        @update:expanded-row-keys="
-          (keys: Array<string | number>) => (expandedKeys = keys.map(String))
-        "
-      >
-        <template #empty>
-          <NEmpty :description="emptyText" class="py-16">
-            <template v-if="!store.isTrashView && !store.isArchiveView" #extra>
-              <NButton size="small" @click="openCreate">{{ t('entry.add') }}</NButton>
-            </template>
-          </NEmpty>
-        </template>
-      </NDataTable>
+      <div ref="tableWrapRef">
+        <NDataTable
+          class="min-h-0 flex-1"
+          :columns="columns"
+          :data="store.visibleEntries"
+          :row-key="(row: EntryView) => row.id"
+          :row-props="rowProps"
+          :expanded-row-keys="expandedKeys"
+          :bordered="false"
+          :single-line="false"
+          size="small"
+          flex-height
+          :scroll-x="scrollX"
+          @update:expanded-row-keys="
+            (keys: Array<string | number>) => (expandedKeys = keys.map(String))
+          "
+        >
+          <template #empty>
+            <NEmpty :description="emptyText" class="py-16">
+              <template v-if="!store.isTrashView && !store.isArchiveView" #extra>
+                <NButton size="small" @click="openCreate">{{ t('entry.add') }}</NButton>
+              </template>
+            </NEmpty>
+          </template>
+        </NDataTable>
+      </div>
     </div>
 
     <EntryDialog :open="dialogOpen" :entry="editing" @close="dialogOpen = false" />

@@ -394,18 +394,15 @@ async function changePassword() {
           <div class="mb-4 grid gap-2">
             <div class="flex items-center gap-2">
               <NText :depth="3" class="w-20 shrink-0 text-xs">{{ t('backup.dataDir') }}</NText>
-              <NInput
-                :value="paths?.dataDir ?? ''"
-                readonly
-                size="small"
-                class="font-mono min-w-0 flex-1"
-              />
+              <NText :depth="3" class="block min-w-0 flex-1 break-all font-mono text-xs">{{
+                paths?.dataDir ?? ''
+              }}</NText>
             </div>
             <NText :depth="3" class="block text-xs">{{ t('backup.dataDirHint') }}</NText>
             <NText :depth="3" class="block text-xs">{{ t('backup.pickHint') }}</NText>
           </div>
 
-          <div class="grid gap-3 sm:grid-cols-2">
+          <div class="flex flex-col gap-3">
             <div class="min-w-0 rounded-lg border border-border p-3">
               <NText strong class="mb-2 block text-sm">{{ t('backup.export') }}</NText>
               <div class="grid gap-2">

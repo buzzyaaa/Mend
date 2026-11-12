@@ -221,9 +221,24 @@ fn archive_unarchive_roundtrip_keeps_main_and_archive_lists_orthogonal() {
     assert_eq!(archived[0].id, "a-1");
     assert!(archived[0].archived);
     assert!(db::list_trashed_entries(&conn).unwrap().is_empty());
-    // 归档条目不可删除（不会进入回收站）
-    assert!(db::delete_entry(&conn, "a-1").is_err());
+
+    // 归档条目可软删除：软删后进入回收站、归档列表清空、密文仍可解密
+    db::delete_entry(&conn, "a-1").expect("删除归档条目");
+    let trashed = db::list_trashed_entries(&conn).expect("回收站列表");
+    assert_eq!(trashed.len(), 1);
+    assert_eq!(trashed[0].id, "a-1");
+    assert!(trashed[0].deleted_at.is_some());
+    assert_eq!(db::list_archived_entries(&conn).unwrap().len(), 0);
+    let trashed_view = entries::decrypt_row(&dek, &trashed[0]).expect("解密回收站里的归档条目");
+    assert_eq!(trashed_view.password, "S3cret-明文");
+
+    // 恢复后回到归档态（不在主列表）
+    db::restore_entry(&conn, "a-1").expect("恢复归档条目");
     assert!(db::list_trashed_entries(&conn).unwrap().is_empty());
+    let restored_archived = db::list_archived_entries(&conn).expect("归档列表");
+    assert_eq!(restored_archived.len(), 1);
+    assert_eq!(restored_archived[0].id, "a-1");
+    assert_eq!(db::list_entries(&conn, None, None).unwrap().len(), 1);
 
     // 取消归档：回到主列表，归档列表清空
     db::unarchive_entry(&conn, "a-1").expect("取消归档");

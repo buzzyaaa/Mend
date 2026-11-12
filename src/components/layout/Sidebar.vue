@@ -77,7 +77,7 @@ async function submitCategory() {
   }
   const input = {
     name,
-    color: colorInput.value?.trim() ? colorInput.value.trim() : null,
+    color: normalizeColor(colorInput.value),
     icon: iconInput.value.trim() || null,
   }
   busy.value = true
@@ -160,6 +160,42 @@ function categoryRowStyle(cat: Category) {
   if (entryStore.bucket === cat.id || !cat.color) return undefined
   return { background: categoryTint(cat.color, 0.1) }
 }
+
+/**
+ * 颜色规范化（防御性）：把取色器可能返回的 `rgb()` / `rgba()` / 任意大小写 hex
+ * 统一转成后端 `validate_category_color` 要求的 `#RRGGBB`（大写）。
+ * 取色器已设 `color-mode="hex"`，此处仍兜底：即使 picker 回退到 rgb 输出也能保存；
+ * 非法值返回 null，交给后端校验拒绝。
+ */
+function normalizeColor(color: string | null | undefined): string | null {
+  const raw = (color ?? '').trim()
+  if (!raw) return null
+
+  // 已是十六进制：#RRGGBB 直接大写，#RGB 补足为 #RRGGBB，其余视为非法。
+  if (raw.startsWith('#')) {
+    if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw.toUpperCase()
+    if (/^#[0-9a-fA-F]{3}$/.test(raw)) {
+      return `#${raw
+        .slice(1)
+        .split('')
+        .map((c) => c + c)
+        .join('')}`.toUpperCase()
+    }
+    return null
+  }
+
+  // rgb(r, g, b) / rgba(r, g, b, a)
+  const match = raw.match(
+    /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*([0-9]*\.?[0-9]+)\s*)?\)$/i,
+  )
+  if (!match) return null
+  const channel = (value: string) => Math.max(0, Math.min(255, Number.parseInt(value, 10)))
+  const alpha = match[4] !== undefined ? Number.parseFloat(match[4]) : 1
+  // 完全透明等价于无色；部分透明无法用 #RRGGBB 表达，按不透明通道处理。
+  if (Number.isFinite(alpha) && alpha <= 0) return null
+  const toHex = (n: number) => n.toString(16).padStart(2, '0')
+  return `#${toHex(channel(match[1]))}${toHex(channel(match[2]))}${toHex(channel(match[3]))}`.toUpperCase()
+}
 </script>
 
 <template>
@@ -176,7 +212,7 @@ function categoryRowStyle(cat: Category) {
         v-for="bucket in fixedBuckets"
         :key="bucket.key"
         block
-        class="!justify-start min-h-9"
+        class="!justify-start min-h-9 transition-all duration-200 ease-out"
         :type="entryStore.bucket === bucket.key ? 'primary' : 'default'"
         :quaternary="entryStore.bucket === bucket.key"
         :text="entryStore.bucket !== bucket.key"
@@ -198,7 +234,7 @@ function categoryRowStyle(cat: Category) {
       <div
         v-for="cat in entryStore.categories"
         :key="cat.id"
-        class="group flex min-h-9 items-center rounded-md transition-colors hover:bg-accent"
+        class="group flex min-h-9 items-center rounded-md transition-all duration-200 ease-out hover:bg-accent"
         :class="entryStore.bucket === cat.id ? 'bg-accent' : ''"
         :style="categoryRowStyle(cat)"
       >
@@ -287,6 +323,7 @@ function categoryRowStyle(cat: Category) {
         <NText :depth="3" class="mb-1 block text-xs">{{ t('sidebar.颜色') }}</NText>
         <NColorPicker
           v-model:value="colorInput"
+          :color-mode="'hex'"
           :show-alpha="false"
           :swatches="colorSwatches"
           :actions="colorPickerActions"
