@@ -8,12 +8,17 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (semver, e.g. 0.4.0)'
+        required: false
+        default: ${{ github.ref_name }}
 
 permissions:
   contents: write
 
 env:
-  APP_VERSION: ${{ github.ref_name }}
+  APP_VERSION: ${{ inputs.version || github.ref_name }}
   BUILD: ${{ github.run_number }}
 
 jobs:
