@@ -1,3 +1,5 @@
+> **0.4.0 重构提示**：本文是 Tauri / Vue / WebView 时代的历史设计记录；当前实现、命令与数据兼容说明见 [`11-native-shell.md`](./11-native-shell.md) 与根目录 `AGENTS.md`。
+
 # 02 · 技术栈定型与 UI 框架决策
 
 > 本文只记录**当前生效**的选型与约定。早期 shadcn-vue / Element Plus 的对比评估已作废（2026-11-11 起统一迁移到 naive-ui），过程性材料不写入公开文档。

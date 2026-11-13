@@ -1,14 +1,7 @@
 name: Release
 
-# 自动发布：推送 `v*` tag（如 v0.3.0）或手动触发，即在 Windows 上构建 NSIS 安装包并发布到 GitHub Release。
-# 发布内容包含安装包、`.sig` 签名，以及 updater 用的 `latest.json`（自动更新功能据此判断新版本）。
-#
-# 前置条件（仅需配置一次）：
-#   仓库 Settings → Secrets and variables → Actions 中添加：
-#     - TAURI_SIGNING_PRIVATE_KEY：更新签名私钥（见 local/mend-updater.key，切勿提交）
-#   公钥已写入 src-tauri/tauri.conf.json 的 plugins.updater.pubkey，无需改动。
-#
-# 发布版本号需与三处保持一致：src-tauri/tauri.conf.json、src-tauri/Cargo.toml、package.json。
+# 打 `v*` tag 时自动构建桌面端、生成签名 OTA 包与更新清单，并发布到 GitHub Release。
+# 应用更新（整包替换）与 OTA（TSX 签名包）共用一份 latest.json。
 
 on:
   push:
@@ -19,38 +12,156 @@ on:
 permissions:
   contents: write
 
+env:
+  APP_VERSION: ${{ github.ref_name }}
+  BUILD: ${{ github.run_number }}
+
 jobs:
-  release:
-    name: Build & Publish Release
-    runs-on: windows-latest
+  package:
+    name: Package ${{ matrix.target }}
+    runs-on: ${{ matrix.runs_on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows
+            runs_on: windows-latest
+          - target: linux
+            runs_on: ubuntu-latest
+          - target: macos
+            runs_on: macos-latest
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install NSH
+        shell: bash
+        run: |
+          if [ "${{ matrix.runs_on }}" = "windows-latest" ]; then
+            powershell -NoProfile -Command "irm https://nsh.dev/install.ps1 | iex"
+            echo "$env:LOCALAPPDATA/nsh/bin" >> "$GITHUB_PATH"
+          else
+            curl -fsSL https://nsh.dev/install.sh | sh
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Install Linux build dependencies
+        if: matrix.target == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-4-dev clang \
+            libwebkitgtk-6.0-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+
+      - name: Add macOS Rust targets
+        if: matrix.target == 'macos'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Package app
+        shell: bash
+        run: |
+          VERSION="${APP_VERSION#v}"
+          nsh package . --target ${{ matrix.target }} \
+            --app-version "$VERSION" --build "$BUILD" -o dist
+
+      - name: Upload ${{ matrix.target }} update archive
+        uses: actions/upload-artifact@v4
         with:
-          node-version: 22
+          name: app-${{ matrix.target }}
+          path: dist/*-${{ matrix.target }}-*.tar.gz
+          path: dist/*-${{ matrix.target }}-*.zip
+          if-no-files-found: error
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+  ot-package:
+    name: Build signed OTA package
+    runs-on: windows-latest
+    needs: package
 
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Install frontend dependencies
-        run: npm ci
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
 
-      - name: Build and publish (Tauri)
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      - name: Install NSH
+        shell: bash
+        run: |
+          powershell -NoProfile -Command "irm https://nsh.dev/install.ps1 | iex"
+          echo "$env:LOCALAPPDATA/nsh/bin" >> "$GITHUB_PATH"
+
+      - name: Write release signing secret
+        shell: bash
+        run: mkdir -p keys && printf '%s' "$NSH_RELEASE_KEY" > keys/release.secret
+
+      - name: Publish signed package
+        shell: bash
+        run: |
+          VERSION="${APP_VERSION#v}"
+          nsh publish . \
+            --key keys/release.secret \
+            --cert keys/release.cert \
+            --app-version "$VERSION" --build "$BUILD" \
+            --source-map file \
+            -o "dist/com.mend.app-${BUILD}.nshpkg"
+
+      - name: Upload OTA package
+        uses: actions/upload-artifact@v4
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Mend ${{ github.ref_name }}'
-          releaseBody: 'Download and install the NSIS setup below. See CHANGELOG in the repo for details.'
-          # 直接发布（非草稿）才能被 updater 的 /releases/latest/download/latest.json 访问到。
-          # 若想先人工复核，可改为 true（草稿），复核后再在 GitHub 上发布。
-          releaseDraft: false
-          prerelease: false
+          name: ot-package
+          path: dist/*.nshpkg
+          if-no-files-found: error
+
+  manifest:
+    name: Manifest and publish release
+    runs-on: ubuntu-latest
+    needs: [package, ot-package]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install NSH
+        run: curl -fsSL https://nsh.dev/install.sh | sh
+      - run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: dist
+
+      - name: Write update signing secret
+        shell: bash
+        run: mkdir -p keys && printf '%s' "$NSH_UPDATE_KEY" > keys/update.secret
+
+      - name: Generate signed manifest
+        shell: bash
+        run: |
+          nsh update-manifest \
+            dist/*-*.tar.gz \
+            dist/*-*.zip \
+            --package dist/*.nshpkg \
+            --notes CHANGELOG.md \
+            --key keys/update.secret \
+            -o dist
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Mend ${{ github.ref_name }}
+          body: |
+            Mend ${{ github.ref_name }} — Native Shell build.
+
+            Download the platform archive (Windows zip / Linux tar.gz / macOS tar.gz)
+            or the signed OTA package. Existing vaults in the application data
+            directory open as-is.
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.nshpkg
+            dist/latest.json
+            dist/latest.json.sig

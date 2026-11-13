@@ -1,23 +1,24 @@
 {
-  "compilerOptions": {
-    "target": "ES2021",
-    "useDefineForClassFields": true,
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "strict": true,
-    "jsx": "preserve",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "esModuleInterop": true,
-    "lib": ["ES2021", "DOM", "DOM.Iterable"],
-    "skipLibCheck": true,
-    "noEmit": true,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    },
-    "types": ["vite/client"]
-  },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "extends": "./.nsh/tsconfig.json",
+  "include": [
+    "App.tsx",
+    "App.test.tsx",
+    "components/**/*.tsx",
+    "screens/**/*.tsx",
+    "lib/**/*.ts",
+    "*.test.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "core",
+    "native",
+    "src",
+    "src-tauri",
+    "vite.config.ts",
+    "vitest.config.ts",
+    ".nsh",
+    ".tools",
+    ".tmp"
+  ]
 }

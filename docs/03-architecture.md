@@ -1,3 +1,5 @@
+> **0.4.0 重构提示**：本文是 Tauri / Vue / WebView 时代的历史设计记录；当前实现、命令与数据兼容说明见 [`11-native-shell.md`](./11-native-shell.md) 与根目录 `AGENTS.md`。
+
 # 03 · 架构与工程结构
 
 ## 1. 分层架构

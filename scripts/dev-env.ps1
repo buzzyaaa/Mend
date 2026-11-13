@@ -9,8 +9,10 @@ $mingwBin = Join-Path $env:USERPROFILE "tools\msys64\mingw64\bin"
 $gitBin = "C:\Program Files\Git\cmd"
 $gitUsrBin = "C:\Program Files\Git\usr\bin"
 $ghBin = "C:\Program Files\GitHub CLI"
+$nshBin = Join-Path $PSScriptRoot "..\.tools\nsh\bin"
 
 $env:PATH = "$cargoBin;$mingwBin;$gitBin;$gitUsrBin;$ghBin;$env:PATH"
+if (Test-Path $nshBin) { $env:PATH = "$nshBin;$env:PATH" }
 
 Write-Host "[dev-env] PATH initialized"
 rustc --version

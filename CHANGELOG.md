@@ -7,6 +7,27 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-13
+
+Native Shell 重构：移除 Tauri / Vue / WebView，改为 TSX 原生 UI + Rust 核心。
+
+#### Added
+- Native Shell（nsh 0.5.0）混合应用：`nsh.json`、`App.tsx`、`native/` 原生模块、`core/` 复用。
+- 桌面 master-detail（侧栏 + 列表 + 详情）与手机单栏/分类 Sheet 自适应布局。
+- 原生 SVG 图标集、emoji 分类图标、主题令牌、深浅色/跟随系统。
+- rust-i18n 词条（`locales/`）、运行时中英文切换；偏好存 nsh `Storage`。
+- headless UI 测试（`nsh test`）与 native 适配层测试（建库、条目、分类、预设、备份恢复）。
+- 原生备份导出（写入应用数据目录）与系统文件选择器恢复。
+
+#### Changed
+- 数据目录/库文件/加密格式/备份容器保持与 0.3.x 兼容，旧库可直接打开。
+- 手动排序由拖拽改为行菜单「上移/下移」；标题栏改为系统原生标题栏。
+- Markdown 预览改用 nsh `TextView`；分类图标改为 emoji 映射。
+- 发布工作流改为 `nsh package`（自动更新待配置）。
+
+#### Removed
+- Tauri 2、Vue 3、Pinia、naive-ui、Vite、Tailwind 配置、WebView 相关代码与依赖。
+
 ## [0.3.4] - 2026-11-12
 
 列表显示与分类视觉的缺陷修复。

@@ -1,0 +1,18 @@
+[package]
+name = "mend-core"
+version = "0.4.0"
+description = "Mend core: encryption, database and error types (no GUI dependencies)"
+edition = "2021"
+rust-version = "1.77"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+argon2 = "0.5"
+chacha20poly1305 = "0.10"
+rand = "0.8"
+zeroize = { version = "1", features = ["derive"] }
+base64 = "0.22"
+rusqlite = { version = "0.31", features = ["bundled"] }
+serde_json = "1"

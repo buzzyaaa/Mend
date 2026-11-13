@@ -1,9 +1,8 @@
 {
   // 打开本仓库时 VS Code 会提示安装以下推荐扩展
   "recommendations": [
-    "Vue.volar", // Vue 3 语法支持（vue-tsc 配套）
-    "rust-lang.rust-analyzer", // Rust 侧（src-tauri 与 core crate）
-    "esbenp.prettier-vscode", // 对应 npx prettier --check . 门禁
-    "dbaeumer.vscode-eslint" // 对应 npm run lint 门禁
+    "rust-lang.rust-analyzer", // core / native crate 的 Rust 补全与检查
+    "esbenp.prettier-vscode", // 对应 npm run format / format:check
+    "ms-vscode.powershell" // tasks.json 里的 PowerShell 命令高亮/调试
   ]
 }

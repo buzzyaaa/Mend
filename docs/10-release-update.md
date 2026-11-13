@@ -1,79 +1,91 @@
-# 10 · 自动发布与自动更新
+# 10 · 发布、应用更新与 OTA（0.4.0 / Native Shell）
 
-> 本文件沉淀 GitHub 自动发布（CI 出包）+ 软件自动更新（Tauri updater）的规则与操作流程。
-> 与 `08-roadmap.md` 的"CI / 自动更新"条目对应，实现于 2026-11-12。
+> 0.4.0 已移除 Tauri，发布与更新改为 Native Shell 的 `nsh package`、`nsh publish`、`nsh update-manifest`。
+> 应用更新（整包替换）与 OTA（TSX 签名包）共用 `nsh.json` 的 `"updater"` 配置与同一份 `latest.json`。
 
-## 1. 目标
+## 1. 更新模型
 
-- **自动发布**：打版本 tag 后自动构建 Windows NSIS 安装包并发布到 GitHub Release（含 `latest.json` 与签名）。
-- **自动更新**：应用按用户设定的间隔（每周 / 每月 / 每年）在启动时检查 GitHub 是否有新版本，有则弹窗提醒，可一键下载安装。
+- **应用更新**：检查并下载平台压缩包（Windows zip、Linux/macOS tar.gz），替换应用并重启。`checkForUpdate` / `downloadUpdate` / `installAndRestart`。
+- **OTA 更新**：只下发签名包（`.nshpkg`，内容为 TSX + 资源），应用下次启动时运行。`checkForPackage` / `downloadPackage` / `restartToPackage`。
+- 发布清单时可以同时包含两者：应用先检查包，再检查整包。界面在设置里按顺序检查并显示可用更新。
+- 校验：清单签名、应用 id、版本只升不降、HTTPS、压缩包大小与 SHA-256、包签名与根证书、构建号（回滚保护）。
 
-## 2. 自动发布（GitHub Actions）
+## 2. 一次性密钥配置
 
-### 2.1 工作流
+```sh
+nsh keygen keys/root      # 根密钥，离线保管 root.secret
+nsh keygen keys/release   # 发布密钥，CI 持有 release.secret
+nsh keygen keys/update    # 清单密钥，CI 持有 update.secret
+nsh certify --root keys/root.secret --key keys/release.pub \
+  --apps com.mend.app -o keys/release.cert
+```
 
-- `.github/workflows/ci.yml`：PR / push 时跑 **核心测试**（Ubuntu + `cargo test --manifest-path src-tauri/core/Cargo.toml`）与 **前端类型检查 + 构建**（Ubuntu）。本机只做验证，不打包。
-- `.github/workflows/release.yml`：推送 `v*` tag（或手动 `workflow_dispatch`）时，在 `windows-latest` 上用 `tauri-apps/tauri-action` 构建 NSIS 安装包并发布 Release。
-  - 仅在 Windows 构建：NSIS 目标在 Linux/macOS 上不可用，所以打包与发布都在 Windows runner 完成。
-  - `releaseDraft: false`：直接发布（非草稿），否则 updater 的 `releases/latest/download/latest.json` 无法访问到。如需先人工复核，可临时改 `true`，复核后再在 GitHub 上发布。
+- 仓库只提交 `keys/root.pub`、`keys/release.pub`、`keys/release.cert`、`keys/update.pub`。
+- 私钥在 `keys/*.secret`（被 `.gitignore` 忽略）或 GitHub Actions secrets 中，不入库。
+- 根密钥私钥离线保管；泄露即等于所有已装应用信任该根。
 
-### 2.2 一次性前置（已配置）
+`nsh.json` 写入更新来源与信任根：
 
-- **签名私钥**：`local/mend-updater.key`（已被 `.gitignore` 忽略，**切勿提交**）。
-- **公钥**：已写入 `src-tauri/tauri.conf.json` 的 `plugins.updater.pubkey`。
-- **密钥轮换**：若丢失私钥需重新生成（`node node_modules/@tauri-apps/cli/tauri.js signer generate -w local/mend-updater.key --ci`），并把公钥更新到 `tauri.conf.json`、私钥重新设为仓库 Secret。注意：换私钥后，已安装旧版的用户将无法验证新签名，需手动重装。
+```json
+{
+  "id": "com.mend.app",
+  "version": "0.4.0",
+  "build": 1,
+  "updater": {
+    "github": "buzzyaaa/Mend",
+    "publicKey": "<keys/update.pub 的内容>",
+    "packages": { "roots": ["<keys/root.pub 的内容>"] }
+  }
+}
+```
 
-### 2.3 发版步骤（每次发版照做）
+## 3. GitHub Actions 密钥
 
-1. **推荐：跑发版脚本**（仓库根目录，一条命令同步三处版本号）：
+在仓库 Settings → Secrets and variables → Actions 添加：
 
-   ```powershell
-   .\scripts\release.ps1 -Version 0.4.0 -Tag
-   ```
+- `NSH_RELEASE_KEY`：`keys/release.secret` 的内容
+- `NSH_RELEASE_CERT`：`keys/release.cert` 的内容（也可只提交 cert，工作流直接使用仓库文件）
+- `NSH_UPDATE_KEY`：`keys/update.secret` 的内容
 
-   - 脚本先按 `^\d+\.\d+\.\d+$` 校验版本号，再用正则精确替换 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 三处的 `version` 字段（不引入 JSON 库依赖），替换后打印三处当前值供确认。
-   - 带 `-Tag`：自动执行 `git commit -am "chore: release v0.4.0"` → `git tag v0.4.0` → `git push origin main` → 推送 tag。
-   - 不带 `-Tag`（默认）：只改文件并打印后续手动命令，便于先本地验证（`npm run build` + core 测试）再提交。
-2. **兜底：手工三步**（脚本不可用时）——把版本号在三处改成同一值（如 `0.4.0`）：
-   - `src-tauri/tauri.conf.json` → `version`
-   - `src-tauri/Cargo.toml` → `version`
-   - `package.json` → `version`
+## 4. CI（`ci.yml`）
 
-   然后提交推送并打 tag：`git commit -am "chore: release v0.4.0" && git push origin main`，再 `git tag v0.4.0 && git push origin v0.4.0`。
-3. 在 GitHub Actions 观察 `Release` 工作流；成功后到 Releases 页确认安装包、`*.sig`、`latest.json` 已发布。
-4. 在已安装旧版的应用里验证：启动 → 若到了检查间隔会提示更新；或在设置弹窗"立即检查更新"。
+- `core-test`：`cargo test --manifest-path core/Cargo.toml`。
+- `native-check`：`cargo check --manifest-path native/Cargo.toml`。
+- `app-check`：安装 nsh，`nsh check .` 与 `nsh test .`。
 
-> tag 名必须与版本号对应（`v` + 版本号），`release.yml` 的 `tagName` 直接使用 `github.ref_name`。
+## 5. 发布流程（`release.yml`）
 
-## 3. 自动更新（Tauri updater）
+打 `v*` tag 或手动触发：
 
-### 3.1 数据源（当前：GitHub Releases）
+1. **package**：矩阵构建 Windows / Linux / macOS 平台压缩包，上传 artifact。
+   - Windows：VS Build Tools + Rust（默认目标即可）。
+   - Linux：安装 `libgtk-4-dev clang libwebkitgtk-6.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev`。
+   - macOS：`rustup target add aarch64-apple-darwin x86_64-apple-darwin`。
+2. **ot-package**：在 Windows 上运行 `nsh publish`，用 `NSH_RELEASE_KEY` / `NSH_RELEASE_CERT` 签名，产出 `dist/com.mend.app-<build>.nshpkg`。
+3. **manifest**：下载全部产物，用 `NSH_UPDATE_KEY` 运行 `nsh update-manifest`，生成带签名的 `dist/latest.json` 与 `latest.json.sig`。
+4. **publish**：用 `softprops/action-gh-release` 把平台包、OTA 包、`latest.json`、`latest.json.sig` 上传到该 tag 的 GitHub Release。
 
-- `tauri.conf.json` 的 `plugins.updater.endpoints` 指向
-  `https://github.com/buzzyaaa/Mend/releases/latest/download/latest.json`。
-- `bundle.createUpdaterArtifacts: true`：构建时生成 updater 用的安装包与 `.sig`。
-- `plugins.updater.windows.installMode: "passive"`：更新时显示进度条、无需用户交互；安装完应用自动退出并重启。
-- 签名校验强制开启（Tauri 不可关闭），由 `pubkey` + 构建期私钥保证。
+版本与构建号：`nsh package` / `nsh publish` 使用 tag 版本（去掉前缀 `v`）和 `github.run_number` 作为构建号；同一发布的整包与 OTA 包使用相同构建号。
 
-### 3.2 检查节奏（用户可配）
+## 6. 手动发布（本地）
 
-- 偏好 `updateCheckIntervalDays`：7（每周）/ 30（每月）/ 365（每年），默认 7，存 `localStorage`。
-- 偏好 `lastUpdateCheckTs`：上次检查时间戳，用于按间隔节流提醒（不论有无更新都刷新，避免频繁打扰）。
-- 自动检查：应用启动（`src/components/UpdateChecker.vue`）调用 `useUpdateChecker`，按间隔到期才查。
-- 手动检查：设置弹窗"立即检查更新"按钮（`SettingsDialog`）。
+```powershell
+nsh package . --target windows --app-version 0.4.1 --build 2 -o dist\windows
+nsh publish . --key local\keys\release.secret --cert keys\release.cert \
+  --app-version 0.4.1 --build 2 --source-map file -o dist\com.mend.app-2.nshpkg
+nsh update-manifest dist\windows\*.zip \
+  --package dist\com.mend.app-2.nshpkg --notes CHANGELOG.md \
+  --key local\keys\update.secret -o dist
+```
 
-### 3.3 抽象层与"未来替换接口"
+## 7. 应用内界面
 
-- 所有更新逻辑收敛在 **`src/lib/update.ts`** 的 `UpdateProvider` 接口之后：
-  - `check(): Promise<AppUpdate | null>` 与 `install()`。
-  - 当前实现 `GithubUpdateProvider` 基于 `@tauri-apps/plugin-updater`。
-- **替换数据源的两种方式**（按需求选）：
-  1. 仅换地址（仍沿用 GitHub `latest.json` 格式）：直接改 `tauri.conf.json` 的 `endpoints`，无需动代码。
-  2. 换成完全不同的协议（自建服务器 / 内网分发）：实现一个新的 `UpdateProvider`（用 `fetch` 拉版本信息并下载安装包），只改 `getUpdateProvider()` 一行，UI 与调度逻辑（`useUpdateChecker`）完全不用改。
-- 这样满足"目前用 GitHub，预留接口方便未来替换"。
+设置页“更新”区块：显示当前外壳版本/构建号/运行时，点击“检查更新”；发现 OTA 包时显示版本、构建号与说明，点击“下载并应用代码包”；否则发现整包更新时显示版本与说明，点击“立即更新”。下载进度用进度条展示；失败显示错误。
 
-### 3.4 已知限制与约定
+## 8. 注意事项
 
-- **未做代码签名**：当前安装包没有 Authenticode 签名，Windows SmartScreen 会报"未知发布者"警告，用户需手动允许。这是已知的可用性问题，不影响更新逻辑；后续若有代码签名证书，把 `TAURI_SIGNING_PRIVATE_KEY` 与证书相关步骤接入即可。
-- **离线优先原则**：更新检查是用户显式开启/可调的网络行为，不违反"默认零网络请求"——未到检查间隔或用户关闭/未安装时不会发起请求；且检查只读取公开的 `latest.json`，不上传任何数据。
-- **回退**：用户可在设置弹窗把检查频率设为"每年"以降低打扰；也可始终手动检查。
+- 每次发布都要提高构建号；旧构建号的包会被拒绝（回滚保护）。
+- GitHub 上 draft 或 prerelease 的 Release 不会被应用更新器读取。
+- OTA 包受 `minRuntime` 限制：较旧运行时会拒绝需要新运行时的包。默认 `minRuntime` 为发布所用 nsh 版本；当前使用 0.5.0。
+- 证书默认 365 天，到期前需重新 `nsh certify` 并更新 `NSH_RELEASE_CERT`。
+- 若发布密钥泄露，用 `nsh revoke` 签发吊销列表并重新发布。

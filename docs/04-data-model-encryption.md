@@ -1,3 +1,5 @@
+> **0.4.0 重构提示**：本文是 Tauri / Vue / WebView 时代的历史设计记录；当前实现、命令与数据兼容说明见 [`11-native-shell.md`](./11-native-shell.md) 与根目录 `AGENTS.md`。
+
 # 04 · 数据模型与加密方案
 
 ## 1. 加密总体思路
@@ -47,8 +49,10 @@ base64( nonce[24B] || ciphertext || tag[16B] )
 
 | 列 | 类型 | 说明 |
 | --- | --- | --- |
-| key | TEXT PK | 如 `kdf_params`、`dek_wrapped`、`salt`、`language`、`theme`、`version` |
+| key | TEXT PK | 如 `kdf_params`、`dek_wrapped`、`salt`、`version` |
 | value | TEXT | 非敏感配置明文；`dek_wrapped` 为密文 |
+
+> 0.4.0 起界面偏好（语言 / 主题 / 自动锁定 / 更新检查间隔）改存 nsh `Storage`（应用数据目录下的非敏感 KV），**不再写入 `meta`**；`meta` 只保留建库与 schema 元数据。
 
 存放：KDF 参数、Argon2 salt、包裹后的 DEK、界面偏好（语言/主题/生成器默认项）、schema 版本。
 
@@ -91,7 +95,7 @@ base64( nonce[24B] || ciphertext || tag[16B] )
 
 > 手动排序：`sort_order` 是条目在所属桶（分类 / 未分类 / 全部）内的显示顺序，由「手动排序」模式拖拽后经 `entry_reorder` 整批写回（`0..n-1`，单事务，**按 `category_id` 分桶**，见 §3）；新建条目取同桶 `MAX(sort_order)+1` 落在末尾。`EntryView` 返回该列，前端 `refresh()` 时据此重建各桶顺序，使拖拽结果跨刷新 / 重启仍然生效（`src/lib/manualOrder.ts`）。
 
-> 归档：`archived` 是条目在「归档桶」内的软状态，与 `deleted_at` 完全正交——`archived = 1` 的条目不出现在 `entry_list`（只出现在 `entry_archive_list`），也不可删除（不会进入回收站）；取消归档后回到主列表。前端通过 `entry.archive` / `entry.unarchive` 切换，均需二次确认。归档条目固定按 `updated_at` 倒序展示，星标置顶逻辑不生效。
+> 归档：`archived` 是条目在「归档桶」内的软状态，与 `deleted_at` 完全正交——`archived = 1` 的条目不出现在主列表（只出现在归档列表），**可以被软删除进入回收站**；恢复后仍保持归档态，取消归档后回到主列表。0.4.0 原生 UI 通过行菜单/详情页切换，归档与删除均需确认。归档条目固定按 `updated_at` 倒序展示，星标置顶逻辑不生效。
 
 ### 2.4 `presets` — 字段预设值
 
@@ -110,7 +114,7 @@ base64( nonce[24B] || ciphertext || tag[16B] )
 - **解锁**：读取 salt 与 KDF 参数 → 派生 KEK → 解包 DEK；认证失败即主密码错误。解锁后 DEK 存内存会话，命令层据此加解密。
 - **新增/编辑条目**：前端提交明文 `EntryInput` → Rust 侧逐字段加密 → 事务写入；返回解密后的展示模型供界面刷新。
 - **删除**：`entry_delete` 只写 `deleted_at`（软删除，进回收站）；`entry_restore` 清空该列；`entry_purge` / `entry_purge_all` 才做物理删除，且仅允许删除回收站里的条目。分类删除仍走"条目归未分类"。
-- **归档**：`entry_archive` 把 `archived` 置 1（软状态，与 `deleted_at` 正交），条目从主列表移入归档桶；归档条目不可删除（`delete_entry` 带 `archived = 0` 守卫），也不会进入回收站；`entry_unarchive` 把 `archived` 置 0 恢复。归档列表按 `updated_at` 倒序，前端星标置顶逻辑对归档桶不生效。
+- **归档**：`entry_archive` 把 `archived` 置 1（软状态，与 `deleted_at` 正交），条目从主列表移入归档桶；归档条目**可以**被软删除进入回收站（`delete_entry` 只守卫 `deleted_at IS NULL`），恢复后仍为归档态；`entry_unarchive` 把 `archived` 置 0 恢复。归档列表按 `updated_at` 倒序，星标置顶逻辑对归档桶不生效。
 - **标签**：条目可挂多个标签，存 `entries.tags`（JSON 数组，明文）；标签由前端在内存中过滤（与备注检索同口径）。写入时 trim、去空、去重，上限 16 个、单个最长 32 字。
 - **手动排序**：条目按所属桶维护 `entries.sort_order`（同桶 `0..n-1`）。前端「手动排序」模式拖拽结束后调 `entry_reorder` 整批写回（单事务原子，**按 `category_id` 分组**：只重排传入的可见条目所占的位置，未传入的同桶条目留在原位，随后整桶紧凑赋 `0..n-1`，避免跨分类互相覆盖或出现重复 / 空洞）；新建条目取同桶 `MAX(sort_order)+1` 落在末尾。`EntryView` 返回 `sortOrder`，前端 `refresh()` 时据此重建各桶手动序（`src/lib/manualOrder.ts`），拖拽顺序因此跨刷新 / 重启保留。排序下拉另有最近更新 / 名称 / 星标优先，均不落库。`sort_order` 为明文元信息，不含敏感数据。
 - **修改主密码**：校验旧密码（派生旧 KEK 解包 DEK，认证失败即旧密码错误）→ 生成新 salt、派生新 KEK → 用新 KEK 重新包裹**同一个 DEK** → 在一个事务内更新 `meta` 的 `salt`/`kdf_params`/`dek_wrapped`。DEK 不变，历史密文无需重加密；事务保证中途崩溃不会出现"salt 与包裹密钥不一致"的坏库。

@@ -1,3 +1,5 @@
+> **0.4.0 重构提示**：本文是 Tauri / Vue / WebView 时代的历史设计记录；当前实现、命令与数据兼容说明见 [`11-native-shell.md`](./11-native-shell.md) 与根目录 `AGENTS.md`。
+
 # 01 · 需求与范围
 
 ## 1. 产品定位
@@ -8,7 +10,7 @@
 
 | 编号 | 需求 | 优先级 | 阶段归属 |
 | --- | --- | --- | --- |
-| R1 | 技术栈：Tauri + Vue + TypeScript + TailwindCSS + SQLite | P0 | 阶段 1 |
+| R1 | 技术栈（0.4.0 起）：Native Shell + TSX 原生 UI + Rust + SQLite | P0 | 0.4.0 重构 |
 | R2 | 前端 UI 在 Shadcn/UI 与 Element Plus 之间评估选型，要求美观 | P0 | 阶段 1（结论见 `02`） |
 | R3 | 主界面左右布局：左侧分类，右侧密码列表 | P0 | 阶段 2/3 |
 | R4 | 备注支持 Markdown 编辑与渲染显示 | P0 | 阶段 3 |
@@ -44,7 +46,7 @@
 - KDBX / Bitwarden / CSV 导入导出（列入后续路线）。
 - 生物识别 / Windows Hello 快速解锁。
 - 团队协作、账号体系、遥测上报。
-- 移动端 App。
+- ~~移动端 App~~（0.4.0 已支持同一份代码自适应桌面/手机布局；移动端打包仍待真机验证）。
 
 ## 5. 后续路线（参考，详见 `08-roadmap.md`）
 

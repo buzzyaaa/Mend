@@ -8,45 +8,38 @@ on:
 
 jobs:
   core-test:
-    name: Rust Core Tests
+    name: Rust core tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: rustup target add x86_64-pc-windows-gnu
       - uses: Swatinem/rust-cache@v2
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
-      # fmt / clippy 质量门禁：当前 core 代码尚未完全满足（另有并行改动正在进行），
-      # 先以 continue-on-error 落地为"警告不拦截"，待 core 代码稳定、本地
-      # `cargo fmt --check` 与 `cargo clippy -- -D warnings` 均通过后，删除 continue-on-error 收紧为硬门禁。
-      - name: Check formatting (cargo fmt)
-        continue-on-error: true
-        run: cargo fmt --check --manifest-path src-tauri/core/Cargo.toml
-      - name: Check lints (cargo clippy)
-        continue-on-error: true
-        run: cargo clippy --manifest-path src-tauri/core/Cargo.toml -- -D warnings
       - name: Run core tests
-        run: cargo test --manifest-path src-tauri/core/Cargo.toml
+        run: cargo test --manifest-path core/Cargo.toml
 
-  frontend-check:
-    name: Frontend Type & Build
+  native-check:
+    name: Native module check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: npm ci
-      - name: Type check
-        run: npm run typecheck
-      - name: Lint
-        run: npm run lint
-      - name: Format check
-        run: npx prettier --check .
-      - name: Build
-        run: npm run build
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Check the nsh native module
+        run: cargo check --manifest-path native/Cargo.toml
 
-  # 说明：真实的可安装包（Windows NSIS）只能在 Windows 上构建，由 .github/workflows/release.yml
-  # 在打 `v*` tag 时构建并发布到 GitHub Release（含 latest.json 与签名）。这里不跑 Tauri 打包，
-  # 避免在非 Windows 环境因 NSIS 不可用而失败。
+  app-check:
+    name: App type check and headless test
+    runs-on: ubuntu-latest
+    env:
+      MEND_DATA_DIR: ${{ runner.temp }}/mend-test-data
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install NSH
+        run: curl -fsSL https://nsh.dev/install.sh | sh
+      - name: Add NSH to PATH
+        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Type check
+        run: nsh check .
+      - name: Headless UI test
+        run: nsh test .

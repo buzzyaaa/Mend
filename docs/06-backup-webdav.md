@@ -1,3 +1,7 @@
+> **0.4.0 重构提示**：本文是 Tauri / Vue / WebView 时代的历史设计记录；当前实现、命令与数据兼容说明见 [`11-native-shell.md`](./11-native-shell.md) 与根目录 `AGENTS.md`。
+>
+> 0.4.0 变化：`.mendbak` 容器与恢复校验逻辑不变；**导出改为写入应用数据目录**（如 `%APPDATA%\com.mend.app`），UI 显示路径并在设置页提供“打开数据目录”，不再弹桌面保存对话框；恢复仍通过系统文件选择器读取 `.mendbak`。WebDAV 仍是未实现预留。
+
 # 06 · 备份、恢复与 WebDAV 预留
 
 ## 1. 数据落盘位置

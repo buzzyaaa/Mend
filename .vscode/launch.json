@@ -1,0 +1,24 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // 附加调试：先运行「打包：Windows（nsh package）」并启动
+      // .nsh/out/Mend/Mend.exe，再 F5 选本配置、挑进程。
+      // 需要 cpptools 类扩展；本机是 GNU 工具链，MIMode 用 gdb。
+      // 若 gdb 不在 PATH，把 miDebuggerPath 指向 MinGW 的 gdb.exe。
+      "name": "调试：附加到 Mend.exe（gdb）",
+      "type": "cppdbg",
+      "request": "attach",
+      "program": "${workspaceFolder}\\.nsh\\out\\Mend\\Mend.exe",
+      "processId": "${command:pickProcess}",
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "为 gdb 启用整齐打印",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    }
+  ]
+}

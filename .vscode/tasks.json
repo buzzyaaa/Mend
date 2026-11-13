@@ -2,8 +2,8 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "环境准备：注入 cargo / git / MinGW 的 PATH",
-      "detail": "新开的终端默认找不到 cargo、git、gcc，先跑 scripts/dev-env.ps1 把工具链加进当前会话 PATH。",
+      "label": "环境：初始化 PATH（cargo / MinGW / nsh）",
+      "detail": "执行 scripts/dev-env.ps1，把 cargo、MinGW、git、gh 以及仓库内 .tools/nsh/bin 加入当前任务会话 PATH。",
       "type": "shell",
       "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
       "args": [
@@ -12,7 +12,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        "Set-Location '${workspaceFolder}'; .\\scripts\\dev-env.ps1; Write-Host '环境就绪，可以继续跑其它任务了' -ForegroundColor Green"
+        "Set-Location '${workspaceFolder}'; . './scripts/dev-env.ps1'; Write-Host '环境就绪' -ForegroundColor Green"
       ],
       "problemMatcher": [],
       "presentation": {
@@ -22,8 +22,8 @@
       }
     },
     {
-      "label": "开发：启动桌面应用（Tauri + 前端热更新）",
-      "detail": "等价于 npm run tauri dev：起 Vite(:1420) + 编译 Rust + 打开 Mend 窗口。",
+      "label": "信息：显示 nsh / Rust / GCC 版本",
+      "detail": "确认 nsh、rustc、cargo、gcc 在当前会话可见；nsh 版本应与 docs/11-native-shell.md 的记录一致。",
       "type": "shell",
       "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
       "args": [
@@ -32,8 +32,36 @@
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        "Set-Location '${workspaceFolder}'; .\\scripts\\dev-env.ps1; npm run tauri dev"
+        "Set-Location '${workspaceFolder}'; . './scripts/dev-env.ps1' *> $null; nsh --version; rustc --version; cargo --version; gcc --version | Select-Object -First 1"
       ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "开发：启动桌面应用（nsh run）",
+      "detail": "nsh run .：编译 native crate、启动 Windows 原生窗口并热更新 TSX。窗口保持打开时任务持续运行，Ctrl+C 结束。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; New-Item -ItemType Directory -Force '.tmp/vscode/localappdata','.tmp/vscode/temp' | Out-Null; . './scripts/dev-env.ps1' *> $null; nsh run ."
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "LOCALAPPDATA": "${workspaceFolder}\\.tmp\\vscode\\localappdata",
+          "TMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
+          "TEMP": "${workspaceFolder}\\.tmp\\vscode\\temp"
+        }
+      },
       "isBackground": true,
       "problemMatcher": [],
       "presentation": {
@@ -43,8 +71,8 @@
       }
     },
     {
-      "label": "开发：只开前端预览（浏览器里看界面）",
-      "detail": "等价于 npm run dev，只起 Vite，不编译 Rust；解锁/读写会提示需要桌面应用。",
+      "label": "开发：启动 Web 预览（nsh run --target web）",
+      "detail": "nsh run . --target web：浏览器里的 Web 运行时，仅用于快速看布局；产品目标仍是原生桌面/手机。",
       "type": "shell",
       "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
       "args": [
@@ -53,8 +81,16 @@
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        "Set-Location '${workspaceFolder}'; npm run dev"
+        "Set-Location '${workspaceFolder}'; New-Item -ItemType Directory -Force '.tmp/vscode/localappdata','.tmp/vscode/temp' | Out-Null; . './scripts/dev-env.ps1' *> $null; nsh run . --target web"
       ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "LOCALAPPDATA": "${workspaceFolder}\\.tmp\\vscode\\localappdata",
+          "TMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
+          "TEMP": "${workspaceFolder}\\.tmp\\vscode\\temp"
+        }
+      },
       "isBackground": true,
       "problemMatcher": [],
       "presentation": {
@@ -64,8 +100,37 @@
       }
     },
     {
-      "label": "检查：前端 TypeScript 类型检查",
-      "detail": "npm run typecheck（vue-tsc --noEmit），不产出文件。",
+      "label": "检查：nsh 类型检查（官方）",
+      "detail": "nsh check .：先 cargo check native crate，再用 nsh 固定的 TypeScript 7 检查 TSX。官方类型检查入口。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; New-Item -ItemType Directory -Force '.tmp/vscode/localappdata','.tmp/vscode/temp' | Out-Null; . './scripts/dev-env.ps1' *> $null; nsh check ."
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "LOCALAPPDATA": "${workspaceFolder}\\.tmp\\vscode\\localappdata",
+          "TMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
+          "TEMP": "${workspaceFolder}\\.tmp\\vscode\\temp"
+        }
+      },
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "检查：TypeScript（本地 tsc）",
+      "detail": "npm run typecheck：使用仓库 node_modules 里的 tsc 做等价类型检查；nsh check 受限时的备用入口。",
       "type": "shell",
       "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
       "args": [
@@ -85,8 +150,8 @@
       }
     },
     {
-      "label": "构建：前端产物到 dist",
-      "detail": "npm run build：类型检查 + Vite 打包，输出 dist/。",
+      "label": "测试：Rust 核心（mend-core）",
+      "detail": "cargo test --manifest-path core/Cargo.toml：加密、SQLite、备份、迁移等 61 项测试，不依赖 nsh/GUI。",
       "type": "shell",
       "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
       "args": [
@@ -95,9 +160,9 @@
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        "Set-Location '${workspaceFolder}'; npm run build"
+        "Set-Location '${workspaceFolder}'; . './scripts/dev-env.ps1' *> $null; cargo test --manifest-path core/Cargo.toml"
       ],
-      "group": "build",
+      "group": "test",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -106,8 +171,8 @@
       }
     },
     {
-      "label": "检查：Rust 编译检查（cargo check）",
-      "detail": "cargo check --manifest-path src-tauri\\Cargo.toml，比 build 快，只查错误。",
+      "label": "测试：原生模块（mend-native）",
+      "detail": "cargo test --manifest-path native/Cargo.toml：适配层全流程测试（建库、条目、分类、预设、备份恢复）。",
       "type": "shell",
       "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
       "args": [
@@ -116,9 +181,9 @@
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        "Set-Location '${workspaceFolder}'; .\\scripts\\dev-env.ps1; cargo check --manifest-path src-tauri\\Cargo.toml"
+        "Set-Location '${workspaceFolder}'; . './scripts/dev-env.ps1' *> $null; cargo test --manifest-path native/Cargo.toml"
       ],
-      "group": "build",
+      "group": "test",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -127,8 +192,8 @@
       }
     },
     {
-      "label": "构建：Rust 调试版可执行文件（cargo build）",
-      "detail": "cargo build --manifest-path src-tauri\\Cargo.toml，产物在 src-tauri/target/debug/mend.exe。",
+      "label": "测试：全量（nsh test）",
+      "detail": "先清空 .tmp/test-data，再 nsh test .：运行 native crate 测试 + TSX headless UI 测试。测试库与真实库隔离。",
       "type": "shell",
       "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
       "args": [
@@ -137,32 +202,17 @@
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        "Set-Location '${workspaceFolder}'; .\\scripts\\dev-env.ps1; cargo build --manifest-path src-tauri\\Cargo.toml"
+        "Set-Location '${workspaceFolder}'; New-Item -ItemType Directory -Force '.tmp/vscode/localappdata','.tmp/vscode/temp' | Out-Null; if (Test-Path '.tmp/test-data') { Remove-Item -Recurse -Force '.tmp/test-data' }; . './scripts/dev-env.ps1' *> $null; nsh test ."
       ],
-      "group": {
-        "kind": "build",
-        "isDefault": true
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "LOCALAPPDATA": "${workspaceFolder}\\.tmp\\vscode\\localappdata",
+          "TMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
+          "TEMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
+          "MEND_DATA_DIR": "${workspaceFolder}\\.tmp\\test-data"
+        }
       },
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      }
-    },
-    {
-      "label": "测试：后端单元测试（mend-core，17+ 项）",
-      "detail": "cargo test --manifest-path src-tauri\\core\\Cargo.toml。注意：不要在 src-tauri 主 crate 上跑 cargo test，本机会 STATUS_ENTRYPOINT_NOT_FOUND 崩溃。",
-      "type": "shell",
-      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-      "args": [
-        "-NoLogo",
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        "Set-Location '${workspaceFolder}'; .\\scripts\\dev-env.ps1; cargo test --manifest-path src-tauri\\core\\Cargo.toml"
-      ],
       "group": {
         "kind": "test",
         "isDefault": true
@@ -175,8 +225,8 @@
       }
     },
     {
-      "label": "打包：生成桌面安装包（Tauri build）",
-      "detail": "npm run tauri build：先构建前端，再出 release 版与安装包（耗时较长）。",
+      "label": "构建：nsh build",
+      "detail": "nsh build .：编译 native crate 并把 TSX 打成 bundle，输出到 .nsh/out（不生成安装包）。",
       "type": "shell",
       "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
       "args": [
@@ -185,7 +235,70 @@
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        "Set-Location '${workspaceFolder}'; .\\scripts\\dev-env.ps1; npm run tauri build"
+        "Set-Location '${workspaceFolder}'; New-Item -ItemType Directory -Force '.tmp/vscode/localappdata','.tmp/vscode/temp' | Out-Null; . './scripts/dev-env.ps1' *> $null; nsh build ."
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "LOCALAPPDATA": "${workspaceFolder}\\.tmp\\vscode\\localappdata",
+          "TMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
+          "TEMP": "${workspaceFolder}\\.tmp\\vscode\\temp"
+        }
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "打包：Windows（nsh package）",
+      "detail": "先跑官方类型检查，再 nsh package . --target windows：产出 .nsh/out/Mend/Mend.exe、Mend.zip、Mend.iss；装有 Inno Setup 6 时还会生成 setup.exe。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; New-Item -ItemType Directory -Force '.tmp/vscode/localappdata','.tmp/vscode/temp' | Out-Null; . './scripts/dev-env.ps1' *> $null; nsh package . --target windows"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "LOCALAPPDATA": "${workspaceFolder}\\.tmp\\vscode\\localappdata",
+          "TMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
+          "TEMP": "${workspaceFolder}\\.tmp\\vscode\\temp"
+        }
+      },
+      "dependsOn": ["检查：nsh 类型检查（官方）"],
+      "dependsOrder": "sequence",
+      "group": "build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "运行：已打包的 Mend.exe",
+      "detail": "启动 .nsh/out/Mend/Mend.exe。若尚未打包，会提示先运行「打包：Windows（nsh package）」。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; $exe = '.nsh/out/Mend/Mend.exe'; if (-not (Test-Path $exe)) { throw '未找到打包产物，先运行「打包：Windows（nsh package）」' }; Start-Process -FilePath (Resolve-Path $exe).Path"
       ],
       "problemMatcher": [],
       "presentation": {
@@ -195,13 +308,174 @@
       }
     },
     {
-      "label": "一键体检：类型检查 + 前端构建 + 后端测试",
-      "detail": "依次跑「检查：前端 TypeScript 类型检查」「构建：前端产物到 dist」「测试：后端单元测试（mend-core，17+ 项）」，全部通过等于可以提交。",
+      "label": "格式：Rust（core + native）",
+      "detail": "cargo fmt core 与 native，就地改写 Rust 源文件。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; . './scripts/dev-env.ps1' *> $null; cargo fmt --manifest-path core/Cargo.toml; cargo fmt --manifest-path native/Cargo.toml"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "格式：TSX / JSON（Prettier）",
+      "detail": "Prettier 就地格式化 App、components、screens、lib、nsh.json、theme.json、tsconfig.json、locales。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; npx prettier --write \"App.tsx\" \"App.test.tsx\" \"components/**/*.tsx\" \"screens/**/*.tsx\" \"lib/**/*.ts\" \"nsh.json\" \"theme.json\" \"tsconfig.json\" \"locales/*.json\""
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "格式检查：Rust + Prettier",
+      "detail": "cargo fmt --check（core/native）与 npm run format:check；提交前跑，确保格式一致。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; . './scripts/dev-env.ps1' *> $null; cargo fmt --manifest-path core/Cargo.toml -- --check; if ($LASTEXITCODE -ne 0) { exit 1 }; cargo fmt --manifest-path native/Cargo.toml -- --check; if ($LASTEXITCODE -ne 0) { exit 1 }; npm run format:check"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "清理：生成产物与测试库",
+      "detail": "删除 .nsh/out 与 .tmp/test-data；保留 .nsh/types 与依赖缓存。不会删除真实库。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; Remove-Item -Recurse -Force '.nsh/out','.tmp/test-data' -ErrorAction SilentlyContinue; Write-Host '已清理 .nsh/out 与 .tmp/test-data' -ForegroundColor Green"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "清理：Cargo target（重建较慢）",
+      "detail": "cargo clean core 与 native 的 target；下次编译会重新构建 SQLite 等依赖，耗时约 1–3 分钟。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; . './scripts/dev-env.ps1' *> $null; cargo clean --manifest-path core/Cargo.toml; cargo clean --manifest-path native/Cargo.toml"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "打开：应用数据目录",
+      "detail": "打开 %APPDATA%\\com.mend.app（Windows 上的真实数据目录）；目录不存在会先创建。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; $dir = Join-Path $env:APPDATA 'com.mend.app'; New-Item -ItemType Directory -Force $dir | Out-Null; Start-Process explorer.exe $dir"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "安装/更新：nsh（官方脚本）",
+      "detail": "运行 nsh.dev 的 Windows 安装脚本（安装到 %LOCALAPPDATA%\\nsh 并修改用户 PATH）。装完请重开终端。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; irm https://nsh.dev/install.ps1 | iex"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "组件：列出 nsh 可安装运行时",
+      "detail": "nsh component list：查看 android / ios / web / gpui / tui 等运行时是否已安装。",
+      "type": "shell",
+      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Set-Location '${workspaceFolder}'; . './scripts/dev-env.ps1' *> $null; nsh component list"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "一键验证：check + 核心测试 + 全量测试 + 格式检查",
+      "detail": "按顺序跑官方类型检查、mend-core 测试、nsh test（native + UI）与格式检查；全部通过可作为提交前门禁。",
       "dependsOrder": "sequence",
       "dependsOn": [
-        "检查：前端 TypeScript 类型检查",
-        "构建：前端产物到 dist",
-        "测试：后端单元测试（mend-core，17+ 项）"
+        "检查：nsh 类型检查（官方）",
+        "测试：Rust 核心（mend-core）",
+        "测试：全量（nsh test）",
+        "格式检查：Rust + Prettier"
       ],
       "problemMatcher": [],
       "presentation": {

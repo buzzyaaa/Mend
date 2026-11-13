@@ -1,4 +1,8 @@
+> **0.4.0 重构提示**：本文是 Tauri / Vue / WebView 时代的历史设计记录；当前实现、命令与数据兼容说明见 [`11-native-shell.md`](./11-native-shell.md) 与根目录 `AGENTS.md`。
+
 # 08 · 分阶段开发计划
+
+> **0.4.0 当前状态**：已完成 Native Shell 重构（TSX 原生 UI + Rust core），旧 Tauri/Vue 阶段 1–6 的功能在原生 UI 中保留；自动更新、弱/重复密码标记、拖拽排序、WebDAV 等仍为后续项，详见 `11-native-shell.md`。
 
 阶段按"可验证闭环"切分；每个阶段结束都要能运行、可演示，并在本地 `local/DEVLOG.md` 记录决策与验证结果。
 
