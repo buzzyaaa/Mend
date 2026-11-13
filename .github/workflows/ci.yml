@@ -32,7 +32,7 @@ jobs:
     name: App type check and headless test
     runs-on: ubuntu-latest
     env:
-      MEND_DATA_DIR: ${{ runner.temp }}/mend-test-data
+      MEND_DATA_DIR: ${{ github.workspace }}/.tmp/mend-test-data
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
