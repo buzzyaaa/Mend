@@ -2,6 +2,7 @@ name: Release
 
 # 打 `v*` tag 时自动构建桌面端、生成签名 OTA 包与更新清单，并发布到 GitHub Release。
 # 应用更新（整包替换）与 OTA（TSX 签名包）共用一份 latest.json。
+# workflow_dispatch 只用于验证流水线（不发 Release），正式发版请推 `v*` tag。
 
 on:
   push:
@@ -10,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (semver, e.g. 0.4.0)'
+        description: 'Release version (semver, e.g. 0.4.0); empty = read from nsh.json'
         required: false
         default: ''
 
@@ -42,15 +43,27 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Install NSH
+      # Windows 安装必须用 pwsh 直接执行：若写在 bash 的 -Command 双引号里，
+      # Git Bash 会先把 $env:GITHUB_PATH 展开成 :GITHUB_PATH，PowerShell 会把它
+      # 当成备用数据流而报 "Could not open the alternate data stream"。
+      - name: Install NSH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          irm https://nsh.dev/install.ps1 | iex
+          $nshBin = Join-Path $env:LOCALAPPDATA 'nsh\bin'
+          if (-not (Test-Path (Join-Path $nshBin 'nsh.exe'))) {
+            throw "nsh.exe not found under $nshBin"
+          }
+          Add-Content -Path $env:GITHUB_PATH -Value $nshBin
+          Write-Host "nsh bin: $nshBin"
+
+      - name: Install NSH (Linux / macOS)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
-          if [ "${{ matrix.runs_on }}" = "windows-latest" ]; then
-            powershell -NoProfile -Command "irm https://nsh.dev/install.ps1 | iex; Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $env:LOCALAPPDATA 'nsh/bin')"
-          else
-            curl -fsSL https://nsh.dev/install.sh | sh
-            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          fi
+          curl -fsSL https://nsh.dev/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Install Linux build dependencies
         if: matrix.target == 'linux'
@@ -69,6 +82,16 @@ jobs:
         shell: bash
         run: |
           VERSION="${APP_VERSION#v}"
+          # workflow_dispatch 未填版本时 github.ref_name 是分支名（如 main），
+          # 不能当版本号传给 nsh package，否则 nsh.json 的 updater 解析 semver 会失败。
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' nsh.json | head -1)"
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::Cannot resolve a semver version (got '$VERSION')"
+            exit 1
+          fi
+          echo "Packaging $VERSION (build $BUILD)"
           nsh package . --target ${{ matrix.target }} \
             --app-version "$VERSION" --build "$BUILD" -o dist
 
@@ -91,18 +114,39 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install NSH
-        shell: bash
+        shell: pwsh
         run: |
-          powershell -NoProfile -Command "irm https://nsh.dev/install.ps1 | iex; Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $env:LOCALAPPDATA 'nsh/bin')"
+          irm https://nsh.dev/install.ps1 | iex
+          $nshBin = Join-Path $env:LOCALAPPDATA 'nsh\bin'
+          if (-not (Test-Path (Join-Path $nshBin 'nsh.exe'))) {
+            throw "nsh.exe not found under $nshBin"
+          }
+          Add-Content -Path $env:GITHUB_PATH -Value $nshBin
 
       - name: Write release signing secret
         shell: bash
-        run: mkdir -p keys && printf '%s' "$NSH_RELEASE_KEY" > keys/release.secret
+        env:
+          NSH_RELEASE_KEY: ${{ secrets.NSH_RELEASE_KEY }}
+        run: |
+          if [ -z "$NSH_RELEASE_KEY" ]; then
+            echo "::error::NSH_RELEASE_KEY secret is missing"
+            exit 1
+          fi
+          mkdir -p keys
+          printf '%s' "$NSH_RELEASE_KEY" > keys/release.secret
 
       - name: Publish signed package
         shell: bash
         run: |
           VERSION="${APP_VERSION#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' nsh.json | head -1)"
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::Cannot resolve a semver version (got '$VERSION')"
+            exit 1
+          fi
+          mkdir -p dist
           nsh publish . \
             --key keys/release.secret \
             --cert keys/release.cert \
@@ -138,20 +182,39 @@ jobs:
 
       - name: Write update signing secret
         shell: bash
-        run: mkdir -p keys && printf '%s' "$NSH_UPDATE_KEY" > keys/update.secret
+        env:
+          NSH_UPDATE_KEY: ${{ secrets.NSH_UPDATE_KEY }}
+        run: |
+          if [ -z "$NSH_UPDATE_KEY" ]; then
+            echo "::error::NSH_UPDATE_KEY secret is missing"
+            exit 1
+          fi
+          mkdir -p keys
+          printf '%s' "$NSH_UPDATE_KEY" > keys/update.secret
 
       - name: Generate signed manifest
         shell: bash
         run: |
-          nsh update-manifest \
-            dist/*-*.tar.gz \
-            dist/*-*.zip \
-            --package dist/*.nshpkg \
+          shopt -s nullglob
+          archives=(dist/*-*.tar.gz dist/*-*.zip)
+          packages=(dist/*.nshpkg)
+          if [ ${#archives[@]} -eq 0 ]; then
+            echo "::error::No platform archives found in dist"
+            exit 1
+          fi
+          if [ ${#packages[@]} -ne 1 ]; then
+            echo "::error::Expected exactly one OTA package, found ${#packages[@]}"
+            exit 1
+          fi
+          nsh update-manifest "${archives[@]}" \
+            --package "${packages[0]}" \
             --notes CHANGELOG.md \
             --key keys/update.secret \
             -o dist
 
+      # 只在 tag 推送时发 Release；手动触发不会把产物挂到分支名上。
       - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}

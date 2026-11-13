@@ -48,7 +48,7 @@
 . .\scripts\dev-env.ps1
 ```
 
-它把 cargo、MinGW、git、gh 以及仓库内 `.tools\nsh\bin`（若存在）加入当前会话 PATH；不修改系统环境变量。nsh 安装方式见 `docs/09-env-setup.md`。
+它把 cargo、MinGW、git、gh 以及仓库内 `.tools\nsh\bin`（若存在）加入当前会话 PATH；未指定 `CARGO_HOME` 时把它指向仓库内 `.tools\cargo-home`（含完整 crate 缓存与镜像配置），避免 nsh 编译 `.nsh/rust` 时去用户目录重新下载依赖而触发 `os error 5`。不修改系统环境变量。nsh 安装方式见 `docs/09-env-setup.md`。
 
 ## 6. 如何更新开发日志
 

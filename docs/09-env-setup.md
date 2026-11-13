@@ -1,6 +1,6 @@
 # 09 · 开发环境与工具链
 
-> 0.4.0 起项目使用 Native Shell（nsh），不再需要 Node 前端构建、Tauri CLI 或 WebView2。每个新 PowerShell 会话先在仓库根目录执行 `scripts/dev-env.ps1`，再运行任何构建命令。脚本只注入会话 PATH，不修改系统环境变量；本文不写死个人绝对路径。
+> 0.4.0 起项目使用 Native Shell（nsh），不再需要 Node 前端构建、Tauri CLI 或 WebView2。每个新 PowerShell 会话先在仓库根目录执行 `scripts/dev-env.ps1`，再运行任何构建命令。脚本只注入会话 PATH 与 `CARGO_HOME`，不修改系统环境变量；本文不写死个人绝对路径。
 
 ## 1. 工具链
 
@@ -28,7 +28,7 @@ irm https://nsh.dev/install.ps1 | iex
 . .\scripts\dev-env.ps1
 ```
 
-脚本把 `.cargo\bin`、MSYS2 `mingw64\bin`、git、gh，以及仓库内 `.tools\nsh\bin`（存在时）加入当前会话 PATH。
+脚本把 `.cargo\bin`、MSYS2 `mingw64\bin`、git、gh，以及仓库内 `.tools\nsh\bin`（存在时）加入当前会话 PATH；若调用方未显式指定 `CARGO_HOME`，则把它指向仓库内 `.tools\cargo-home`，复用已缓存的 crate 与该目录下的镜像 `config.toml`。`.vscode/tasks.json` 的所有 nsh/cargo 任务也会在 `options.env` 里显式设置同一个 `CARGO_HOME`。
 
 常用命令：
 
@@ -49,6 +49,7 @@ npm run format               # Prettier
 
 - **GNU 工具链可用**：nsh 的 Windows 开发宿主由 Cargo 用当前工具链构建；本机 GNU 目标 + MinGW 已能完成混合应用构建、headless 测试与运行。官方文档以 MSVC 为标准路径；若切换 MSVC，需安装 VS Build Tools + Windows SDK，并安装对应的 Rust MSVC target。
 - **nsh 临时目录**：nsh 运行/检查时会在用户临时目录或本地应用数据目录创建会话目录。若受限环境报 `os error 5`，把 `TMP`/`TEMP` 与 `LOCALAPPDATA` 指向仓库内可写目录，并用 `MEND_DATA_DIR` 指定测试库位置；正式安装后的应用使用用户正常的数据目录。本仓库已在 Windows 上以此方式通过 `nsh check` / `nsh test` / `nsh package`。
+- **Cargo 缓存不落在用户目录**：`nsh run` 会编译 nsh 生成的 `.nsh/rust` 工程，依赖数量远多于 `core`/`native`。若 `CARGO_HOME` 留在用户目录且缓存不全，就会触发下载，在受限环境里报 `failed to open ....crate / 拒绝访问 (os error 5)`。任务与 `dev-env.ps1` 均把 `CARGO_HOME` 固定到仓库内 `.tools\cargo-home`（含 rsproxy 镜像配置与完整依赖缓存），正常开发零下载。
 - **rusqlite `bundled`**：首次编译 SQLite C 源码约 30–60s；`cargo check` 也会触发构建脚本，因此机器上必须有可用的 C 编译器。
 - **测试数据隔离**：`nsh test` 的 headless 应用没有真实数据目录，测试前设置 `MEND_DATA_DIR` 指向临时目录，并在每次测试前清空。
 - **不要在主 crate 上跑 `cargo test`**：已不存在 Tauri 主 crate；当前测试入口是 `core` 与 `native`。
@@ -56,6 +57,6 @@ npm run format               # Prettier
 
 ## 4. 已知遗留
 
-- `nsh check` 在本机当前环境可能因下载/写入 TypeScript 7 的临时目录被拒绝而报 `os error 5`；`npm run typecheck` 等价可用。
+- 受限环境仍可能因 nsh 写临时目录被拒绝而报 `os error 5`；`.vscode/tasks.json` 已把 `LOCALAPPDATA`/`TMP`/`TEMP` 指向工作区 `.tmp/vscode`，`npm run typecheck` 可作等价 TypeScript 检查。
 - 手机打包需要 Android SDK/NDK 或 Xcode；本仓库当前只在 Windows 上验证了桌面与 headless 测试。
-- 自动更新签名清单与发布密钥尚未配置，发布工作流只产出 zip/setup。
+- 发布链路（签名 OTA 包、`latest.json` 与 GitHub Release）已配置，但 Windows/Linux/macOS 三端产物与清单签名需在 CI 上完整验证一次；`workflow_dispatch` 仅作流水线自检，正式发版推 `v*` tag。

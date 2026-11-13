@@ -59,7 +59,8 @@
         "env": {
           "LOCALAPPDATA": "${workspaceFolder}\\.tmp\\vscode\\localappdata",
           "TMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
-          "TEMP": "${workspaceFolder}\\.tmp\\vscode\\temp"
+          "TEMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
+          "CARGO_HOME": "${workspaceFolder}\\.tools\\cargo-home"
         }
       },
       "isBackground": true,
@@ -88,7 +89,8 @@
         "env": {
           "LOCALAPPDATA": "${workspaceFolder}\\.tmp\\vscode\\localappdata",
           "TMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
-          "TEMP": "${workspaceFolder}\\.tmp\\vscode\\temp"
+          "TEMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
+          "CARGO_HOME": "${workspaceFolder}\\.tools\\cargo-home"
         }
       },
       "isBackground": true,
@@ -117,7 +119,8 @@
         "env": {
           "LOCALAPPDATA": "${workspaceFolder}\\.tmp\\vscode\\localappdata",
           "TMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
-          "TEMP": "${workspaceFolder}\\.tmp\\vscode\\temp"
+          "TEMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
+          "CARGO_HOME": "${workspaceFolder}\\.tools\\cargo-home"
         }
       },
       "group": "test",
@@ -210,6 +213,7 @@
           "LOCALAPPDATA": "${workspaceFolder}\\.tmp\\vscode\\localappdata",
           "TMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
           "TEMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
+          "CARGO_HOME": "${workspaceFolder}\\.tools\\cargo-home",
           "MEND_DATA_DIR": "${workspaceFolder}\\.tmp\\test-data"
         }
       },
@@ -242,7 +246,8 @@
         "env": {
           "LOCALAPPDATA": "${workspaceFolder}\\.tmp\\vscode\\localappdata",
           "TMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
-          "TEMP": "${workspaceFolder}\\.tmp\\vscode\\temp"
+          "TEMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
+          "CARGO_HOME": "${workspaceFolder}\\.tools\\cargo-home"
         }
       },
       "group": {
@@ -274,7 +279,8 @@
         "env": {
           "LOCALAPPDATA": "${workspaceFolder}\\.tmp\\vscode\\localappdata",
           "TMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
-          "TEMP": "${workspaceFolder}\\.tmp\\vscode\\temp"
+          "TEMP": "${workspaceFolder}\\.tmp\\vscode\\temp",
+          "CARGO_HOME": "${workspaceFolder}\\.tools\\cargo-home"
         }
       },
       "dependsOn": ["检查：nsh 类型检查（官方）"],

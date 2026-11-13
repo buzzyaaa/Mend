@@ -99,7 +99,7 @@ SQLite 单文件（应用层字段加密）
 ## 8. 开发与验证命令
 
 ```powershell
-. .\scripts\dev-env.ps1     # 把 cargo / MinGW / nsh(.tools) 加入当前会话 PATH
+. .\scripts\dev-env.ps1     # 加入 cargo / MinGW / nsh(.tools) 到 PATH，并固定 CARGO_HOME
 
 nsh run .                   # 本机桌面窗口
 nsh test .                  # headless：cargo test（native）+ TSX UI 测试
@@ -110,7 +110,7 @@ cargo test --manifest-path core\Cargo.toml
 npm run typecheck           # 本地 TypeScript 检查（nsh check 在本机受临时目录权限限制时使用）
 ```
 
-`nsh check` 是官方类型检查入口。若受限环境报 `os error 5`（nsh 写临时目录/本地应用数据目录被拒绝），可把 `LOCALAPPDATA` 与 `TMP`/`TEMP` 指向仓库内可写目录后重试；也可以用 `npm run typecheck` 做等价的 TypeScript 检查。本仓库已在 Windows 上验证 `nsh check .`、`nsh test .`、`nsh build .` 与 `nsh package . --target windows` 均可通过。
+`nsh check` 是官方类型检查入口。若受限环境报 `os error 5`（nsh 写临时目录/本地应用数据目录被拒绝），可把 `LOCALAPPDATA` 与 `TMP`/`TEMP` 指向仓库内可写目录后重试；也可以用 `npm run typecheck` 做等价的 TypeScript 检查。此外 `CARGO_HOME` 必须指向仓库内 `.tools\cargo-home`：`.nsh/rust` 的依赖远多于 `core`/`native`，缓存不全时会触发下载，容易在用户目录撞上 `failed to open ....crate / 拒绝访问`。本仓库已在 Windows 上验证 `nsh check .`、`nsh test .`、`nsh build .` 与 `nsh package . --target windows` 均可通过。
 
 ## 9. 已知风险
 
