@@ -41,14 +41,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
 
       - name: Install NSH
         shell: bash
         run: |
           if [ "${{ matrix.runs_on }}" = "windows-latest" ]; then
-            powershell -NoProfile -Command "irm https://nsh.dev/install.ps1 | iex"
-            echo "$env:LOCALAPPDATA/nsh/bin" >> "$GITHUB_PATH"
+            powershell -NoProfile -Command "irm https://nsh.dev/install.ps1 | iex; Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $env:LOCALAPPDATA 'nsh/bin')"
           else
             curl -fsSL https://nsh.dev/install.sh | sh
             echo "$HOME/.local/bin" >> "$GITHUB_PATH"
@@ -91,13 +89,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
 
       - name: Install NSH
         shell: bash
         run: |
-          powershell -NoProfile -Command "irm https://nsh.dev/install.ps1 | iex"
-          echo "$env:LOCALAPPDATA/nsh/bin" >> "$GITHUB_PATH"
+          powershell -NoProfile -Command "irm https://nsh.dev/install.ps1 | iex; Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $env:LOCALAPPDATA 'nsh/bin')"
 
       - name: Write release signing secret
         shell: bash
