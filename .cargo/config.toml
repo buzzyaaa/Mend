@@ -1,0 +1,22 @@
+# Cargo 配置（本仓库专用，提交到仓库；不属于个人/本机信息）。
+#
+# 背景：Windows 上部分机器/安全软件会让 cargo 构建脚本派生的编译器
+# （cc-rs 调用的 gcc，编译 ring / libsqlite3-sys 等 C 代码）无法在
+# `%LOCALAPPDATA%\Temp` 创建临时文件，报：
+#   Cannot create temporary file in C:\Users\<user>\AppData\Local\Temp\: Permission denied
+# 导致 `nsh dev` / `nsh test` 在编译 Rust 依赖阶段直接失败。
+#
+# `[env]` 作用于构建脚本、rustc 及其派生进程（gcc / collect2 / dlltool），
+# 因此这里把临时目录固定到仓库内 `.cargo/tmp`：该目录由随仓库分发的
+# `.cargo/tmp/.gitkeep` 保证存在，并且与修复配置放在一起，不会被当成
+# 「随手可删的构建垃圾」清掉（`.tmp/` 就是这种目录，曾被清空导致
+# `Cannot create temporary file in ...\.tmp\build\: No such file or directory`）。
+# 这样无论是否先 dot-source `scripts/dev-env.ps1`，`nsh dev` 都能直接编译。
+# `force = true` 是因为 TMP/TEMP 在系统环境中总是已存在，不强制就不会覆盖。
+#
+# 相对路径以本文件所在目录（仓库根）为基准，跨平台通用；Unix 上多设一个
+# TMPDIR 让 rustc/gcc 走同一目录（不影响 Windows）。
+[env]
+TMP = { value = ".cargo/tmp", relative = true, force = true }
+TEMP = { value = ".cargo/tmp", relative = true, force = true }
+TMPDIR = { value = ".cargo/tmp", relative = true, force = true }
