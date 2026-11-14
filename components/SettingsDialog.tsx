@@ -37,6 +37,9 @@ import {
   SectionTitle,
   SelectField,
   TextField,
+  MODAL_BACKDROP_CLASS,
+  MODAL_CLASS,
+  ModalFrame,
 } from './ui'
 
 const AUTO_LOCK_OPTIONS = [0, 1, 5, 10, 15, 30, 60]
@@ -172,15 +175,17 @@ export function SettingsDialog() {
       }}
       onCancel={closeSettings}
       accessibilityLabel={t('nav.settings')}
+      class={MODAL_CLASS}
+      backdropClass={MODAL_BACKDROP_CLASS}
       style={{ width: 760, maxWidth: '94%' }}
     >
-      <View
+      <ModalFrame
         class="overflow-hidden rounded-xl border border-border bg-card shadow-xl"
-        style={{ maxHeight: Math.max(360, windowSize().height - 72) }}
+        maxHeight={Math.max(360, windowSize().height - 72)}
       >
-        <View class="flex-row items-start gap-3 border-b border-border px-5 py-4">
+        <View class="flex-row items-start gap-3 border-b border-border px-5 py-3">
           <View class="flex-1 gap-0.5">
-            <Text class="text-lg font-semibold text-foreground">{t('nav.settings')}</Text>
+            <Text class="text-sm font-semibold text-foreground">{t('nav.settings')}</Text>
             <Text class="text-xs text-muted-foreground">{t('settings.appearanceHint')}</Text>
           </View>
           <IconButton
@@ -193,7 +198,7 @@ export function SettingsDialog() {
 
         <Scroll
           style={{ maxHeight: Math.max(300, windowSize().height - 140) }}
-          contentClass="gap-5 p-5"
+          contentClass="gap-4 p-4"
         >
           <View class="gap-3">
             <SectionTitle title={t('settings.appearance')} />
@@ -248,7 +253,7 @@ export function SettingsDialog() {
             </Field>
 
             <View class="gap-2 rounded-lg border border-border bg-muted/30 p-3">
-              <Text class="text-sm font-medium text-foreground">
+              <Text class="text-xs font-medium text-foreground">
                 {t('settings.changePassword')}
               </Text>
               <Text class="text-xs text-muted-foreground">{t('settings.changePasswordHint')}</Text>
@@ -342,13 +347,13 @@ export function SettingsDialog() {
               />
             </View>
             <View class="gap-1 rounded-md border border-border bg-muted/30 px-3 py-2">
-              <Text class="text-[10px] uppercase tracking-wide text-muted-foreground">
+              <Text class="text-[11px] uppercase tracking-wide text-muted-foreground">
                 {t('backup.dataDir')}
               </Text>
               <Text class="text-xs text-foreground" style={{ numberOfLines: 2 }}>
                 {paths()?.dataDir ?? '…'}
               </Text>
-              <Text class="text-[10px] text-muted-foreground">{paths()?.dbPath ?? ''}</Text>
+              <Text class="text-[11px] text-muted-foreground">{paths()?.dbPath ?? ''}</Text>
             </View>
           </View>
 
@@ -390,7 +395,7 @@ export function SettingsDialog() {
 
             <If when={updatePackage()}>
               <View class="rounded-lg border border-success/30 bg-success/10 p-3">
-                <Text class="text-sm font-medium text-success">{t('update.packageFound')}</Text>
+                <Text class="text-xs font-medium text-success">{t('update.packageFound')}</Text>
                 <Text class="mt-1 text-xs text-foreground">
                   {t('update.packageVersion', {
                     version: updatePackage()?.version ?? '',
@@ -414,7 +419,7 @@ export function SettingsDialog() {
 
             <If when={!updatePackage() && updateApp()}>
               <View class="rounded-lg border border-border bg-card p-3">
-                <Text class="text-sm font-medium text-foreground">
+                <Text class="text-xs font-medium text-foreground">
                   {t('update.appAvailable', { version: updateApp()?.version ?? '' })}
                 </Text>
                 {updateApp()?.notes ? (
@@ -444,9 +449,7 @@ export function SettingsDialog() {
             <View class="flex-row items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2">
               <View class="gap-0.5">
                 <Text class="text-xs font-medium text-foreground">{t('settings.version')}</Text>
-                <Text class="text-xs text-muted-foreground">
-                  {`${appInfo().version ?? '0.4.0'} (${appInfo().build ?? 1})`}
-                </Text>
+                <Text class="text-xs text-muted-foreground">{appInfo().version ?? '0.4.0'}</Text>
               </View>
               <Text class="text-xs text-muted-foreground">Native Shell</Text>
             </View>
@@ -456,7 +459,7 @@ export function SettingsDialog() {
             <ActionButton label={t('common.close')} variant="secondary" onPress={closeSettings} />
           </View>
         </Scroll>
-      </View>
+      </ModalFrame>
     </Dialog>
   )
 }

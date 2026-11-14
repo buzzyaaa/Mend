@@ -27,7 +27,7 @@ function BucketRow(props: { id: string; label: string; icon: IconName; onNavigat
   return (
     <View
       class={
-        'h-9 flex-row items-center gap-2.5 rounded-md px-2.5 ' +
+        'h-8 flex-row items-center gap-2.5 rounded-md px-2.5 ' +
         (active()
           ? 'bg-accent text-foreground '
           : 'text-muted-foreground hover:bg-accent hover:text-foreground ')
@@ -41,12 +41,12 @@ function BucketRow(props: { id: string; label: string; icon: IconName; onNavigat
     >
       <Icon
         name={props.id === 'favorites' && active() ? 'star-filled' : props.icon}
-        size={16}
+        size={14}
         color={active() ? token('foreground') : token('muted-foreground')}
       />
       <Text
         class={
-          'flex-1 text-sm ' + (active() ? 'font-medium text-foreground' : 'text-muted-foreground')
+          'flex-1 text-xs ' + (active() ? 'font-medium text-foreground' : 'text-muted-foreground')
         }
       >
         {t(props.label)}
@@ -60,7 +60,7 @@ function CategoryRow(props: { category: Category; onNavigate?: () => void }) {
   return (
     <View
       class={
-        'group h-9 flex-row items-center gap-2 rounded-md px-2 ' +
+        'group h-8 flex-row items-center gap-2 rounded-md px-2 ' +
         (active() ? 'bg-accent ' : 'hover:bg-accent ')
       }
       onPress={() => {
@@ -76,11 +76,11 @@ function CategoryRow(props: { category: Category; onNavigate?: () => void }) {
           backgroundColor: props.category.color ? `${props.category.color}22` : token('muted'),
         }}
       >
-        <Text class="text-[13px]">{categoryEmoji(props.category.icon)}</Text>
+        <Text class="text-[11px]">{categoryEmoji(props.category.icon)}</Text>
       </View>
       <Text
         class={
-          'flex-1 text-sm ' + (active() ? 'font-medium text-foreground' : 'text-muted-foreground')
+          'flex-1 text-xs ' + (active() ? 'font-medium text-foreground' : 'text-muted-foreground')
         }
         style={{ numberOfLines: 1 }}
       >
@@ -117,7 +117,7 @@ function CategoryRow(props: { category: Category; onNavigate?: () => void }) {
 
 export function Sidebar(props: { onNavigate?: () => void; compact?: boolean }) {
   return (
-    <View class={'h-full bg-card ' + (props.compact ? 'w-full' : 'w-60 border-r border-border')}>
+    <View class="h-full w-full bg-card">
       <View class="flex-1 gap-1 p-2.5">
         <View class="px-1.5 pb-1 pt-1">
           <Text class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -145,12 +145,12 @@ export function Sidebar(props: { onNavigate?: () => void; compact?: boolean }) {
         </View>
 
         <View
-          class="h-9 flex-row items-center gap-2 rounded-md px-2.5 text-muted-foreground hover:bg-accent"
+          class="h-8 flex-row items-center gap-2 rounded-md px-2.5 text-muted-foreground hover:bg-accent"
           onPress={() => categoryEditor.set({ id: null })}
           role="button"
         >
-          <Icon name="plus" size={15} color={token('muted-foreground')} />
-          <Text class="text-sm text-muted-foreground">{t('nav.addCategory')}</Text>
+          <Icon name="plus" size={14} color={token('muted-foreground')} />
+          <Text class="text-xs text-muted-foreground">{t('nav.addCategory')}</Text>
         </View>
       </View>
     </View>

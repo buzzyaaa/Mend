@@ -80,7 +80,7 @@ function EntryRow(props: { entry: EntrySummary; index: number }) {
   const menu = (
     <Menu
       trigger={
-        <IconButton icon="more-horizontal" label={t('common.actions')} size={16} class="h-7 w-7" />
+        <IconButton icon="more-horizontal" label={t('common.actions')} size={14} class="h-7 w-7" />
       }
       popupClass="min-w-40 rounded-md border border-border bg-popover p-1 shadow-lg"
     >
@@ -93,7 +93,7 @@ function EntryRow(props: { entry: EntrySummary; index: number }) {
         >
           <View class="flex-row items-center gap-2">
             <Icon name="edit" size={14} color={token('muted-foreground')} />
-            <Text class="text-sm text-popover-foreground">{t('entry.edit')}</Text>
+            <Text class="text-xs text-popover-foreground">{t('entry.edit')}</Text>
           </View>
         </MenuItem>
         <MenuItem onSelect={() => void toggleFavorite(props.entry)}>
@@ -103,7 +103,7 @@ function EntryRow(props: { entry: EntrySummary; index: number }) {
               size={14}
               color={token('muted-foreground')}
             />
-            <Text class="text-sm text-popover-foreground">
+            <Text class="text-xs text-popover-foreground">
               {props.entry.favorite ? t('entry.unstar') : t('entry.star')}
             </Text>
           </View>
@@ -111,14 +111,14 @@ function EntryRow(props: { entry: EntrySummary; index: number }) {
         <MenuItem onSelect={requestArchive}>
           <View class="flex-row items-center gap-2">
             <Icon name="archive" size={14} color={token('muted-foreground')} />
-            <Text class="text-sm text-popover-foreground">{t('entry.archive')}</Text>
+            <Text class="text-xs text-popover-foreground">{t('entry.archive')}</Text>
           </View>
         </MenuItem>
         <MenuSeparator class="my-1 h-px bg-border" />
         <MenuItem onSelect={requestDelete}>
           <View class="flex-row items-center gap-2">
             <Icon name="trash" size={14} color={token('destructive')} />
-            <Text class="text-sm text-destructive">{t('entry.delete')}</Text>
+            <Text class="text-xs text-destructive">{t('entry.delete')}</Text>
           </View>
         </MenuItem>
       </If>
@@ -137,13 +137,13 @@ function EntryRow(props: { entry: EntrySummary; index: number }) {
         >
           <View class="flex-row items-center gap-2">
             <Icon name="restore" size={14} color={token('muted-foreground')} />
-            <Text class="text-sm text-popover-foreground">{t('entry.unarchive')}</Text>
+            <Text class="text-xs text-popover-foreground">{t('entry.unarchive')}</Text>
           </View>
         </MenuItem>
         <MenuItem onSelect={requestDelete}>
           <View class="flex-row items-center gap-2">
             <Icon name="trash" size={14} color={token('destructive')} />
-            <Text class="text-sm text-destructive">{t('entry.delete')}</Text>
+            <Text class="text-xs text-destructive">{t('entry.delete')}</Text>
           </View>
         </MenuItem>
       </If>
@@ -151,13 +151,13 @@ function EntryRow(props: { entry: EntrySummary; index: number }) {
         <MenuItem onSelect={() => void restoreEntry(props.entry.id)}>
           <View class="flex-row items-center gap-2">
             <Icon name="restore" size={14} color={token('muted-foreground')} />
-            <Text class="text-sm text-popover-foreground">{t('trash.restore')}</Text>
+            <Text class="text-xs text-popover-foreground">{t('trash.restore')}</Text>
           </View>
         </MenuItem>
         <MenuItem onSelect={requestPurge}>
           <View class="flex-row items-center gap-2">
             <Icon name="trash" size={14} color={token('destructive')} />
-            <Text class="text-sm text-destructive">{t('trash.purge')}</Text>
+            <Text class="text-xs text-destructive">{t('trash.purge')}</Text>
           </View>
         </MenuItem>
       </If>
@@ -166,13 +166,13 @@ function EntryRow(props: { entry: EntrySummary; index: number }) {
         <MenuItem onSelect={() => void moveEntry(props.entry, -1)}>
           <View class="flex-row items-center gap-2">
             <Icon name="arrow-up" size={14} color={token('muted-foreground')} />
-            <Text class="text-sm text-popover-foreground">{t('entry.moveUp')}</Text>
+            <Text class="text-xs text-popover-foreground">{t('entry.moveUp')}</Text>
           </View>
         </MenuItem>
         <MenuItem onSelect={() => void moveEntry(props.entry, 1)}>
           <View class="flex-row items-center gap-2">
             <Icon name="arrow-down" size={14} color={token('muted-foreground')} />
-            <Text class="text-sm text-popover-foreground">{t('entry.moveDown')}</Text>
+            <Text class="text-xs text-popover-foreground">{t('entry.moveDown')}</Text>
           </View>
         </MenuItem>
       </If>
@@ -181,30 +181,30 @@ function EntryRow(props: { entry: EntrySummary; index: number }) {
 
   return (
     <View
-      class="flex-row items-center gap-3 rounded-lg border border-transparent bg-card px-3 py-2.5 hover:border-border hover:bg-accent active:opacity-90"
+      class="flex-row items-center gap-3 rounded-lg border border-transparent bg-card px-3 py-2 hover:border-border hover:bg-accent active:opacity-90"
       onPress={isTrashView() ? undefined : () => void selectEntry(props.entry.id)}
       role={isTrashView() ? undefined : 'button'}
       accessibilityLabel={props.entry.title}
     >
       <View
-        class="h-9 w-9 items-center justify-center rounded-lg"
+        class="h-8 w-8 items-center justify-center rounded-lg"
         style={{
           backgroundColor: category()?.color ? `${category()?.color}22` : token('muted'),
         }}
       >
-        <Text class="text-base">{categoryEmoji(category()?.icon)}</Text>
+        <Text class="text-sm">{categoryEmoji(category()?.icon)}</Text>
       </View>
 
       <View class="flex-1 gap-0.5">
         <View class="flex-row items-center gap-2">
-          <Text class="flex-1 text-sm font-medium text-foreground" style={{ numberOfLines: 1 }}>
+          <Text class="flex-1 text-xs font-medium text-foreground" style={{ numberOfLines: 1 }}>
             {props.entry.title}
           </Text>
           <If when={props.entry.favorite}>
-            <Icon name="star-filled" size={13} color={token('warning')} />
+            <Icon name="star-filled" size={12} color={token('warning')} />
           </If>
           <If when={props.entry.archived}>
-            <Text class="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+            <Text class="rounded bg-muted px-1 py-0.5 text-[11px] text-muted-foreground">
               {t('entry.archived')}
             </Text>
           </If>
@@ -236,7 +236,7 @@ function EntryRow(props: { entry: EntrySummary; index: number }) {
           <IconButton
             icon={props.entry.favorite ? 'star-filled' : 'star'}
             label={props.entry.favorite ? t('entry.unstar') : t('entry.star')}
-            size={15}
+            size={14}
             class="h-7 w-7"
             onPress={() => void toggleFavorite(props.entry)}
           />

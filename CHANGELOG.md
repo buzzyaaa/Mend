@@ -7,6 +7,27 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-14
+
+启动诊断与数据目录写权限加固。
+
+#### Added
+- 启动前显式探测数据目录与库文件的写权限，失败时返回专门的 `db_readonly` 错误码（含路径），并提供中英文操作指引。
+- `native` 增加写权限探测单测：可写目录通过、不可写目录返回 `db_readonly`。
+- 启动失败的错误页附上实际解析出的数据库路径，便于定位权限或路径错配问题。
+- headless UI 回归测试：`Vault.init` 不得接收硬编码的开发期数据目录，只能使用宿主的 `process.dataDir`。
+
+#### Fixed
+- 数据目录不可写时，界面不再只显示 SQLite 底层的 `attempt to write a readonly database` / `unable to open database file`，而是给出可操作的原因说明。
+- 移除可视化验证时遗留的临时数据目录覆盖：此前 `initVault()` 把数据库写死到仓库内的 `.cargo/tmp/test-data`，会让发布版读写开发机路径、并令测试复用旧库。现恢复为宿主 `process.dataDir`，旧库仍在 `%APPDATA%\com.mend.app\mend.db` 原样打开。
+- 输入框输入文字不可见：nsh `Input` 的文字色由 `InputStyle.color` 控制，原先依赖 `text-foreground` 颜色类被 `Input` 内置默认色（与边框同色、浅底上近乎透明）覆盖。改为在 `inputTextStyle()` 中显式设置 `color` / `placeholderColor` / `caretColor`，`TextField` 与顶部搜索框统一应用。
+- 设置等弹窗出现在左上角、不可拖动、无遮罩：新增 `ModalFrame`（居中 + `bg-black/50` 半透明遮罩 + 44px 拖拽标题栏），六个弹窗（设置 / 预设 / 条目编辑 / 分类编辑 / 确认 / 分类 Sheet）统一接入。
+- 桌面三列（侧栏 / 列表 / 详情）不可拖动调宽：改用 `ResizablePanelGroup` 包三个 `ResizablePanel`，拖拽结果经 `onResize` 持久化到 `Preferences.columnSizes`。
+- 图标按钮（星标 / 编辑 / 归档 / 删除等）缺悬停功能提示：`IconButton` 的 `tooltip` 改用 `<Tooltip placement="top" delay={350}>` 包裹功能标签，所有图标按钮自动继承。
+- 整体字号与按钮偏大、风格不统一：收敛设计令牌（标题 14 / 正文 12 / 辅助 11，按钮收到 `h-8`，图标与间距同步收窄），重写 `ui.tsx` 基元并批量收敛各组件。
+- 中间空状态提示文字过大：空状态标题收到 `text-sm`、提示收到 `text-[11px]`。
+- 关于页版本号多出无意义的 `(1)`：版本文本由 `${version} (${build})` 改为仅 `${version}`。
+
 ## [0.4.0] - 2026-11-13
 
 Native Shell 重构：移除 Tauri / Vue / WebView，改为 TSX 原生 UI + Rust 核心。

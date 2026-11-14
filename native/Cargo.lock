@@ -1051,7 +1051,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "mend-core"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "argon2",
  "base64 0.22.1",
@@ -1066,7 +1066,7 @@ dependencies = [
 
 [[package]]
 name = "mend-native"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "base64 0.22.1",
  "mend-core",

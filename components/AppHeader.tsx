@@ -19,20 +19,27 @@ export function AppHeader(props: { compact: () => boolean; onOpenCategories?: ()
   const version = appInfo().version ?? '0.4.0'
 
   const search = (
-    <View class="h-9 flex-1 flex-row items-center gap-2 rounded-md border border-input bg-background px-2.5">
-      <Icon name="search" size={15} color={token('muted-foreground')} />
+    <View class="h-8 flex-1 flex-row items-center gap-1.5 rounded-md border border-input bg-background px-2">
+      <Icon name="search" size={14} color={token('muted-foreground')} />
       <Input
         value={keyword()}
         onChange={(event) => setKeyword(event.value)}
         placeholder={t('entry.searchPlaceholder')}
         accessibilityLabel={t('entry.searchPlaceholder')}
-        class="h-8 flex-1 border-0 bg-transparent px-0 text-sm text-foreground placeholder:text-muted-foreground"
+        class="h-7 flex-1 border-0 bg-transparent px-0 text-xs"
+        // `Input` 的 token 颜色类不可靠（值有效但文字不显示），显式给文字样式。
+        style={{
+          color: token('foreground'),
+          fontSize: 12,
+          placeholderColor: token('muted-foreground'),
+          caretColor: token('foreground'),
+        }}
       />
       <If when={keyword().length > 0}>
         <IconButton
           icon="close"
           label={t('common.close')}
-          size={13}
+          size={12}
           class="h-6 w-6"
           onPress={() => setKeyword('')}
         />
@@ -42,14 +49,14 @@ export function AppHeader(props: { compact: () => boolean; onOpenCategories?: ()
 
   return (
     <View class="border-b border-border bg-card">
-      <View class="h-12 flex-row items-center gap-2 px-3">
+      <View class="h-10 flex-row items-center gap-1.5 px-2.5">
         <If when={props.compact()}>
           <IconButton
             icon="menu"
             label={t('nav.categories')}
             onPress={() => props.onOpenCategories?.()}
           />
-          <Text class="flex-1 text-base font-semibold text-foreground" style={{ numberOfLines: 1 }}>
+          <Text class="flex-1 text-sm font-semibold text-foreground" style={{ numberOfLines: 1 }}>
             {bucketTitle()}
           </Text>
           <IconButton
@@ -71,14 +78,14 @@ export function AppHeader(props: { compact: () => boolean; onOpenCategories?: ()
         </If>
 
         <If when={!props.compact()}>
-          <View class="flex-row items-center gap-2">
+          <View class="flex-row items-center gap-1.5">
             <View class="h-7 w-7 items-center justify-center rounded-lg bg-primary">
-              <Icon name="shield" size={15} color={token('primary-foreground')} />
+              <Icon name="shield" size={14} color={token('primary-foreground')} />
             </View>
-            <Text class="text-base font-semibold tracking-tight text-foreground">
+            <Text class="text-sm font-semibold tracking-tight text-foreground">
               {t('app.name')}
             </Text>
-            <Text class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+            <Text class="rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
               {`v${version}`}
             </Text>
           </View>
@@ -112,7 +119,7 @@ export function AppHeader(props: { compact: () => boolean; onOpenCategories?: ()
       </View>
 
       <If when={props.compact()}>
-        <View class="flex-row items-center gap-2 px-3 pb-2.5">
+        <View class="flex-row items-center gap-1.5 px-2.5 pb-2">
           {search}
           <IconButton icon="key" label={t('nav.presets')} onPress={() => presetsOpen.set(true)} />
           <IconButton icon="lock" label={t('header.lock')} onPress={() => void lockVault()} />

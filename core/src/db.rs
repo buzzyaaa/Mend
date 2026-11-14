@@ -5,9 +5,9 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, OptionalExtension, Transaction, TransactionBehavior};
 
 /// 向外暴露连接类型，避免上层再单独依赖 rusqlite。
 pub use rusqlite::Connection;
@@ -16,6 +16,16 @@ use crate::error::{MendError, MendResult};
 
 pub const SCHEMA_VERSION: i64 = 4;
 pub const DB_FILE_NAME: &str = "mend.db";
+
+/// SQLite 忙等待上限。必须在 `Connection::open` 之后、任何读写之前设置：
+/// open / pragma journal_mode / migrate 阶段如果库文件正被其他进程短暂持有
+/// （第二个应用实例、杀毒扫描、备份工具等），没有忙等待会立刻以 SQLite
+/// busy/locked 失败 → MendError::Db → 启动 Fatal「数据读写失败」。
+///
+/// 注意：忙回调只覆盖「直接申请锁」的路径。事务内**先读后写**时，SQLite 为了
+/// 避免死锁会在读锁升级写锁处直接返回 SQLITE_BUSY、不调用忙回调。所以写事务
+/// （如 `migrate`）必须用 `BEGIN IMMEDIATE` 先拿写锁，见下方 `migrate`。
+pub const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 const SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS meta (
@@ -96,6 +106,9 @@ pub fn open_and_migrate(path: &Path) -> MendResult<Connection> {
             .map_err(|err| MendError::Db(format!("创建数据目录失败: {err}")))?;
     }
     let conn = Connection::open(path).map_err(db_err)?;
+    // 忙等待必须先于一切读写：pragma journal_mode 与 migrate（建表 / 写
+    // schema_version）都可能撞上别的连接持有的写锁，见 BUSY_TIMEOUT 文档。
+    conn.busy_timeout(BUSY_TIMEOUT).map_err(db_err)?;
     // 单文件库：不用 WAL，便于整库拷贝备份（见 docs/06）
     conn.pragma_update(None, "journal_mode", "DELETE")
         .map_err(db_err)?;
@@ -109,10 +122,14 @@ pub fn open_and_migrate(path: &Path) -> MendResult<Connection> {
 /// "列已加、版本未升"的半迁移状态（旧实现三段分开执行，坏库会导致下次启动永久失败）。
 /// 可重入：`CREATE TABLE IF NOT EXISTS` 幂等；各版本迁移前先探测目标列是否已存在，
 /// 即使历史版本崩溃留下了"列存在但版本未升"的库，也能安全补齐版本号。
+///
+/// 用 `BEGIN IMMEDIATE`（而非默认的 DEFERRED）：迁移整体是写事务，先拿写锁能让
+/// `BUSY_TIMEOUT` 真正作用于 BEGIN。DEFERRED 事务里先 `meta_get` 读、再 `meta_set`
+/// 写，若此刻别的进程持有写锁，SQLite 在"读→写升级"处会**绕过忙回调**直接返回
+/// SQLITE_BUSY（防死锁），忙等待形同虚设——这正是启动 Fatal 的另一半根因。
 pub fn migrate(conn: &Connection) -> MendResult<()> {
-    // unchecked_transaction：借用 &Connection 即可开启，便于在事务内复用仓储函数
-    // （meta_get/meta_set 接收 &Connection，&Transaction 自动解引用传递）。
-    let tx = conn.unchecked_transaction().map_err(db_err)?;
+    // unchecked_transaction 的语义（借用 &Connection 开启事务），只是换成 IMMEDIATE
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate).map_err(db_err)?;
     tx.execute_batch(SCHEMA_V1).map_err(db_err)?;
     let current: i64 = meta_get(&tx, "schema_version")?
         .and_then(|v| v.parse().ok())
@@ -413,7 +430,9 @@ pub fn next_entry_sort_order(conn: &Connection, category_id: Option<&str>) -> Me
 ///
 /// 只更新未删除未归档条目；不存在的 id 静默跳过；空数组为合法空操作。
 pub fn reorder_entries(conn: &Connection, ids: &[String]) -> MendResult<()> {
-    let tx = conn.unchecked_transaction().map_err(db_err)?;
+    // 事务内先按 id 读 category_id、再写 sort_order：与 migrate 同理，DEFERRED 会在
+    // 「读锁升级写锁」处绕过忙回调直接返回 SQLITE_BUSY，故显式用 BEGIN IMMEDIATE。
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate).map_err(db_err)?;
 
     // 1) 按 category_id 分组，保持传入顺序。
     let mut groups: Vec<(Option<String>, Vec<String>)> = Vec::new();
@@ -853,6 +872,52 @@ mod tests {
         );
         assert!(column_exists(&conn, "entries", "tags").unwrap());
         assert!(column_exists(&conn, "entries", "sort_order").unwrap());
+    }
+
+    /// 忙等待必须在 open / pragma / migrate 阶段就生效：另一个连接用
+    /// `BEGIN IMMEDIATE` 独占写锁 ~150ms 后提交，期间的 `open_and_migrate`
+    /// 应等待锁释放后成功，而不是立刻报 database is locked（修复前的行为，
+    /// 表现为启动 Fatal「数据读写失败」且重试也立刻复现）。
+    #[test]
+    fn open_and_migrate_waits_for_transient_write_lock() {
+        let dir = std::env::temp_dir().join(format!("mend-core-db-busy-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(DB_FILE_NAME);
+
+        // 先建一个已迁移完成的库；后续 open_and_migrate 仍会重跑 migrate
+        //（其中 meta_set 写 schema_version 需要写锁）。
+        {
+            let conn = open_and_migrate(&path).unwrap();
+            meta_set(&conn, "boot", "ok").unwrap();
+        } // 在此关闭，释放文件句柄
+
+        // 锁持有线程：BEGIN IMMEDIATE 独占写锁，150ms 后提交。
+        let (lock_held, held_rx) = std::sync::mpsc::channel();
+        let lock_path = path.clone();
+        let holder = std::thread::spawn(move || {
+            let conn = Connection::open(&lock_path).unwrap();
+            conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+            lock_held.send(()).unwrap();
+            std::thread::sleep(Duration::from_millis(150));
+            conn.execute_batch("COMMIT").unwrap();
+        });
+        held_rx.recv().unwrap(); // 写锁已被持有，才开始第二个连接的打开
+
+        let started = std::time::Instant::now();
+        let conn = open_and_migrate(&path).unwrap();
+        let waited = started.elapsed();
+        holder.join().unwrap();
+
+        assert!(
+            waited >= Duration::from_millis(100),
+            "open_and_migrate 应等待瞬时写锁释放，实际耗时 {waited:?}"
+        );
+        // 锁释放后第二个连接可正常读写，且看到了建库阶段写入的数据
+        meta_set(&conn, "after", "lock").unwrap();
+        assert_eq!(meta_get(&conn, "boot").unwrap().as_deref(), Some("ok"));
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// v1 旧库（无 tags / sort_order 列）升级到 v3：加列成功，旧数据带默认空标签与排序号 0。

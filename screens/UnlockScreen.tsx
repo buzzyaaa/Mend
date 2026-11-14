@@ -59,18 +59,18 @@ export function UnlockScreen(props: { mode: 'setup' | 'unlock' }) {
   }
 
   return (
-    <View class="flex-1 items-center justify-center bg-background p-5">
+    <View class="flex-1 items-center justify-center bg-background p-4">
       <View
-        class="w-full max-w-[430px] gap-6 rounded-2xl border border-border bg-card p-7 shadow-lg"
+        class="w-full max-w-[430px] gap-4 rounded-2xl border border-border bg-card p-5 shadow-lg"
         style={{ alignSelf: 'center' }}
       >
         <View class="flex-row items-start justify-between">
           <View class="flex-row items-center gap-3">
-            <View class="h-11 w-11 items-center justify-center rounded-xl bg-primary">
-              <Icon name="shield" size={23} color={token('primary-foreground')} />
+            <View class="h-10 w-10 items-center justify-center rounded-xl bg-primary">
+              <Icon name="shield" size={20} color={token('primary-foreground')} />
             </View>
             <View class="gap-0.5">
-              <Text class="text-xl font-semibold tracking-tight text-foreground">
+              <Text class="text-sm font-semibold tracking-tight text-foreground">
                 {t('app.name')}
               </Text>
               <Text class="text-xs text-muted-foreground">{t('unlock.subtitle')}</Text>
@@ -86,15 +86,15 @@ export function UnlockScreen(props: { mode: 'setup' | 'unlock' }) {
         </View>
 
         <View class="gap-1">
-          <Text class="text-2xl font-semibold tracking-tight text-foreground">
+          <Text class="text-base font-semibold tracking-tight text-foreground">
             {isSetup() ? t('unlock.setupSubtitle') : t('unlock.password')}
           </Text>
           {isSetup() ? (
-            <Text class="text-sm text-muted-foreground">{t('unlock.cannotRecover')}</Text>
+            <Text class="text-xs text-muted-foreground">{t('unlock.cannotRecover')}</Text>
           ) : null}
         </View>
 
-        <View class="gap-4">
+        <View class="gap-3">
           <Field label={t('unlock.password')}>
             <View class="flex-row items-center gap-2">
               <TextField
@@ -155,7 +155,7 @@ export function UnlockScreen(props: { mode: 'setup' | 'unlock' }) {
 
           {error() ? (
             <View class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2">
-              <Text class="text-sm text-destructive">{error()}</Text>
+              <Text class="text-xs text-destructive">{error()}</Text>
             </View>
           ) : null}
 

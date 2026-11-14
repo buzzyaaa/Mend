@@ -1,11 +1,18 @@
 # --- Native Shell generated / local toolchain ---
 /.nsh/
 /.tools/
-/.tmp/
 /target/
 **/target/
 *.nshpkg
 *.mendbak
+
+# --- Local scratch / test data (never the Cargo temp dir; that lives in .cargo/tmp) ---
+/.tmp/
+
+# --- Cargo build-script temp dir (see .cargo/config.toml) ---
+# Keep the placeholder so the directory exists in a fresh clone; ignore its contents.
+/.cargo/tmp/*
+!/.cargo/tmp/.gitkeep
 
 # --- Node dev tooling (type check / format only) ---
 node_modules/
@@ -27,6 +34,7 @@ keys/*.key
 # --- Private local notes / logs / offline keys ---
 /local/
 /.workbuddy/
+/.memsearch/
 
 # --- App data / sensitive vault files ---
 *.db

@@ -22,7 +22,7 @@ export function ToastHost() {
             return (
               <View
                 class={
-                  'max-w-[420px] flex-row items-center gap-2 rounded-lg px-3.5 py-2 shadow-lg ' +
+                  'max-w-[420px] flex-row items-center gap-2 rounded-lg px-3 py-2 shadow-lg ' +
                   (error
                     ? 'bg-destructive'
                     : current.kind === 'info'
@@ -34,7 +34,7 @@ export function ToastHost() {
               >
                 <Icon
                   name={error ? 'alert-triangle' : current.kind === 'info' ? 'info' : 'check'}
-                  size={15}
+                  size={14}
                   color={
                     error
                       ? '#ffffff'
@@ -46,10 +46,10 @@ export function ToastHost() {
                 <Text
                   class={
                     error
-                      ? 'text-sm text-white'
+                      ? 'text-xs text-white'
                       : current.kind === 'info'
-                        ? 'text-sm text-foreground'
-                        : 'text-sm text-primary-foreground'
+                        ? 'text-xs text-foreground'
+                        : 'text-xs text-primary-foreground'
                   }
                 >
                   {current.message}

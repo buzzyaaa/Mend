@@ -9,7 +9,18 @@ import type { EntryEditorState, EntryInput, Preset } from '../lib/types'
 import { splitTags } from '../lib/format'
 import * as native from '../lib/native'
 import { Icon } from './Icon'
-import { ActionButton, Field, IconButton, SelectField, Spinner, SwitchField, TextField } from './ui'
+import {
+  ActionButton,
+  Field,
+  IconButton,
+  SelectField,
+  Spinner,
+  SwitchField,
+  TextField,
+  MODAL_BACKDROP_CLASS,
+  MODAL_CLASS,
+  ModalFrame,
+} from './ui'
 
 function emptyForm(categoryId: string | null): EntryInput {
   return {
@@ -175,10 +186,10 @@ export function EntryEditor(props: { state: EntryEditorState }) {
   ]
 
   const body = (
-    <View class="gap-4">
+    <View class="gap-3">
       <View class="flex-row items-start gap-3">
         <View class="flex-1 gap-1">
-          <Text class="text-lg font-semibold text-foreground">
+          <Text class="text-sm font-semibold text-foreground">
             {props.state.id ? t('entry.dialogEdit') : t('entry.dialogCreate')}
           </Text>
           <Text class="text-xs text-muted-foreground">{t('entry.formHint')}</Text>
@@ -356,7 +367,7 @@ export function EntryEditor(props: { state: EntryEditorState }) {
               />
               <View class="flex-row items-center gap-2">
                 <View class="flex-1 rounded-md border border-border bg-background px-3 py-2">
-                  <Text class="text-sm font-mono text-foreground">
+                  <Text class="text-xs font-mono text-foreground">
                     {generated() || t('generator.placeholder')}
                   </Text>
                 </View>
@@ -485,10 +496,10 @@ export function EntryEditor(props: { state: EntryEditorState }) {
               >
                 <Scroll class="flex-1">
                   <If when={form().notes.trim().length > 0}>
-                    <TextView markdown={form().notes} selectable class="text-sm text-foreground" />
+                    <TextView markdown={form().notes} selectable class="text-xs text-foreground" />
                   </If>
                   <If when={form().notes.trim().length === 0}>
-                    <Text class="text-sm text-muted-foreground">{t('entry.noNotes')}</Text>
+                    <Text class="text-xs text-muted-foreground">{t('entry.noNotes')}</Text>
                   </If>
                 </Scroll>
               </View>
@@ -504,7 +515,7 @@ export function EntryEditor(props: { state: EntryEditorState }) {
 
           <If when={error()}>
             <View class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2">
-              <Text class="text-sm text-destructive">{error()}</Text>
+              <Text class="text-xs text-destructive">{error()}</Text>
             </View>
           </If>
 
@@ -530,16 +541,18 @@ export function EntryEditor(props: { state: EntryEditorState }) {
       closeOnEscape={false}
       animation="fade"
       accessibilityLabel={props.state.id ? t('entry.dialogEdit') : t('entry.dialogCreate')}
+      class={MODAL_CLASS}
+      backdropClass={MODAL_BACKDROP_CLASS}
       style={{ width: 760, maxWidth: '94%' }}
     >
-      <View
+      <ModalFrame
         class="overflow-hidden rounded-xl border border-border bg-card shadow-xl"
-        style={{ maxHeight: Math.max(360, windowSize().height - 72) }}
+        maxHeight={Math.max(360, windowSize().height - 72)}
       >
-        <Scroll style={{ maxHeight: Math.max(360, windowSize().height - 72) }} contentClass="p-5">
+        <Scroll style={{ maxHeight: Math.max(360, windowSize().height - 72) }} contentClass="p-4">
           {body}
         </Scroll>
-      </View>
+      </ModalFrame>
     </Dialog>
   )
 }

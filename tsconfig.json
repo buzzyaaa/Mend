@@ -8,17 +8,5 @@
     "lib/**/*.ts",
     "*.test.tsx"
   ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "core",
-    "native",
-    "src",
-    "src-tauri",
-    "vite.config.ts",
-    "vitest.config.ts",
-    ".nsh",
-    ".tools",
-    ".tmp"
-  ]
+  "exclude": ["node_modules", "dist", "core", "native", ".nsh", ".tools", ".tmp", ".cargo"]
 }

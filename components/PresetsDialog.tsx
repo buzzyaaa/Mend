@@ -4,7 +4,16 @@ import { t } from 'nsh/i18n'
 
 import { confirm, presets, presetsOpen, removePreset, savePreset } from '../lib/state'
 import type { Preset, PresetInput } from '../lib/types'
-import { ActionButton, EmptyState, Field, IconButton, TextField } from './ui'
+import {
+  ActionButton,
+  EmptyState,
+  Field,
+  IconButton,
+  TextField,
+  MODAL_BACKDROP_CLASS,
+  MODAL_CLASS,
+  ModalFrame,
+} from './ui'
 
 const TYPES = ['username', 'email', 'phone', 'password'] as const
 type PresetType = (typeof TYPES)[number]
@@ -68,15 +77,17 @@ export function PresetsDialog() {
       }}
       onCancel={() => presetsOpen.set(false)}
       accessibilityLabel={t('preset.title')}
+      class={MODAL_CLASS}
+      backdropClass={MODAL_BACKDROP_CLASS}
       style={{ width: 720, maxWidth: '94%' }}
     >
-      <View
-        class="gap-4 overflow-hidden rounded-xl border border-border bg-card p-5 shadow-xl"
-        style={{ maxHeight: Math.max(340, windowSize().height - 80) }}
+      <ModalFrame
+        class="gap-3 overflow-hidden rounded-xl border border-border bg-card p-4 shadow-xl"
+        maxHeight={Math.max(340, windowSize().height - 80)}
       >
         <View class="flex-row items-start gap-3">
           <View class="flex-1 gap-0.5">
-            <Text class="text-lg font-semibold text-foreground">{t('preset.title')}</Text>
+            <Text class="text-sm font-semibold text-foreground">{t('preset.title')}</Text>
             <Text class="text-xs text-muted-foreground">{t('preset.hint')}</Text>
           </View>
           <IconButton
@@ -116,7 +127,7 @@ export function PresetsDialog() {
               return (
                 <View class="flex-row items-center gap-3 rounded-md border border-border bg-background px-3 py-2">
                   <View class="flex-1 gap-0.5">
-                    <Text class="text-sm font-medium text-foreground">{item.label}</Text>
+                    <Text class="text-xs font-medium text-foreground">{item.label}</Text>
                     <Text class="text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>
                       {item.value}
                     </Text>
@@ -147,7 +158,7 @@ export function PresetsDialog() {
 
         <View class="gap-3 rounded-lg border border-border bg-muted/30 p-3">
           <View class="flex-row items-center justify-between">
-            <Text class="text-sm font-medium text-foreground">
+            <Text class="text-xs font-medium text-foreground">
               {editingId() ? t('preset.edit') : t('preset.add')}
             </Text>
             <View class="rounded-full bg-muted px-2 py-0.5">
@@ -203,7 +214,7 @@ export function PresetsDialog() {
             onPress={() => presetsOpen.set(false)}
           />
         </View>
-      </View>
+      </ModalFrame>
     </Dialog>
   )
 }

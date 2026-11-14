@@ -3,7 +3,7 @@ import { t } from 'nsh/i18n'
 import { Dialog } from 'nsh/base'
 
 import { confirm } from '../lib/state'
-import { ActionButton } from './ui'
+import { ActionButton, MODAL_BACKDROP_CLASS, MODAL_CLASS, ModalFrame } from './ui'
 
 export function ConfirmDialog() {
   return (
@@ -17,12 +17,14 @@ export function ConfirmDialog() {
           onCancel={() => confirm.set(null)}
           accessibilityLabel={state().title}
           accessibilityDescription={state().message}
+          class={MODAL_CLASS}
+          backdropClass={MODAL_BACKDROP_CLASS}
           style={{ width: 420, maxWidth: '90%' }}
         >
-          <View class="gap-4 rounded-xl border border-border bg-card p-5 shadow-xl">
+          <ModalFrame class="gap-3 rounded-xl border border-border bg-card p-4 shadow-xl">
             <View class="gap-1.5">
-              <Text class="text-base font-semibold text-foreground">{state().title}</Text>
-              <Text class="text-sm text-muted-foreground">{state().message}</Text>
+              <Text class="text-sm font-semibold text-foreground">{state().title}</Text>
+              <Text class="text-xs text-muted-foreground">{state().message}</Text>
             </View>
             <View class="flex-row justify-end gap-2">
               <ActionButton
@@ -40,7 +42,7 @@ export function ConfirmDialog() {
                 }}
               />
             </View>
-          </View>
+          </ModalFrame>
         </Dialog>
       )}
     </If>

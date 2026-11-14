@@ -1,6 +1,6 @@
 import { t } from 'nsh/i18n'
 
-export interface AppError {
+interface AppError {
   code: string
   message: string
 }
@@ -26,6 +26,7 @@ const CODE_KEYS: Record<string, string> = {
   locked: 'error.locked',
   crypto: 'error.crypto',
   db: 'error.db',
+  db_readonly: 'error.dbReadonly',
   not_found: 'error.notFound',
   cancelled: 'error.cancelled',
   vault: 'error.vault',

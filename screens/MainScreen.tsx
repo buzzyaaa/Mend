@@ -1,5 +1,5 @@
 import { computed, platform, Text, View, windowSize } from 'nsh'
-import { Dialog } from 'nsh/base'
+import { Dialog, ResizablePanel, ResizablePanelGroup } from 'nsh/base'
 import { t } from 'nsh/i18n'
 
 import { AppHeader } from '../components/AppHeader'
@@ -12,7 +12,8 @@ import { PresetsDialog } from '../components/PresetsDialog'
 import { SettingsDialog } from '../components/SettingsDialog'
 import { Sidebar } from '../components/Sidebar'
 import { ToastHost } from '../components/ToastHost'
-import { IconButton } from '../components/ui'
+import { IconButton, MODAL_BACKDROP_CLASS, MODAL_CLASS, ModalFrame } from '../components/ui'
+import { preferences, setColumnSizes } from '../lib/preferences'
 import {
   categoriesSheetOpen,
   categoryEditor,
@@ -27,6 +28,8 @@ export function MainScreen() {
   const compact = computed(
     () => platform.idiom === 'phone' || platform.idiom === 'pad' || windowSize().width < 900,
   )
+  const sidebarWidth = () => preferences().columnSizes[0] ?? 240
+  const listWidth = () => preferences().columnSizes[1] ?? 360
 
   return (
     <View
@@ -41,17 +44,25 @@ export function MainScreen() {
       <AppHeader compact={compact} onOpenCategories={() => categoriesSheetOpen.set(true)} />
 
       <If when={!compact()}>
-        <View class="flex-1 min-h-0 flex-row">
-          <Sidebar />
-          <View class="flex-1 min-h-0">
-            <View class="flex-1 min-h-0 flex-row">
-              <View class="min-h-0 border-r border-border bg-background" style={{ width: 360 }}>
-                <EntryList />
-              </View>
-              <EntryDetail />
+        <ResizablePanelGroup
+          axis="horizontal"
+          class="flex-1 min-h-0"
+          handleClass="w-px bg-border group-hover:bg-primary"
+          handleThumbClass="h-5 w-[3px] rounded-full bg-muted-foreground opacity-0 group-hover:opacity-40"
+          onResize={(event) => setColumnSizes(event.sizes)}
+        >
+          <ResizablePanel size={sidebarWidth()} minSize={180} maxSize={360} fixed>
+            <Sidebar />
+          </ResizablePanel>
+          <ResizablePanel size={listWidth()} minSize={260} maxSize={640}>
+            <View class="h-full min-h-0 bg-background">
+              <EntryList />
             </View>
-          </View>
-        </View>
+          </ResizablePanel>
+          <ResizablePanel minSize={260}>
+            <EntryDetail />
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </If>
 
       <If when={compact()}>
@@ -76,6 +87,8 @@ export function MainScreen() {
 
       <Dialog
         open={categoriesSheetOpen()}
+        class={MODAL_CLASS}
+        backdropClass={MODAL_BACKDROP_CLASS}
         closeOnBackdropPress
         onCancel={() => categoriesSheetOpen.set(false)}
         onOpenChange={(event) => {
@@ -84,8 +97,8 @@ export function MainScreen() {
         accessibilityLabel={t('nav.categories')}
         style={{ width: 340, maxWidth: '90%', height: '80%' }}
       >
-        <View class="h-full overflow-hidden rounded-xl border border-border bg-card shadow-xl">
-          <View class="flex-row items-center justify-between border-b border-border px-3 py-2">
+        <ModalFrame class="h-full overflow-hidden rounded-xl border border-border bg-card shadow-xl">
+          <View class="flex-row items-center justify-between border-b border-border px-2.5 py-2">
             <Text class="text-sm font-semibold text-foreground">{t('nav.categories')}</Text>
             <IconButton
               icon="close"
@@ -94,7 +107,7 @@ export function MainScreen() {
             />
           </View>
           <Sidebar compact onNavigate={() => categoriesSheetOpen.set(false)} />
-        </View>
+        </ModalFrame>
       </Dialog>
     </View>
   )

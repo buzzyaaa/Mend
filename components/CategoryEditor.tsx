@@ -7,7 +7,15 @@ import { categories, categoryEditor, confirm, removeCategory, saveCategory } fro
 import { CATEGORY_COLORS, CATEGORY_ICON_OPTIONS, categoryEmoji } from '../lib/category-icons'
 import type { CategoryInput } from '../lib/types'
 import { Icon } from './Icon'
-import { ActionButton, Field, IconButton, TextField } from './ui'
+import {
+  ActionButton,
+  Field,
+  IconButton,
+  TextField,
+  MODAL_BACKDROP_CLASS,
+  MODAL_CLASS,
+  ModalFrame,
+} from './ui'
 
 function validHex(value: string): string | null {
   const trimmed = value.trim()
@@ -81,15 +89,17 @@ export function CategoryEditor(props: { state: { id: string | null } }) {
       closeOnEscape={false}
       animation="fade"
       accessibilityLabel={editing() ? t('sidebar.rename') : t('nav.addCategory')}
+      class={MODAL_CLASS}
+      backdropClass={MODAL_BACKDROP_CLASS}
       style={{ width: 540, maxWidth: '94%' }}
     >
-      <View
-        class="gap-4 overflow-hidden rounded-xl border border-border bg-card p-5 shadow-xl"
-        style={{ maxHeight: Math.max(320, windowSize().height - 80) }}
+      <ModalFrame
+        class="gap-3 overflow-hidden rounded-xl border border-border bg-card p-4 shadow-xl"
+        maxHeight={Math.max(320, windowSize().height - 80)}
       >
         <View class="flex-row items-start gap-3">
           <View class="flex-1 gap-0.5">
-            <Text class="text-lg font-semibold text-foreground">
+            <Text class="text-sm font-semibold text-foreground">
               {editing() ? t('sidebar.rename') : t('nav.addCategory')}
             </Text>
             <Text class="text-xs text-muted-foreground">{t('category.hint')}</Text>
@@ -160,7 +170,7 @@ export function CategoryEditor(props: { state: { id: string | null } }) {
             <View class="flex-row flex-wrap gap-1.5">
               <View
                 class={
-                  'h-9 w-9 items-center justify-center rounded-md border text-lg ' +
+                  'h-8 w-8 items-center justify-center rounded-md border text-sm ' +
                   (icon() === null
                     ? 'border-ring bg-accent'
                     : 'border-border bg-background hover:bg-accent')
@@ -169,13 +179,13 @@ export function CategoryEditor(props: { state: { id: string | null } }) {
                 role="button"
                 accessibilityLabel={t('category.noIcon')}
               >
-                <Text class="text-base">{categoryEmoji(null)}</Text>
+                <Text class="text-sm">{categoryEmoji(null)}</Text>
               </View>
               <Each of={CATEGORY_ICON_OPTIONS} key={(option) => option.id}>
                 {(option) => (
                   <View
                     class={
-                      'h-9 w-9 items-center justify-center rounded-md border text-lg ' +
+                      'h-8 w-8 items-center justify-center rounded-md border text-sm ' +
                       (icon() === option().id
                         ? 'border-ring bg-accent'
                         : 'border-border bg-background hover:bg-accent')
@@ -184,7 +194,7 @@ export function CategoryEditor(props: { state: { id: string | null } }) {
                     role="button"
                     accessibilityLabel={option().id}
                   >
-                    <Text class="text-base">{option().emoji}</Text>
+                    <Text class="text-sm">{option().emoji}</Text>
                   </View>
                 )}
               </Each>
@@ -193,7 +203,7 @@ export function CategoryEditor(props: { state: { id: string | null } }) {
 
           <If when={error()}>
             <View class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2">
-              <Text class="text-sm text-destructive">{error()}</Text>
+              <Text class="text-xs text-destructive">{error()}</Text>
             </View>
           </If>
 
@@ -232,7 +242,7 @@ export function CategoryEditor(props: { state: { id: string | null } }) {
             />
           </View>
         </View>
-      </View>
+      </ModalFrame>
     </Dialog>
   )
 }

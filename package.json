@@ -1,10 +1,15 @@
 {
   "name": "mend",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "description": "Local offline encrypted password manager (Native Shell / TSX + Rust)",
   "scripts": {
+    "dev": "nsh dev .",
+    "build": "nsh build .",
+    "package": "nsh package . --target windows",
+    "test": "nsh test .",
+    "check": "nsh check .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

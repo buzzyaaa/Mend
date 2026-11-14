@@ -27,6 +27,8 @@ export interface Preferences {
   autoLockMinutes: number
   updateCheckIntervalDays: number
   lastUpdateCheckTs: number
+  /** Desktop three-column widths (sidebar, list); the detail column takes the rest. */
+  columnSizes: number[]
 }
 
 export type SortMode = 'updated' | 'title' | 'favorite' | 'manual'
@@ -52,11 +54,7 @@ export interface EntryEditorState {
   categoryId: string | null
 }
 
-export interface CategoryEditorState {
-  id: string | null
-}
-
-export const BUILTIN_BUCKETS = ['all', 'favorites', 'archive', 'uncategorized', 'trash'] as const
+const BUILTIN_BUCKETS = ['all', 'favorites', 'archive', 'uncategorized', 'trash'] as const
 
 export type BuiltinBucket = (typeof BUILTIN_BUCKETS)[number]
 

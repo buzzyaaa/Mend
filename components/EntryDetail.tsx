@@ -32,10 +32,10 @@ function DetailRow(props: {
   onOpen?: () => void
 }) {
   return (
-    <View class="flex-row items-start gap-3 border-b border-border py-2.5">
+    <View class="flex-row items-start gap-3 border-b border-border py-2">
       <Text class="w-20 pt-0.5 text-xs font-medium text-muted-foreground">{props.label}</Text>
       <View class="flex-1">
-        <Text class="text-sm text-foreground">
+        <Text class="text-xs text-foreground">
           {props.masked && !props.revealed ? '••••••••••••' : props.value}
         </Text>
       </View>
@@ -85,7 +85,7 @@ function EntryBody(props: { entry: () => EntryView; compact?: boolean }) {
 
   return (
     <View class="flex-1 min-h-0">
-      <View class="border-b border-border bg-card px-4 py-3">
+      <View class="border-b border-border bg-card px-3 py-2">
         <View class="flex-row items-start gap-3">
           <If when={props.compact}>
             <IconButton
@@ -95,26 +95,26 @@ function EntryBody(props: { entry: () => EntryView; compact?: boolean }) {
             />
           </If>
           <View
-            class="h-10 w-10 items-center justify-center rounded-xl"
+            class="h-8 w-9 items-center justify-center rounded-xl"
             style={{
               backgroundColor: category()?.color ? `${category()?.color}22` : token('muted'),
             }}
           >
-            <Text class="text-lg">{categoryEmoji(category()?.icon)}</Text>
+            <Text class="text-sm">{categoryEmoji(category()?.icon)}</Text>
           </View>
           <View class="flex-1 gap-0.5">
             <View class="flex-row items-center gap-2">
               <Text
-                class="flex-1 text-lg font-semibold text-foreground"
+                class="flex-1 text-sm font-semibold text-foreground"
                 style={{ numberOfLines: 1 }}
               >
                 {entry().title}
               </Text>
               <If when={entry().favorite}>
-                <Icon name="star-filled" size={15} color={token('warning')} />
+                <Icon name="star-filled" size={14} color={token('warning')} />
               </If>
               <If when={entry().archived}>
-                <Text class="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                <Text class="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
                   {t('entry.archived')}
                 </Text>
               </If>
@@ -196,8 +196,8 @@ function EntryBody(props: { entry: () => EntryView; compact?: boolean }) {
         </If>
       </View>
 
-      <Scroll class="flex-1" contentClass="p-4 gap-4">
-        <View class="rounded-xl border border-border bg-card p-4">
+      <Scroll class="flex-1" contentClass="p-3 gap-3">
+        <View class="rounded-xl border border-border bg-card p-3">
           <If when={hasFields()}>
             <If when={Boolean(entry().username)}>
               <DetailRow label={t('entry.username')} value={entry().username} />
@@ -226,43 +226,43 @@ function EntryBody(props: { entry: () => EntryView; compact?: boolean }) {
             </If>
           </If>
           <If when={!hasFields()}>
-            <Text class="text-sm text-muted-foreground">{t('entry.noFields')}</Text>
+            <Text class="text-xs text-muted-foreground">{t('entry.noFields')}</Text>
           </If>
         </View>
 
         <View class="gap-2">
           <Text class="text-xs font-medium text-muted-foreground">{t('entry.notes')}</Text>
-          <View class="rounded-xl border border-border bg-card p-4">
+          <View class="rounded-xl border border-border bg-card p-3">
             <If when={entry().notes.trim().length > 0}>
               <TextView
                 markdown={entry().notes}
                 selectable
                 links="open"
-                class="text-sm text-foreground"
+                class="text-xs text-foreground"
                 classes={{
-                  heading1: 'text-xl font-semibold',
-                  heading2: 'text-lg font-semibold',
-                  heading3: 'text-base font-semibold',
+                  heading1: 'text-sm font-semibold',
+                  heading2: 'text-xs font-semibold',
+                  heading3: 'text-xs font-semibold',
                   code: 'font-mono bg-muted',
                   link: 'text-primary underline',
                 }}
               />
             </If>
             <If when={entry().notes.trim().length === 0}>
-              <Text class="text-sm text-muted-foreground">{t('entry.noNotes')}</Text>
+              <Text class="text-xs text-muted-foreground">{t('entry.noNotes')}</Text>
             </If>
           </View>
         </View>
 
-        <View class="flex-row flex-wrap items-center gap-4 rounded-xl border border-border bg-card px-4 py-3">
+        <View class="flex-row flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2">
           <View class="gap-0.5">
-            <Text class="text-[10px] uppercase tracking-wide text-muted-foreground">
+            <Text class="text-[11px] uppercase tracking-wide text-muted-foreground">
               {t('entry.created')}
             </Text>
             <Text class="text-xs text-foreground">{formatDate(entry().createdAt, true)}</Text>
           </View>
           <View class="gap-0.5">
-            <Text class="text-[10px] uppercase tracking-wide text-muted-foreground">
+            <Text class="text-[11px] uppercase tracking-wide text-muted-foreground">
               {t('entry.updated')}
             </Text>
             <Text class="text-xs text-foreground">{formatDate(entry().updatedAt, true)}</Text>

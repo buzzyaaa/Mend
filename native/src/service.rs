@@ -9,7 +9,6 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{Mutex, MutexGuard, OnceLock},
-    time::Duration,
 };
 
 use base64::{Engine, engine::general_purpose::STANDARD as B64};
@@ -86,11 +85,65 @@ fn resolve_data_dir(provided: Option<String>) -> Result<PathBuf, String> {
     ))
 }
 
+/// Make sure the data directory and the database file can actually be written
+/// to before SQLite is asked to open them.
+///
+/// SQLite reports a read-only directory / read-only file as
+/// `attempt to write a readonly database` or `unable to open database file`,
+/// which hides the real cause. This happens on Windows when the app runs with
+/// a lower mandatory integrity level than its data directory (for example an
+/// executable unpacked into a folder carrying a `Low Mandatory Level` label):
+/// the process may read the vault but Windows denies every write to the
+/// medium-integrity `%APPDATA%` folder. Probing up front turns that into a
+/// dedicated `db_readonly` error with an actionable message and the path.
+fn ensure_writable_data_dir(dir: &Path, db_path: &Path) -> Result<(), String> {
+    let probe = dir.join(format!(".mend-write-probe-{}", Uuid::new_v4()));
+    match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+    {
+        Ok(_) => {
+            let _ = fs::remove_file(&probe);
+        }
+        Err(err) => {
+            return Err(coded(
+                "db_readonly",
+                format!("数据目录不可写 ({err}): {}", dir.display()),
+            ));
+        }
+    }
+
+    // An existing vault must be writable too (a read-only file attribute or a
+    // restrictive ACL is otherwise only discovered during the first write).
+    if db_path.exists() {
+        if let Err(err) = fs::OpenOptions::new().read(true).write(true).open(db_path) {
+            return Err(coded(
+                "db_readonly",
+                format!("数据库文件不可写 ({err}): {}", db_path.display()),
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn ensure_conn(backend: &mut Backend) -> Result<(), String> {
     if backend.conn.is_none() {
-        let conn = db::open_and_migrate(&backend.db_path).map_err(domain)?;
-        conn.busy_timeout(Duration::from_secs(5))
-            .map_err(|err| coded("db", format!("设置 SQLite 忙等待失败: {err}")))?;
+        // busy_timeout 由 db::open_and_migrate 在任何读写之前统一设置
+        //（覆盖 open / pragma / migrate 全程），这里不再重复设置。
+        // 备份导入的临时连接（validate_backup_file）走同一个入口，同样有忙等待。
+        let conn = db::open_and_migrate(&backend.db_path).map_err(|err| {
+            let message = err.to_string();
+            if message.contains("readonly") || message.contains("unable to open database file") {
+                // Keep the OS-level detail but use a code the UI can explain.
+                coded(
+                    "db_readonly",
+                    format!("{message} @ {}", backend.db_path.display()),
+                )
+            } else {
+                domain(err)
+            }
+        })?;
         backend.conn = Some(conn);
     }
     Ok(())
@@ -139,6 +192,7 @@ pub fn init_sync(data_dir: Option<String>) -> Result<VaultStatus, String> {
     let dir = resolve_data_dir(data_dir)?;
     fs::create_dir_all(&dir).map_err(|err| coded("vault", format!("创建数据目录失败: {err}")))?;
     let db_path = db::db_file_path(&dir);
+    ensure_writable_data_dir(&dir, &db_path)?;
 
     let mut backend = backend()?;
     let same = backend.db_path == db_path;
@@ -1007,6 +1061,30 @@ mod tests {
             favorite: false,
             tags: vec!["work".into()],
         }
+    }
+
+    #[test]
+    fn write_probe_accepts_writable_dir_and_flags_unwritable_one() {
+        let dir = std::env::temp_dir().join(format!("mend-native-probe-{}", Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+
+        assert!(ensure_writable_data_dir(&dir, &dir.join("mend.db")).is_ok());
+        assert!(!fs::read_dir(&dir).unwrap().any(|entry| {
+            entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".mend-write-probe-")
+        }));
+
+        // A path that is not a writable directory must surface the dedicated
+        // code, never a raw SQLite "readonly database" message.
+        let blocker = dir.join("not-a-directory");
+        fs::write(&blocker, b"x").unwrap();
+        let err = ensure_writable_data_dir(&blocker, &blocker.join("mend.db")).unwrap_err();
+        assert!(err.starts_with("db_readonly|"), "{err}");
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

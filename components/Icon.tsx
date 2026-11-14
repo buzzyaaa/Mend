@@ -94,7 +94,7 @@ export type IconName =
   | 'user'
 
 /** The SVG asset behind each icon. */
-export const ICON_ASSETS: Record<IconName, ImageAsset> = {
+const ICON_ASSETS: Record<IconName, ImageAsset> = {
   'alert-triangle': alertTriangle,
   archive,
   'arrow-down': arrowDown,
@@ -140,7 +140,7 @@ export const ICON_ASSETS: Record<IconName, ImageAsset> = {
 
 export interface IconProps {
   name: IconName
-  /** Both width and height in points (default 18). */
+  /** Both width and height in points (default 16). */
   size?: number
   /** The `tintColor` the SVG is recolored with (a CSS color). */
   color?: string
@@ -150,9 +150,9 @@ export interface IconProps {
   accessibilityLabel?: string
 }
 
-/** A tinted 24x24 native icon scaled to `size` (default 18). */
+/** A tinted 24x24 native icon scaled to `size` (default 16). */
 export function Icon(props: IconProps) {
-  const size = props.size ?? 18
+  const size = props.size ?? 16
   return (
     <Image
       src={ICON_ASSETS[props.name]}

@@ -15,7 +15,7 @@
 | [06-backup-webdav.md](./06-backup-webdav.md) | 手动拷贝备份/恢复、加密导出导入、WebDAV 预留（导出位置改为应用数据目录，见 `11`） |
 | [07-i18n.md](./07-i18n.md) | 中英文切换（实现已换成 nsh/i18n + rust-i18n 词条格式） |
 | [08-roadmap.md](./08-roadmap.md) | 分阶段计划与验收（0.4.0 状态见 `11` 与本地 DEVLOG） |
-| [09-env-setup.md](./09-env-setup.md) | 工具链、会话初始化、nsh 安装与平台依赖 |
+| [09-env-setup.md](./09-env-setup.md) | 工具链、环境准备（裸跑 / 可选 dev-env）、nsh 安装与平台依赖 |
 | [10-release-update.md](./10-release-update.md) | 发布与更新（已改为 `nsh package`；自动更新待配置） |
 
 > `../local/DEVLOG.md` 为本地私有开发日志，不入库。

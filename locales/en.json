@@ -279,6 +279,7 @@
     "locked": "Vault is locked",
     "crypto": "Decryption failed — check the master password or backup file.",
     "db": "Database error.",
+    "dbReadonly": "The data folder is not writable. Check its permissions or restart the app with normal privileges.",
     "notFound": "Not found.",
     "vault": "Operation failed.",
     "title": "Something went wrong",
@@ -294,7 +295,8 @@
     "close": "Close",
     "actions": "Actions",
     "loading": "Loading…",
-    "retry": "Try again"
+    "retry": "Try again",
+    "retrying": "Retrying…"
   },
   "category": {
     "color": "Color",

@@ -21,6 +21,7 @@
 - 主要 UI 结构：桌面 master-detail（侧栏 + 列表 + 详情）；手机单栏（详情页 + 分类 Sheet）。系统标题栏；应用内 Header 放搜索/新增/预设/设置/锁定。
 - 测试：`nsh test .`（native cargo test + TSX headless）；`cargo test --manifest-path core\Cargo.toml`；`npm run typecheck`。
 - 发布：`.github/workflows/release.yml` 打 `v*` tag 时构建 Windows/Linux/macOS 包、签名 OTA 包、生成签名 `latest.json` 并发布 GitHub Release；应用更新与 OTA 共用 `nsh.json` 的 `"updater"`，详见 `docs/10-release-update.md`。
+- 启动诊断（0.4.1）：`Vault.init` 前置探测数据目录/库文件写权限，不可写返回 `db_readonly`（含路径），Fatal 页显示实际数据库路径；不静默换库。详见 `docs/11-native-shell.md` §4。
 
 ## 3. 硬性约束
 
@@ -42,13 +43,20 @@
 - 日志：禁止打印密码、密钥、备注明文；安全事件只记录元信息。
 - 版本号需同步：`nsh.json`、`package.json`、`core/Cargo.toml`（以及发布 tag）。
 
-## 5. 每个新 PowerShell 会话
+## 5. 每个新 PowerShell 会话（可选）
+
+在仓库根目录直接 `nsh dev .` 即可。仓库根的 `.cargo/config.toml` 已用 `[env]`（`force = true`）把 Cargo 构建脚本的 `TMP`/`TEMP` 指到 `.cargo/tmp`，所以 Windows 上 cc-rs 的临时目录被拒问题不再要求先初始化会话。
+
+需要以下增强时再执行（推荐，但非每个会话必做）：
 
 ```powershell
 . .\scripts\dev-env.ps1
 ```
 
-它把 cargo、MinGW、git、gh 以及仓库内 `.tools\nsh\bin`（若存在）加入当前会话 PATH；未指定 `CARGO_HOME` 时把它指向仓库内 `.tools\cargo-home`（含完整 crate 缓存与镜像配置），避免 nsh 编译 `.nsh/rust` 时去用户目录重新下载依赖而触发 `os error 5`。不修改系统环境变量。nsh 安装方式见 `docs/09-env-setup.md`。
+- 把 `CARGO_HOME` 指向仓库内 `.tools\cargo-home`（含完整 crate 缓存与镜像配置），避免编译 `.nsh/rust` 时去用户目录重新下载依赖而触发 `os error 5`，并加速构建；
+- 统一当前会话 PATH：官方安装的 nsh（`%LOCALAPPDATA%\nsh\bin`）排在最前并清掉仓库内 `.tools\nsh\bin` 残留，再加入 cargo、MinGW、git、gh。
+
+nsh 必须来自官方安装路径：仓库内拷贝放进 PATH 会让 `nsh dev` 创建 dev session 目录时必然报 `os error 5`（详见 `docs/11-native-shell.md` 第 8 节）。开发入口是 `nsh dev .`；`nsh run` 仅用于 web/tui 等其他目标预览。不修改系统环境变量。nsh 安装方式见 `docs/09-env-setup.md`。
 
 ## 6. 如何更新开发日志
 

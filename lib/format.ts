@@ -119,12 +119,3 @@ export function sortEntries(
     return b.updatedAt - a.updatedAt
   })
 }
-
-export function categoryLabel(
-  categoryId: string | null,
-  categories: Category[],
-  uncategorized: string,
-): string {
-  if (!categoryId) return uncategorized
-  return categories.find((category) => category.id === categoryId)?.name ?? uncategorized
-}

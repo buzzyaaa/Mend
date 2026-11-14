@@ -5,7 +5,7 @@ import { btoa } from 'buffer'
 import { errorText, isCancelled, parseError } from './errors'
 import { formatBytes, normalizeUrl, sortEntries } from './format'
 import * as native from './native'
-import { preferences } from './preferences'
+import { loadPreferences, preferences } from './preferences'
 import {
   isBuiltinBucket,
   type Category,
@@ -37,8 +37,11 @@ export const status = signal<VaultStatus>({
 })
 export const bootReady = signal(false)
 export const fatalError = signal<string | null>(null)
+/** 最近一次启动失败的原始错误细节（`code|message`），供 Fatal 页诊断小字展示。 */
+export const fatalDetail = signal<string | null>(null)
+/** boot / 重试流程进行中：Fatal 页用它禁用重试按钮并显示「重试中…」。 */
+export const bootRetrying = signal(false)
 export const authBusy = signal(false)
-export const loadingEntries = signal(false)
 export const detailBusy = signal(false)
 
 export const categories = signal<Category[]>([])
@@ -60,7 +63,6 @@ export const settingsOpen = signal(false)
 export const presetsOpen = signal(false)
 export const categoryEditor = signal<{ id: string | null } | null>(null)
 export const categoriesSheetOpen = signal(false)
-export const helpOpen = signal(false)
 
 // ---------------------------------------------------------------------------
 // Toasts
@@ -112,24 +114,81 @@ async function runAction<T>(action: () => T | Promise<T>, success?: string): Pro
 
 let bootStarted = false
 
+/** code=db 的瞬时错误自动重试参数：最多 2 次重试、间隔 300ms。
+ *  库文件被短暂占用（另一实例收尾、杀毒扫描等）时在这里消化掉，不进 Fatal。 */
+const BOOT_MAX_RETRIES = 2
+const BOOT_RETRY_DELAY_MS = 300
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** 只有 SQLite busy/locked 类的瞬时 db 错误才值得自动重试：
+ *  crypto / vault 等业务错误、损坏或权限类持久错误重试没有意义。 */
+function isTransientDbError(error: unknown): boolean {
+  const parsed = parseError(error)
+  return parsed.code === 'db' && /busy|locked/i.test(parsed.message)
+}
+
+/** 原始 `code|message`，用于 Fatal 页的诊断小字（不替换主文案的 i18n 映射）。 */
+function rawErrorText(error: unknown): string {
+  const { code, message } = parseError(error)
+  return `${code}|${message}`
+}
+
 export async function boot(): Promise<void> {
   if (bootStarted) return
   bootStarted = true
+  bootRetrying.set(true)
+  // 偏好（语言/主题/自动锁定）存在 Storage，与库无关，必须在 initVault 之前
+  // 读回并应用：否则设置里改过的语言/主题/自动锁定会在重启后丢失。
+  // loadPreferences 自己吞掉 Storage/JSON 错误并回退默认值；这里再兜一层，
+  // 保证偏好绝不是进 Fatal 的原因（只有 initVault/status/loadAll 失败才进）。
   try {
-    await native.initVault()
-    status.set(await native.status())
-    if (status().unlocked) await loadAll()
-  } catch (error) {
-    fatalError.set(errorText(error))
-  } finally {
-    bootReady.set(true)
+    await loadPreferences()
+  } catch {
+    // 偏好不是启动必需品：读不出来就用模块里的默认值。
   }
+  let lastError: unknown = null
+  for (let attempt = 0; attempt <= BOOT_MAX_RETRIES; attempt += 1) {
+    if (attempt > 0) await sleep(BOOT_RETRY_DELAY_MS)
+    try {
+      await native.initVault()
+      status.set(await native.status())
+      if (status().unlocked) await loadAll()
+      lastError = null
+      break
+    } catch (error) {
+      lastError = error
+      if (!isTransientDbError(error)) break
+    }
+  }
+  bootRetrying.set(false)
+  if (lastError === null) {
+    // 重试成功后清掉上一轮失败的文案，避免 Fatal 残留
+    fatalError.set(null)
+    fatalDetail.set(null)
+  } else {
+    // 启动失败时附带实际解析出的数据目录/库文件路径：只读、权限、路径错配
+    // 类问题一眼可辨。status() 不依赖数据库连接，init 失败后仍返回路径。
+    let location = ''
+    try {
+      const paths = native.status()
+      const path = paths.dbPath || paths.dataDir
+      if (path) location = ` @ ${path}`
+    } catch {
+      // 状态查询失败时不掩盖原始错误
+    }
+    fatalDetail.set(`${rawErrorText(lastError)}${location}`)
+    fatalError.set(errorText(lastError))
+  }
+  bootReady.set(true)
 }
 
 export async function retryBoot(): Promise<void> {
+  // 只重置守卫再重跑 boot()；期间不清 fatalError / bootReady，
+  // 让 Fatal 页保持可见：按钮禁用显示「重试中…」，失败后原页更新错误细节。
   bootStarted = false
-  fatalError.set(null)
-  bootReady.set(false)
   await boot()
 }
 
@@ -166,7 +225,6 @@ function clearSensitiveState(): void {
   categoryEditor.set(null)
   categoriesSheetOpen.set(false)
   confirm.set(null)
-  helpOpen.set(false)
   keyword.set('')
   tagFilter.set(null)
 }
@@ -213,7 +271,7 @@ export async function refreshCategories(): Promise<void> {
   }
 }
 
-export async function refreshPresets(): Promise<void> {
+async function refreshPresets(): Promise<void> {
   try {
     presets.set(await native.listPresets())
   } catch (error) {
@@ -223,7 +281,6 @@ export async function refreshPresets(): Promise<void> {
 
 export function refreshEntries(): void {
   if (!status().unlocked) return
-  loadingEntries.set(true)
   const current = bucket()
   const filter: ListFilter = {
     bucket: isBuiltinBucket(current) ? current : 'category',
@@ -235,8 +292,6 @@ export function refreshEntries(): void {
     entries.set(native.listEntries(filter))
   } catch (error) {
     showError(error)
-  } finally {
-    loadingEntries.set(false)
   }
 }
 
@@ -269,10 +324,6 @@ export const bucketTitle = computed<string>(() => {
 export function visibleEntries(): EntrySummary[] {
   return sortEntries(entries(), sortBy(), categories(), bucket())
 }
-
-export const selectedSummary = computed<EntrySummary | null>(
-  () => entries().find((entry) => entry.id === selectedId()) ?? null,
-)
 
 export const isTrashView = computed(() => bucket() === 'trash')
 export const isArchiveView = computed(() => bucket() === 'archive')
@@ -555,7 +606,7 @@ function stamp(): string {
   )}${pad(date.getMinutes())}${pad(date.getSeconds())}`
 }
 
-export function defaultBackupName(): string {
+function defaultBackupName(): string {
   return `mend-backup-${stamp()}.mendbak`
 }
 

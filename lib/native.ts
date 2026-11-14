@@ -18,8 +18,6 @@ import type {
   VaultStatus,
 } from './types'
 
-export { Vault }
-
 /** `process.dataDir` is the per-app directory nsh gives us. Passing it
  * explicitly keeps the old Tauri data directory (`%APPDATA%\com.mend.app`)
  * as the single source of truth on every platform. */
