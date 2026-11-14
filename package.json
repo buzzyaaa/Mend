@@ -1,6 +1,6 @@
 {
   "name": "mend",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "type": "module",
   "description": "Local offline encrypted password manager (Native Shell / TSX + Rust)",
