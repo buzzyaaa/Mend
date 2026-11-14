@@ -6,6 +6,14 @@ publish = false
 
 [workspace]
 
+# 发布体积优化：剥离符号、按体积优先编译（与 core 保持一致，最大化 Mend 自身 Rust 侧的体积回收）。
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+
+
 [dependencies]
 nsh-core = "0.5.0"
 mend-core = { path = "../core" }

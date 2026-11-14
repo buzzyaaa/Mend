@@ -126,6 +126,8 @@
   "unlock": {
     "subtitle": "输入主密码以访问你的密码库",
     "password": "主密码",
+    "passwordPlaceholder": "请输入密码",
+    "confirmPasswordPlaceholder": "请再次输入主密码",
     "unlock": "解锁",
     "setupSubtitle": "首次使用，请设置一个主密码。主密码丢失将无法找回数据。",
     "confirm": "确认主密码",

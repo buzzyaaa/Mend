@@ -1,6 +1,6 @@
-import { signal, Text, token, View } from 'nsh'
+import { computed, signal, Text, token, View } from 'nsh'
 import type { JSX } from 'nsh'
-import { Button, Input, Select, Switch, Tooltip, type SelectItem } from 'nsh/base'
+import { Button, Input, Switch, Tooltip, type SelectItem } from 'nsh/base'
 
 import { touchActivity } from '../lib/state'
 
@@ -27,19 +27,6 @@ const BUTTON_CLASS: Record<ButtonVariant, string> = {
  *  所有弹窗统一加这两个类：popup 居中 + 半透明遮罩。 */
 export const MODAL_CLASS = 'm-auto'
 export const MODAL_BACKDROP_CLASS = 'bg-black/50'
-
-/** `Input` 的文字样式显式走内联 style。
- *  nsh 0.5.0 的 Input 对 `text-foreground` 这类 token 颜色类解析不可靠：
- *  值能写入、提交也有效，但输入的文字渲染不出来（占位符却正常）。
- *  `style` 优先于 `class`，`token()` 是响应式的，主题切换会重算颜色。 */
-function inputTextStyle() {
-  return {
-    color: token('foreground'),
-    fontSize: 12,
-    placeholderColor: token('muted-foreground'),
-    caretColor: token('foreground'),
-  }
-}
 
 export function ActionButton(props: {
   label?: string
@@ -164,11 +151,21 @@ export function Field(props: {
   )
 }
 
+/** 输入框文字与背景的着色约定（实测于 nsh 0.5.0 / Windows）：
+ *
+ *  - 文字色必须走 `class` 里的 `text-foreground`／`placeholder:text-muted-foreground`，
+ *    写进 `style.color` 只作用于外层容器、够不到内部文本框；
+ *  - 值文本的**字形绘制**在 0.5.0 的 Windows 宿主上有缺陷（布局与光标位置正确、
+ *    字形不上屏，占位符正常），属于引擎问题，已在 nsh 0.5.1 修复（#1978）；
+ *    应用侧不改写组件、也不叠加浮层，等引擎版本跟上即可。 */
+const INPUT_CLASS =
+  'w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs ' +
+  'text-foreground placeholder:text-muted-foreground'
+
 export function TextField(props: {
   value: string
   onChange: (value: string) => void
   placeholder?: string
-  masked?: boolean
   multiline?: boolean
   autoFocus?: boolean
   maxLength?: number
@@ -187,8 +184,7 @@ export function TextField(props: {
         props.onChange(event.value)
       }}
       placeholder={props.placeholder}
-      masked={props.masked}
-      multiline={props.multiline}
+      multiline={!!props.multiline}
       autoFocus={props.autoFocus}
       maxLength={props.maxLength}
       readonly={props.disabled}
@@ -196,19 +192,57 @@ export function TextField(props: {
       // The generated types narrow autoComplete to a union; the app only uses
       // standard values and the native side ignores unknown ones.
       autoComplete={props.autoComplete as never}
-      onPressDown={undefined}
       onSubmit={props.onSubmit ? () => props.onSubmit?.() : undefined}
-      class={
-        'w-full rounded-md border border-input bg-background px-2.5 text-xs ' +
-        'focus:border-ring ' +
-        (props.multiline ? 'py-1.5 ' : 'h-8 ') +
-        (props.class ?? '')
-      }
-      style={{ ...inputTextStyle(), ...props.style }}
+      class={`${INPUT_CLASS} ${props.class ?? ''}`}
+      style={{
+        fontSize: 12,
+        ...props.style,
+      }}
     />
   )
 }
 
+/** 密码输入框（原生 `Input`，明文显示）。
+ *
+ * 离线自用软件，按用户要求直接明文显示、不再用 `masked` 圆点掩码，也不叠加浮层，
+ * 以保证输入法、光标、点击体验与原生一致。`reveal` 保留为可选参数（兼容旧调用），
+ * 但当前始终明文；如需隐藏可在调用处自行处理。 */
+export function PasswordField(props: {
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+  reveal?: boolean
+  autoFocus?: boolean
+  autoComplete?: string
+  onSubmit?: () => void
+  accessibilityLabel?: string
+  class?: string
+}) {
+  return (
+    <Input
+      value={props.value}
+      onChange={(event) => {
+        touchActivity()
+        props.onChange(event.value)
+      }}
+      placeholder={props.placeholder}
+      autoFocus={props.autoFocus}
+      autoComplete={props.autoComplete as never}
+      onSubmit={props.onSubmit ? () => props.onSubmit?.() : undefined}
+      accessibilityLabel={props.accessibilityLabel}
+      class={`${INPUT_CLASS} ${props.class ?? ''}`}
+      style={{ fontSize: 12 }}
+    />
+  )
+}
+
+/** 下拉选择：**自带列表**，展开在触发器下方（不再用 `nsh/base` 的 `Select`）。
+ *
+ *  两个实测坑（nsh 0.5.0 / Windows）：
+ *  1. `Select` 的列表是独立弹出层，放进 `Dialog`（本身也是弹出层）后永远弹不出来，
+ *     这就是「选择分类没有用」；改成组件内自渲染后弹窗内外都能用。
+ *  2. 组件函数体只执行一次（Solid 语义），`const title = ...props.value` 这类
+ *     语句不会跟着 props 更新，必须放进 `computed()` 或 JSX 表达式里。 */
 export function SelectField(props: {
   items: SelectItem[]
   value: string | null
@@ -218,38 +252,68 @@ export function SelectField(props: {
   disabled?: boolean
   class?: string
 }) {
-  const selectedTitle =
-    props.items.find((item) => item.value === props.value)?.title ?? props.placeholder ?? ''
+  const open = signal(false)
+  const title = computed(
+    () => props.items.find((item) => item.value === props.value)?.title ?? props.placeholder ?? '',
+  )
+  const hasValue = computed(() => props.value !== null && props.value !== '')
   return (
-    <Select
-      items={props.items}
-      value={props.value}
-      onChange={(event) => {
-        touchActivity()
-        props.onChange(event.value)
-      }}
-      placeholder={props.placeholder}
-      cleanable={props.cleanable}
-      disabled={props.disabled}
-      class={props.class}
-      popupClass="rounded-md border border-border bg-popover p-1 shadow-lg"
-      listClass="max-h-72"
-      itemClass="rounded px-2 py-1 text-xs text-popover-foreground focus:bg-accent focus:text-accent-foreground selected:bg-accent selected:text-accent-foreground"
-      trigger={
-        <View
-          class={
-            'h-8 w-full flex-row items-center justify-between gap-2 rounded-md border border-input ' +
-            'bg-background px-2.5 ' +
-            (props.disabled ? 'opacity-45' : 'hover:bg-accent')
-          }
-        >
-          <Text class={props.value ? 'text-xs text-foreground' : 'text-xs text-muted-foreground'}>
-            {selectedTitle}
-          </Text>
-          <Icon name="chevron-down" size={12} color={token('muted-foreground')} />
+    <View class={`w-full gap-1 ${props.class ?? ''}`}>
+      <View
+        class={
+          'h-8 w-full flex-row items-center justify-between gap-2 rounded-md border border-input ' +
+          'bg-background px-2.5 ' +
+          (props.disabled ? 'opacity-45' : open() ? 'bg-accent' : 'hover:bg-accent')
+        }
+        onPress={
+          props.disabled
+            ? undefined
+            : () => {
+                touchActivity()
+                open.update((current: boolean) => !current)
+              }
+        }
+        role="button"
+        accessibilityLabel={title()}
+      >
+        {hasValue() ? (
+          <Text class="text-xs text-foreground">{title()}</Text>
+        ) : (
+          <Text class="text-xs text-muted-foreground">{title()}</Text>
+        )}
+        <Icon name="chevron-down" size={12} color={token('muted-foreground')} />
+      </View>
+      {open() ? (
+        <View class="w-full overflow-hidden rounded-md border border-border bg-popover p-1">
+          <View class="gap-0.5">
+            {props.items.map((item) => (
+              <Button
+                class={
+                  'h-7 w-full flex-row items-center justify-start rounded px-2 ' +
+                  (item.value === props.value ? 'bg-accent' : 'hover:bg-accent active:opacity-70')
+                }
+                onPress={() => {
+                  touchActivity()
+                  props.onChange(item.value)
+                  open.set(false)
+                }}
+                accessibilityLabel={item.title}
+              >
+                <Text
+                  class={
+                    item.value === props.value
+                      ? 'text-xs font-medium text-accent-foreground'
+                      : 'text-xs text-popover-foreground'
+                  }
+                >
+                  {item.title}
+                </Text>
+              </Button>
+            ))}
+          </View>
         </View>
-      }
-    />
+      ) : null}
+    </View>
   )
 }
 
@@ -261,7 +325,17 @@ export function SwitchField(props: {
   disabled?: boolean
 }) {
   return (
-    <View class="flex-row items-center justify-between gap-2 py-1.5">
+    <View
+      class="flex-row items-center justify-between gap-2 py-1.5"
+      onPress={
+        props.disabled
+          ? undefined
+          : () => {
+              touchActivity()
+              props.onChange(!props.checked)
+            }
+      }
+    >
       <View class="flex-1 gap-0.5">
         <Text class="text-xs text-foreground">{props.label}</Text>
         {props.hint ? <Text class="text-[11px] text-muted-foreground">{props.hint}</Text> : null}
@@ -274,8 +348,8 @@ export function SwitchField(props: {
         }}
         disabled={props.disabled}
         accessibilityLabel={props.label}
-        trackClass="h-4 w-7 rounded-full border border-input bg-muted checked:bg-primary"
-        thumbClass="h-3 w-3 rounded-full bg-background checked:translate-x-3"
+        trackClass="h-5 w-9 flex-row items-center justify-start rounded-full bg-muted p-0.5 checked:bg-primary"
+        thumbClass="h-4 w-4 rounded-full bg-background checked:translate-x-4"
       />
     </View>
   )
@@ -372,46 +446,11 @@ export function Spinner(props: { label?: string }) {
   )
 }
 
-/** 弹窗内容框：在 `Dialog` 居中之外再提供「按住标题栏拖动」。
- *  nsh 的 Dialog 没有 draggable，鼠标事件只在视图内上报，所以把
- *  按下/移动/松开都绑在整个弹窗上，用 `pagePosition` 计算位移；
- *  指针离开弹窗即结束拖动，避免快速拖动后卡住。 */
-const DRAG_ZONE_HEIGHT = 44
-const DRAG_LIMIT = 400
-
+/** 弹窗内容框：只负责尺寸与最大高度。
+ *  拖动功能已移除（原 mouse 事件实现不稳定、易卡住）。 */
 export function ModalFrame(props: { class?: string; maxHeight?: number; children: JSX.Element }) {
-  const offsetX = signal(0)
-  const offsetY = signal(0)
-  const origin = signal<{ pageX: number; pageY: number; x: number; y: number } | null>(null)
-
-  const clamp = (value: number) => Math.max(-DRAG_LIMIT, Math.min(DRAG_LIMIT, value))
-
   return (
-    <View
-      class={props.class}
-      style={{
-        translate: `${offsetX()}px ${offsetY()}px`,
-        maxHeight: props.maxHeight,
-      }}
-      onPressDown={(event) => {
-        if (event.position.y <= DRAG_ZONE_HEIGHT) {
-          origin.set({
-            pageX: event.pagePosition.x,
-            pageY: event.pagePosition.y,
-            x: offsetX(),
-            y: offsetY(),
-          })
-        }
-      }}
-      onMouseMove={(event) => {
-        const start = origin()
-        if (!start || !event.pressedButton) return
-        offsetX.set(clamp(start.x + event.pagePosition.x - start.pageX))
-        offsetY.set(clamp(start.y + event.pagePosition.y - start.pageY))
-      }}
-      onMouseUp={() => origin.set(null)}
-      onMouseLeave={() => origin.set(null)}
-    >
+    <View class={props.class} style={{ maxHeight: props.maxHeight }}>
       {props.children}
     </View>
   )

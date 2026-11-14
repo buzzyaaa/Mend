@@ -19,15 +19,15 @@ export function AppHeader(props: { compact: () => boolean; onOpenCategories?: ()
   const version = appInfo().version ?? '0.4.0'
 
   const search = (
-    <View class="h-8 flex-1 flex-row items-center gap-1.5 rounded-md border border-input bg-background px-2">
+    // 原生 Input 文字色用 class 控制（text-foreground），不靠 style.color。
+    <View class="relative h-8 flex-1 flex-row items-center gap-1.5 rounded-md border border-input bg-background px-2">
       <Icon name="search" size={14} color={token('muted-foreground')} />
       <Input
         value={keyword()}
         onChange={(event) => setKeyword(event.value)}
         placeholder={t('entry.searchPlaceholder')}
         accessibilityLabel={t('entry.searchPlaceholder')}
-        class="h-7 flex-1 border-0 bg-transparent px-0 text-xs"
-        // `Input` 的 token 颜色类不可靠（值有效但文字不显示），显式给文字样式。
+        class="flex-1 border-0 bg-transparent px-0 py-0.5 text-xs text-foreground placeholder:text-muted-foreground"
         style={{
           color: token('foreground'),
           fontSize: 12,
@@ -40,7 +40,7 @@ export function AppHeader(props: { compact: () => boolean; onOpenCategories?: ()
           icon="close"
           label={t('common.close')}
           size={12}
-          class="h-6 w-6"
+          class="absolute right-1 top-1 h-6 w-6"
           onPress={() => setKeyword('')}
         />
       </If>

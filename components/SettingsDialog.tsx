@@ -34,6 +34,7 @@ import {
   Divider,
   Field,
   IconButton,
+  PasswordField,
   SectionTitle,
   SelectField,
   TextField,
@@ -260,10 +261,11 @@ export function SettingsDialog() {
               <View class="flex-row flex-wrap gap-2">
                 <View class="flex-1">
                   <Field label={t('settings.oldPassword')}>
-                    <TextField
+                    <PasswordField
                       value={oldPassword()}
                       onChange={oldPassword.set}
-                      masked
+                      placeholder={t('settings.oldPassword')}
+                      reveal={false}
                       autoComplete="current-password"
                       accessibilityLabel={t('settings.oldPassword')}
                     />
@@ -271,10 +273,11 @@ export function SettingsDialog() {
                 </View>
                 <View class="flex-1">
                   <Field label={t('settings.newPassword')}>
-                    <TextField
+                    <PasswordField
                       value={newPassword()}
                       onChange={newPassword.set}
-                      masked
+                      placeholder={t('settings.newPassword')}
+                      reveal={false}
                       autoComplete="new-password"
                       accessibilityLabel={t('settings.newPassword')}
                     />
@@ -282,10 +285,11 @@ export function SettingsDialog() {
                 </View>
                 <View class="flex-1">
                   <Field label={t('settings.confirmPassword')}>
-                    <TextField
+                    <PasswordField
                       value={confirmPassword()}
                       onChange={confirmPassword.set}
-                      masked
+                      placeholder={t('settings.confirmPassword')}
+                      reveal={false}
                       autoComplete="new-password"
                       accessibilityLabel={t('settings.confirmPassword')}
                     />
@@ -312,13 +316,13 @@ export function SettingsDialog() {
           <View class="gap-3">
             <SectionTitle title={t('backup.title')} hint={t('backup.hint')} />
             <Field label={t('backup.passwordPlaceholder')}>
-              <TextField
+              <PasswordField
                 value={backupPassword()}
                 onChange={backupPassword.set}
-                masked
+                placeholder={t('backup.passwordPlaceholder')}
+                reveal={false}
                 autoComplete="current-password"
                 accessibilityLabel={t('backup.passwordPlaceholder')}
-                placeholder={t('backup.passwordPlaceholder')}
               />
             </Field>
             <Text class="text-[11px] text-muted-foreground">{t('backup.exportHint')}</Text>

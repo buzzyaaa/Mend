@@ -126,6 +126,8 @@
   "unlock": {
     "subtitle": "Enter your master password to access your vault",
     "password": "Master password",
+    "passwordPlaceholder": "Enter your password",
+    "confirmPasswordPlaceholder": "Confirm your password",
     "unlock": "Unlock",
     "setupSubtitle": "First time here? Set a master password. It cannot be recovered if lost.",
     "confirm": "Confirm master password",

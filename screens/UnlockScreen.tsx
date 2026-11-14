@@ -2,7 +2,7 @@ import { appInfo, signal, Text, token, View } from 'nsh'
 import { t } from 'nsh/i18n'
 
 import { Icon } from '../components/Icon'
-import { ActionButton, Badge, Field, IconButton, TextField } from '../components/ui'
+import { ActionButton, Badge, Field, IconButton, PasswordField, TextField } from '../components/ui'
 import { errorText } from '../lib/errors'
 import { passwordStrength } from '../lib/format'
 import { preferences, setLanguage } from '../lib/preferences'
@@ -12,7 +12,6 @@ export function UnlockScreen(props: { mode: 'setup' | 'unlock' }) {
   const password = signal('')
   const confirmation = signal('')
   const error = signal('')
-  const reveal = signal(false)
   const busy = authBusy
 
   const isSetup = () => props.mode === 'setup'
@@ -96,40 +95,30 @@ export function UnlockScreen(props: { mode: 'setup' | 'unlock' }) {
 
         <View class="gap-3">
           <Field label={t('unlock.password')}>
-            <View class="flex-row items-center gap-2">
-              <TextField
-                value={password()}
-                onChange={(value) => {
-                  password.set(value)
-                  error.set('')
-                }}
-                placeholder="••••••••"
-                masked={!reveal()}
-                autoFocus
-                autoComplete={isSetup() ? 'new-password' : 'current-password'}
-                onSubmit={() => void submit()}
-                accessibilityLabel={t('unlock.password')}
-                class="flex-1"
-              />
-              <IconButton
-                icon={reveal() ? 'eye-off' : 'eye'}
-                label={reveal() ? t('entry.hide') : t('entry.show')}
-                onPress={() => reveal.update((value) => !value)}
-              />
-            </View>
+            <PasswordField
+              value={password()}
+              onChange={(value) => {
+                password.set(value)
+                error.set('')
+              }}
+              placeholder={t('unlock.passwordPlaceholder')}
+              autoFocus
+              autoComplete={isSetup() ? 'new-password' : 'current-password'}
+              onSubmit={() => void submit()}
+              accessibilityLabel={t('unlock.password')}
+            />
           </Field>
 
           {isSetup() ? (
             <>
               <Field label={t('unlock.confirm')}>
-                <TextField
+                <PasswordField
                   value={confirmation()}
                   onChange={(value) => {
                     confirmation.set(value)
                     error.set('')
                   }}
-                  placeholder="••••••••"
-                  masked={!reveal()}
+                  placeholder={t('unlock.confirmPasswordPlaceholder')}
                   autoComplete="new-password"
                   onSubmit={() => void submit()}
                   accessibilityLabel={t('unlock.confirm')}

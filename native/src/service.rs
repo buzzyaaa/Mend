@@ -127,6 +127,86 @@ fn ensure_writable_data_dir(dir: &Path, db_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// 依次尝试的数据目录列表。第一个是 nsh 提供 / 配置的目录（Windows 上通常是
+/// `%APPDATA%\\com.mend.app`）；其余是逐步“兜底”的位置。每个目录在使用前都会
+/// 用 `prepare_dir` 实际探测是否可写，因此当前进程写不了某个目录（例如
+/// `%APPDATA%` 带着限制性 ACL，或 `nsh dev` 宿主以 Low 完整性级别运行、无法写
+/// 入任何 Medium 级别的用户目录）时会被直接跳过，而不是让整个启动失败。
+///
+/// 兜底顺序（dev 场景下最关键的是 `LocalLow`，它是 Low 完整性进程唯一能稳定
+/// 写入的位置）：
+///   1. nsh 数据目录（发布版可写，直接用）
+///   2. `MEND_DEV_DATA_DIR`（可选，显式指定时优先，便于测试/调试用隔离库）
+///   3. `LocalLow\\com.mend.app` —— Low 完整性 dev 宿主的可写目录
+///   4. `%LOCALAPPDATA%\\com.mend.app`
+///   5. `%USERPROFILE%\\.mend`
+///   6. `%TEMP%\\com.mend.app`
+fn candidate_data_dirs(primary: &Path) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = vec![primary.to_path_buf()];
+    let mut push = |candidate: Option<PathBuf>| {
+        if let Some(candidate) = candidate {
+            if !dirs.iter().any(|existing| existing == &candidate) {
+                dirs.push(candidate);
+            }
+        }
+    };
+    // 可选的开发者数据目录：显式指定时**优先于** Low 完整性兜底目录，
+    // 这样测试/调试用 `MEND_DEV_DATA_DIR` 就能拿到一个干净隔离的库。
+    if let Some(value) = std::env::var_os("MEND_DEV_DATA_DIR").filter(|value| !value.is_empty()) {
+        push(Some(PathBuf::from(value)));
+    }
+    // Low 完整性 dev 宿主的兜底：Windows 为低完整性进程预留的可写目录。
+    push(local_low_dir());
+    if let Some(value) = std::env::var_os("LOCALAPPDATA").filter(|value| !value.is_empty()) {
+        push(Some(Path::new(&value).join("com.mend.app")));
+    }
+    if let Some(value) = std::env::var_os("USERPROFILE").filter(|value| !value.is_empty()) {
+        push(Some(Path::new(&value).join(".mend")));
+    }
+    if let Some(value) = std::env::var_os("TEMP").filter(|value| !value.is_empty()) {
+        push(Some(Path::new(&value).join("com.mend.app")));
+    }
+    dirs
+}
+
+/// 确保 `dir` 存在且真正可写，然后再交给 SQLite 打开。`prepare_dir` 比裸
+/// `create_dir_all` 更稳：对于“已存在但当前进程无法重新创建”的目录，错误由内部
+/// 的写探针（而非 `create_dir_all`）报出，从而让候选链能继续往下试。
+fn prepare_dir(dir: &Path) -> Result<(), String> {
+    if !dir.exists() {
+        if let Err(err) = fs::create_dir_all(dir) {
+            return Err(format!("无法创建目录 ({err}): {}", dir.display()));
+        }
+    }
+    ensure_writable_data_dir(dir, &db::db_file_path(dir))
+}
+
+/// 尽力把 `src` 里已有的保险库复制到 `dst`：当配置的数据目录不可写、我们回退到
+/// 另一个位置时调用，避免用户丢失已有条目。复制失败一律忽略——新目录照样能打开，
+/// 必要时用户可以用 `.mendbak` 备份恢复。
+fn migrate_vault(src: &Path, dst: &Path) {
+    let src_db = src.join("mend.db");
+    if !src_db.exists() {
+        return;
+    }
+    let dst_db = dst.join("mend.db");
+    if dst_db.exists() {
+        return;
+    }
+    let _ = fs::copy(&src_db, &dst_db);
+    if let Ok(entries) = fs::read_dir(src) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) == Some("mendbak") {
+                let dst_file = dst.join(entry.file_name());
+                if !dst_file.exists() {
+                    let _ = fs::copy(&path, &dst_file);
+                }
+            }
+        }
+    }
+}
+
 fn ensure_conn(backend: &mut Backend) -> Result<(), String> {
     if backend.conn.is_none() {
         // busy_timeout 由 db::open_and_migrate 在任何读写之前统一设置
@@ -184,26 +264,61 @@ fn ensure_unlocked(backend: &mut Backend) -> Result<(), String> {
     Ok(())
 }
 
+/// Windows 上为「低完整性级别」进程（典型如 `nsh dev` 宿主）预留的可写目录
+/// `LocalLow` 下的应用目录。`nsh dev` 宿主通常跑在 Low 完整性级别，无法写入
+/// Medium 级别的 `%APPDATA%`/`%LOCALAPPDATA%`/`%USERPROFILE%`/`%TEMP%`，但
+/// `LocalLow` 就是为此而存在的可写位置——因此它是 dev 模式下最可靠的兜底候选。
+fn local_low_dir() -> Option<PathBuf> {
+    let userprofile = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)?;
+    Some(
+        userprofile
+            .join("AppData")
+            .join("LocalLow")
+            .join("com.mend.app"),
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
 
 pub fn init_sync(data_dir: Option<String>) -> Result<VaultStatus, String> {
-    let dir = resolve_data_dir(data_dir)?;
-    fs::create_dir_all(&dir).map_err(|err| coded("vault", format!("创建数据目录失败: {err}")))?;
-    let db_path = db::db_file_path(&dir);
-    ensure_writable_data_dir(&dir, &db_path)?;
+    let primary = resolve_data_dir(data_dir)?;
+    let candidates = candidate_data_dirs(&primary);
 
-    let mut backend = backend()?;
-    let same = backend.db_path == db_path;
-    if !same {
-        backend.conn = None;
-        backend.session = None;
+    // 依次探测候选目录，使用第一个真正可写的；配置目录不可写时回退并把已有
+    // 保险库迁移过去。全部不可写才给出带每个候选失败明细的诊断信息。
+    let mut failures: Vec<String> = Vec::new();
+    for candidate in &candidates {
+        match prepare_dir(candidate) {
+            Ok(()) => {
+                if candidate != &primary {
+                    migrate_vault(&primary, candidate);
+                }
+                let mut backend = backend()?;
+                let db_path = db::db_file_path(candidate);
+                if backend.db_path != db_path {
+                    backend.conn = None;
+                    backend.session = None;
+                }
+                backend.data_dir = candidate.clone();
+                backend.db_path = db_path;
+                ensure_conn(&mut backend)?;
+                return status_of(&backend);
+            }
+            Err(err) => failures.push(format!("· {} → {}", candidate.display(), err)),
+        }
     }
-    backend.data_dir = dir;
-    backend.db_path = db_path;
-    ensure_conn(&mut backend)?;
-    status_of(&backend)
+
+    Err(coded(
+        "db_readonly",
+        format!(
+            "所有候选数据目录均不可写，无法启动：\n{}\n\n可设置环境变量 MEND_DATA_DIR 或 MEND_DEV_DATA_DIR 指向一个可写目录后重试。",
+            failures.join("\n")
+        ),
+    ))
 }
 
 pub fn status_sync() -> Result<VaultStatus, String> {

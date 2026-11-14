@@ -16,3 +16,12 @@ zeroize = { version = "1", features = ["derive"] }
 base64 = "0.22"
 rusqlite = { version = "0.31", features = ["bundled"] }
 serde_json = "1"
+
+# 发布体积优化：剥离符号、按体积优先编译（rusqlite bundled 把整份 SQLite C 源码编进本 crate，
+# 此 profile 对其体积影响最明显）。lto 会显著拉长构建时间，但只在 `nsh package` 的 release 阶段发生。
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+

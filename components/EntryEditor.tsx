@@ -16,6 +16,7 @@ import {
   SelectField,
   Spinner,
   SwitchField,
+  PasswordField,
   TextField,
   MODAL_BACKDROP_CLASS,
   MODAL_CLASS,
@@ -72,7 +73,6 @@ export function EntryEditor(props: { state: EntryEditorState }) {
   const busy = signal(false)
   const error = signal('')
   const tab = signal<'edit' | 'preview'>('edit')
-  const revealPassword = signal(false)
   const generatorOpen = signal(false)
   const generated = signal('')
   const generatorError = signal('')
@@ -219,7 +219,7 @@ export function EntryEditor(props: { state: EntryEditorState }) {
           <Field label={t('entry.category')}>
             <SelectField
               items={categoryItems}
-              value={form().categoryId ?? ''}
+              value={form().categoryId ?? null}
               onChange={(value) =>
                 form.update((current) => ({
                   ...current,
@@ -257,20 +257,15 @@ export function EntryEditor(props: { state: EntryEditorState }) {
             <View class="flex-1">
               <Field label={t('entry.password')}>
                 <View class="flex-row items-center gap-1.5">
-                  <TextField
+                  <PasswordField
                     value={form().password}
                     onChange={(value) =>
                       form.update((current) => ({ ...current, password: value }))
                     }
-                    masked={!revealPassword()}
+                    placeholder={t('entry.password')}
                     autoComplete="new-password"
                     accessibilityLabel={t('entry.password')}
                     class="flex-1"
-                  />
-                  <IconButton
-                    icon={revealPassword() ? 'eye-off' : 'eye'}
-                    label={revealPassword() ? t('entry.hide') : t('entry.show')}
-                    onPress={() => revealPassword.update((value) => !value)}
                   />
                   <IconButton
                     icon="sparkles"

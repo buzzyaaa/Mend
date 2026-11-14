@@ -32,8 +32,8 @@ function DetailRow(props: {
   onOpen?: () => void
 }) {
   return (
-    <View class="flex-row items-start gap-3 border-b border-border py-2">
-      <Text class="w-20 pt-0.5 text-xs font-medium text-muted-foreground">{props.label}</Text>
+    <View class="flex-row items-center gap-3 border-b border-border py-2">
+      <Text class="w-20 text-xs font-medium text-muted-foreground">{props.label}</Text>
       <View class="flex-1">
         <Text class="text-xs text-foreground">
           {props.masked && !props.revealed ? '••••••••••••' : props.value}
