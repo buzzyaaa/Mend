@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Local offline encrypted password manager (Native Shell / TSX + Rust)",
   "scripts": {
-    "dev": "nsh dev .",
+    "dev": "node scripts/dev.mjs",
+    "dev:raw": "nsh dev .",
     "build": "nsh build .",
     "package": "nsh package . --target windows",
     "test": "nsh test .",

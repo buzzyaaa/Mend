@@ -165,7 +165,7 @@ export function PresetsDialog() {
               <Text class="text-[11px] text-muted-foreground">{typeLabel(activeType())}</Text>
             </View>
           </View>
-          <View class="flex-row flex-wrap gap-2">
+          <View class="flex-row flex-wrap items-end gap-2">
             <View class="w-40">
               <Field label={t('preset.label')}>
                 <TextField

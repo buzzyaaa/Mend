@@ -13,7 +13,7 @@
   "tasks": [
     {
       "label": "开发：nsh dev（官方入口）",
-      "detail": "nsh dev .：官方开发入口，本机原生宿主 + TSX 热重载；按端口自动接管旧会话，无需手动清理，Ctrl+C 结束。",
+      "detail": "node scripts/dev.mjs：先结束本仓库旧的开发宿主/打包版进程、清空 %LOCALAPPDATA%\\nsh\\dev-sessions 会话记录，再启动 nsh dev .，避免沿用旧会话看到旧界面；Ctrl+C 结束。",
       "type": "shell",
       "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
       "args": [
@@ -22,7 +22,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        "Set-Location '${workspaceFolder}'; nsh dev ."
+        "Set-Location '${workspaceFolder}'; node scripts/dev.mjs"
       ],
       "isBackground": true,
       "problemMatcher": [],

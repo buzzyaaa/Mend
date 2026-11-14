@@ -56,7 +56,9 @@
 - 把 `CARGO_HOME` 指向仓库内 `.tools\cargo-home`（含完整 crate 缓存与镜像配置），避免编译 `.nsh/rust` 时去用户目录重新下载依赖而触发 `os error 5`，并加速构建；
 - 统一当前会话 PATH：官方安装的 nsh（`%LOCALAPPDATA%\nsh\bin`）排在最前并清掉仓库内 `.tools\nsh\bin` 残留，再加入 cargo、MinGW、git、gh。
 
-nsh 必须来自官方安装路径：仓库内拷贝放进 PATH 会让 `nsh dev` 创建 dev session 目录时必然报 `os error 5`（详见 `docs/11-native-shell.md` 第 8 节）。开发入口是 `nsh dev .`；`nsh run` 仅用于 web/tui 等其他目标预览。不修改系统环境变量。nsh 安装方式见 `docs/09-env-setup.md`。
+nsh 必须来自官方安装路径：仓库内拷贝放进 PATH 会让 `nsh dev` 创建 dev session 目录时必然报 `os error 5`（详见 `docs/11-native-shell.md` 第 8 节）。开发入口是 `npm run dev`（= `scripts/dev.mjs`，先清理旧宿主/旧 dev 会话再 `nsh dev .`；`npm run dev:raw` 才是裸 `nsh dev .`）；`nsh run` 仅用于 web/tui 等其他目标预览。不修改系统环境变量。nsh 安装方式见 `docs/09-env-setup.md`。
+
+排查「改了代码但界面没变」时先确认三件事：**桌面上开的是不是旧打包版 `Mend.exe`**（读死 bundle）、是不是旧开发宿主窗口没关（`%LOCALAPPDATA%\nsh\dev-sessions` 里还留着端口记录）、以及 `.nsh/out/bundle.nshc` 是否为旧产物。`npm run dev -- --dry-run` 可先看会清理哪些进程。
 
 ## 6. 如何更新开发日志
 

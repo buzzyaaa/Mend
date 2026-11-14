@@ -1,6 +1,6 @@
-import { computed, signal, Text, token, View } from 'nsh'
+import { computed, Text, token, View } from 'nsh'
 import type { JSX } from 'nsh'
-import { Button, Input, Switch, Tooltip, type SelectItem } from 'nsh/base'
+import { Button, Input, Menu, MenuItem, Switch, Tooltip, type SelectItem } from 'nsh/base'
 
 import { touchActivity } from '../lib/state'
 
@@ -95,6 +95,8 @@ export function IconButton(props: {
   size?: number
   class?: string
   testID?: string
+  /** 图标色，不传时按 `active` 走主题色（星标这类有状态的图标用它上色）。 */
+  iconColor?: string
 }) {
   return (
     <Button
@@ -130,7 +132,7 @@ export function IconButton(props: {
       <Icon
         name={props.icon}
         size={props.size ?? 16}
-        color={token(props.active ? 'foreground' : 'muted-foreground')}
+        color={props.iconColor ?? token(props.active ? 'foreground' : 'muted-foreground')}
       />
     </Button>
   )
@@ -151,15 +153,16 @@ export function Field(props: {
   )
 }
 
-/** 输入框文字与背景的着色约定（实测于 nsh 0.5.0 / Windows）：
+/** 输入框文字与背景的着色约定（实测于 nsh 0.5.x / Windows）：
  *
  *  - 文字色必须走 `class` 里的 `text-foreground`／`placeholder:text-muted-foreground`，
- *    写进 `style.color` 只作用于外层容器、够不到内部文本框；
- *  - 值文本的**字形绘制**在 0.5.0 的 Windows 宿主上有缺陷（布局与光标位置正确、
- *    字形不上屏，占位符正常），属于引擎问题，已在 nsh 0.5.1 修复（#1978）；
- *    应用侧不改写组件、也不叠加浮层，等引擎版本跟上即可。 */
+ *    写进 `style.color` 只作用于外层容器、够不到内部文本框。
+ *
+ *  高度统一为 32（`h-8`），与 `ActionButton`／`SelectField` 的触发器同高，
+ *  这样「输入框 + 按钮」并排时不会一高一矮（预设弹窗那行就是这个问题）。
+ *  多行输入自己带 `style.height`，不套 `h-8`。 */
 const INPUT_CLASS =
-  'w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs ' +
+  'w-full rounded-md border border-input bg-background px-2.5 text-xs ' +
   'text-foreground placeholder:text-muted-foreground'
 
 export function TextField(props: {
@@ -193,7 +196,7 @@ export function TextField(props: {
       // standard values and the native side ignores unknown ones.
       autoComplete={props.autoComplete as never}
       onSubmit={props.onSubmit ? () => props.onSubmit?.() : undefined}
-      class={`${INPUT_CLASS} ${props.class ?? ''}`}
+      class={`${INPUT_CLASS} ${props.multiline ? '' : 'h-8'} ${props.class ?? ''}`}
       style={{
         fontSize: 12,
         ...props.style,
@@ -230,19 +233,23 @@ export function PasswordField(props: {
       autoComplete={props.autoComplete as never}
       onSubmit={props.onSubmit ? () => props.onSubmit?.() : undefined}
       accessibilityLabel={props.accessibilityLabel}
-      class={`${INPUT_CLASS} ${props.class ?? ''}`}
+      class={`${INPUT_CLASS} h-8 ${props.class ?? ''}`}
       style={{ fontSize: 12 }}
     />
   )
 }
 
-/** 下拉选择：**自带列表**，展开在触发器下方（不再用 `nsh/base` 的 `Select`）。
+/** 下拉选择：用官方的 `Menu` 承载列表（触发器自己画）。
  *
- *  两个实测坑（nsh 0.5.0 / Windows）：
- *  1. `Select` 的列表是独立弹出层，放进 `Dialog`（本身也是弹出层）后永远弹不出来，
- *     这就是「选择分类没有用」；改成组件内自渲染后弹窗内外都能用。
- *  2. 组件函数体只执行一次（Solid 语义），`const title = ...props.value` 这类
- *     语句不会跟着 props 更新，必须放进 `computed()` 或 JSX 表达式里。 */
+ *  为什么不自己渲染列表：自渲染列表只能排在文档流里，展开时会把下面的内容顶下去
+ *  （「弹出不是浮在界面上」）；改成 `absolute` 又会被后续兄弟（列表行、表单字段）
+ *  盖住——nsh 的 `zIndex` 只对同级生效，抬不到外层兄弟之上。
+ *  官方 `Menu` 是**独立弹出的浮层**（桌面端弹出在自己的窗口里），不占文档流、
+ *  不会被内容盖住、放不下时自己滚动，`Dialog` 里也能用（`Select` 的弹层在
+ *  `Dialog` 里弹不出来，这才是当初「选择分类没有用」的根因）。
+ *
+ *  另外：组件函数体只执行一次（Solid 语义），`props` 的派生值必须放进
+ *  `computed()` 或 JSX 表达式，否则选中后触发器文字不更新。 */
 export function SelectField(props: {
   items: SelectItem[]
   value: string | null
@@ -252,67 +259,70 @@ export function SelectField(props: {
   disabled?: boolean
   class?: string
 }) {
-  const open = signal(false)
   const title = computed(
     () => props.items.find((item) => item.value === props.value)?.title ?? props.placeholder ?? '',
   )
   const hasValue = computed(() => props.value !== null && props.value !== '')
+  const trigger = (
+    <Button
+      class={
+        'h-8 w-full flex-row items-center justify-between gap-2 rounded-md border border-input ' +
+        'bg-background px-2.5 ' +
+        (props.disabled ? 'opacity-45' : 'hover:bg-accent')
+      }
+      disabled={props.disabled}
+      accessibilityLabel={title()}
+    >
+      {hasValue() ? (
+        <Text class="flex-1 text-xs text-foreground" style={{ numberOfLines: 1 }}>
+          {title()}
+        </Text>
+      ) : (
+        <Text class="flex-1 text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>
+          {title()}
+        </Text>
+      )}
+      <Icon name="chevron-down" size={12} color={token('muted-foreground')} />
+    </Button>
+  )
+
+  if (props.disabled) return <View class={props.class ?? 'w-full'}>{trigger}</View>
+
   return (
-    <View class={`w-full gap-1 ${props.class ?? ''}`}>
-      <View
-        class={
-          'h-8 w-full flex-row items-center justify-between gap-2 rounded-md border border-input ' +
-          'bg-background px-2.5 ' +
-          (props.disabled ? 'opacity-45' : open() ? 'bg-accent' : 'hover:bg-accent')
-        }
-        onPress={
-          props.disabled
-            ? undefined
-            : () => {
-                touchActivity()
-                open.update((current: boolean) => !current)
-              }
-        }
-        role="button"
-        accessibilityLabel={title()}
+    // 宽度类必须挂在外层 View 上：把 `class` 直接给 `Menu` 会让它的宿主塌成 0 宽，
+    // 触发器整块不显示（实测）。
+    <View class={props.class ?? 'w-full'}>
+      <Menu
+        placement="bottom"
+        align="start"
+        offset={4}
+        popupClass="rounded-md border border-border bg-popover p-1 shadow-lg"
+        trigger={trigger}
       >
-        {hasValue() ? (
-          <Text class="text-xs text-foreground">{title()}</Text>
-        ) : (
-          <Text class="text-xs text-muted-foreground">{title()}</Text>
-        )}
-        <Icon name="chevron-down" size={12} color={token('muted-foreground')} />
-      </View>
-      {open() ? (
-        <View class="w-full overflow-hidden rounded-md border border-border bg-popover p-1">
-          <View class="gap-0.5">
-            {props.items.map((item) => (
-              <Button
-                class={
-                  'h-7 w-full flex-row items-center justify-start rounded px-2 ' +
-                  (item.value === props.value ? 'bg-accent' : 'hover:bg-accent active:opacity-70')
-                }
-                onPress={() => {
-                  touchActivity()
-                  props.onChange(item.value)
-                  open.set(false)
-                }}
-                accessibilityLabel={item.title}
-              >
-                <Text
-                  class={
-                    item.value === props.value
-                      ? 'text-xs font-medium text-accent-foreground'
-                      : 'text-xs text-popover-foreground'
-                  }
-                >
-                  {item.title}
-                </Text>
-              </Button>
-            ))}
-          </View>
-        </View>
-      ) : null}
+        {props.items.map((item) => (
+          <MenuItem
+            class={
+              'h-7 min-w-[120px] flex-row items-center rounded px-2 ' +
+              (item.value === props.value ? 'bg-accent' : 'hover:bg-accent')
+            }
+            accessibilityLabel={item.title}
+            onSelect={() => {
+              touchActivity()
+              props.onChange(item.value)
+            }}
+          >
+            <Text
+              class={
+                item.value === props.value
+                  ? 'text-xs font-medium text-accent-foreground'
+                  : 'text-xs text-popover-foreground'
+              }
+            >
+              {item.title}
+            </Text>
+          </MenuItem>
+        ))}
+      </Menu>
     </View>
   )
 }

@@ -50,10 +50,13 @@ curl -fsSL https://nsh.dev/install.sh | sh
 在仓库根目录执行：
 
 ```powershell
-nsh dev
+npm run dev        # 干净启动：先结束旧的开发宿主/打包版进程、清空旧的 dev 会话，再 nsh dev .
+npm run dev:raw    # 等价于直接 `nsh dev .`（不做清理）
 ```
 
 `nsh dev` 使用官方原生宿主并带 TSX 热重载；首次运行会自动编译 Rust 模块，之后改动即改即生效。
+
+**为什么默认用 `npm run dev`**：`nsh dev` 会按端口接管上一次的开发会话（记录在 `%LOCALAPPDATA%\nsh\dev-sessions`）。如果上次的宿主窗口还开着，或者桌面上还开着 **旧打包版 `Mend.exe`**（它读的是打包时写死的 bundle，永远停在那个构建），新代码看起来就"没生效"。`scripts/dev.mjs` 会先结束 `target\debug\nsh-app-*-windows-host.exe`、`.nsh\out\Mend\Mend.exe` 与残留的 nsh 开发服务器，清掉会话记录，再启动开发宿主，所以每次都是最新代码。只想看会清理什么可加 `--dry-run`。
 
 仓库根的 `.cargo/config.toml` 已把 Cargo 构建脚本的临时目录固定到仓库内 `.cargo/tmp`，因此 Windows 上 cc-rs 的临时目录报错（`Cannot create temporary file ... Permission denied`）不会再挡住 `nsh dev`，**无需任何额外初始化**。该目录由 `.cargo/tmp/.gitkeep` 随仓库分发；若被误删（报 `No such file or directory`），执行 `New-Item -ItemType Directory -Force .cargo/tmp` 或运行下面的 `dev-env.ps1` 即可恢复。
 

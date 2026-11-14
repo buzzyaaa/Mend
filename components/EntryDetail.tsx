@@ -110,9 +110,6 @@ function EntryBody(props: { entry: () => EntryView; compact?: boolean }) {
               >
                 {entry().title}
               </Text>
-              <If when={entry().favorite}>
-                <Icon name="star-filled" size={14} color={token('warning')} />
-              </If>
               <If when={entry().archived}>
                 <Text class="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
                   {t('entry.archived')}
@@ -127,6 +124,7 @@ function EntryBody(props: { entry: () => EntryView; compact?: boolean }) {
             <IconButton
               icon={entry().favorite ? 'star-filled' : 'star'}
               label={entry().favorite ? t('entry.unstar') : t('entry.star')}
+              iconColor={token(entry().favorite ? 'warning' : 'muted-foreground')}
               onPress={() => void toggleFavorite(entry())}
             />
             <If when={!entry().archived}>

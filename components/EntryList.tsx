@@ -101,7 +101,7 @@ function EntryRow(props: { entry: EntrySummary; index: number }) {
             <Icon
               name={props.entry.favorite ? 'star-filled' : 'star'}
               size={14}
-              color={token('muted-foreground')}
+              color={token(props.entry.favorite ? 'warning' : 'muted-foreground')}
             />
             <Text class="text-xs text-popover-foreground">
               {props.entry.favorite ? t('entry.unstar') : t('entry.star')}
@@ -200,9 +200,6 @@ function EntryRow(props: { entry: EntrySummary; index: number }) {
           <Text class="flex-1 text-xs font-medium text-foreground" style={{ numberOfLines: 1 }}>
             {props.entry.title}
           </Text>
-          <If when={props.entry.favorite}>
-            <Icon name="star-filled" size={12} color={token('warning')} />
-          </If>
           <If when={props.entry.archived}>
             <Text class="rounded bg-muted px-1 py-0.5 text-[11px] text-muted-foreground">
               {t('entry.archived')}
@@ -238,6 +235,7 @@ function EntryRow(props: { entry: EntrySummary; index: number }) {
             label={props.entry.favorite ? t('entry.unstar') : t('entry.star')}
             size={14}
             class="h-7 w-7"
+            iconColor={token(props.entry.favorite ? 'warning' : 'muted-foreground')}
             onPress={() => void toggleFavorite(props.entry)}
           />
         </If>
