@@ -2,36 +2,38 @@
 
 > **Mend the gaps of your memory.**
 
-Mend 是一款本地离线、存盘加密的个人密码管理器，基于 **Native Shell（nsh 0.5.0）**：TSX 原生视图 + Rust 核心（SQLite / Argon2id / XChaCha20-Poly1305），不使用 WebView、HTML 或 CSS 页面。数据与加密全部在 Rust 侧完成，桌面与手机共用同一份自适应 UI。
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![Platform: Windows / macOS / Linux](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
+[![Version](https://img.shields.io/badge/Version-0.4.4-green.svg)](./CHANGELOG.md)
 
-## ✨ 功能特性
+English | [简体中文](./README.zh-CN.md)
 
-- 本地 SQLite 密码库：账号、密码、邮箱、手机号、备注、预设值等敏感字段在写入磁盘前完成加密。
-- 条目管理：标题、用户名、密码、网址、Markdown 备注、标签、收藏。
-- 分类（颜色 + emoji 图标）、归档、回收站、预设值。
-- 强密码生成器、搜索、排序（最近更新 / 名称 / 收藏 / 手动）、复制到剪贴板、打开网址。
-- 自动锁定、浅色 / 深色 / 跟随系统主题、中英文界面。
-- 加密备份：`.mendbak` 导出与恢复。
-- 应用更新与签名 OTA 更新（正式发布走 GitHub Releases）。
-- 同一份代码自适应桌面 master-detail（侧栏 + 列表 + 详情）与手机单栏布局。
+Mend is a local-first, offline, encrypted personal password manager. It is built on **Native Shell (nsh 0.5.0)**: a TSX native view layer over a Rust core (SQLite + Argon2id + XChaCha20-Poly1305), with no WebView, no HTML/CSS pages and no frontend bundler. All storage and cryptography happen in Rust; desktop and mobile share the same adaptive UI from a single codebase.
 
-## 🔏 Code signing / 代码签名
+## Features
+
+- **Encrypted local vault** — a SQLite database where account names, passwords, emails, phone numbers, notes and preset values are encrypted before they touch the disk.
+- **Entry management** — title, username, password, URL, Markdown notes, tags and favorites.
+- **Organization** — color and emoji categories, archive, trash and preset values.
+- **Everyday tools** — strong password generator, search, sorting (recently updated / name / favorite / manual), copy-to-clipboard and open-in-browser.
+- **Comfort** — auto-lock, light / dark / system themes, English and Chinese interfaces.
+- **Backup** — encrypted `.mendbak` export and restore.
+- **Updates** — in-app updates with signed OTA packages (releases are published on GitHub Releases).
+- **Adaptive layout** — desktop master-detail (sidebar + list + detail) and single-column mobile from the same code.
+
+## Code signing
 
 Windows releases are signed with a project key. We plan to move to a publicly trusted code signing certificate as the project grows; until then, Windows SmartScreen may show a publisher warning on first download.
 
-Windows 发布包使用项目密钥签名。项目成熟后计划改用公共信任的代码签名证书；在此之前，Windows SmartScreen 可能在首次下载时显示发布者警告。
-
-## ⚠️ Important / 重要提示
+## Important
 
 This software is provided "as is", without warranty of any kind. Back up your vault regularly. If you lose the master password, the data cannot be recovered.
 
-本软件按现状提供，不附带任何形式的担保。请定期备份密码库；主密码丢失后数据无法恢复。
+## Getting started
 
-## 🧰 环境准备
+Install the Native Shell CLI and a Rust toolchain before developing.
 
-开发前先安装 Native Shell CLI，再准备 Rust 工具链。
-
-**1. 安装 nsh CLI（0.5.0）**
+**1. Install nsh CLI (0.5.0)**
 
 ```powershell
 # Windows
@@ -43,85 +45,85 @@ irm https://nsh.dev/install.ps1 | iex
 curl -fsSL https://nsh.dev/install.sh | sh
 ```
 
-安装完成后用 `nsh --version` 确认可用。
+Verify with `nsh --version`.
 
-**2. 安装 Rust 工具链**
+**2. Install Rust**
 
-通过 [rustup](https://rustup.rs) 安装 Rust。Windows 上 MinGW-w64 或 MSVC 均可（与所选 Rust target 匹配即可）；`rusqlite` 以 bundled 方式编译 SQLite，需要一个可用的 C 编译器。
+Use [rustup](https://rustup.rs). On Windows, both MinGW-w64 and MSVC work (match your Rust target). `rusqlite` builds SQLite from bundled sources, so a working C compiler is required.
 
-**3. 进入仓库根目录，即可开始开发。**
+**3. Open the repository root and start developing.**
 
-## 🚀 快速开发
+## Development
 
-在仓库根目录执行：
-
-```powershell
-npm run dev        # 干净启动：先结束旧的开发宿主/打包版进程、清空旧的 dev 会话，再 nsh dev .
-npm run dev:raw    # 等价于直接 `nsh dev .`（不做清理）
-```
-
-`nsh dev` 使用官方原生宿主并带 TSX 热重载；首次运行会自动编译 Rust 模块，之后改动即改即生效。
-
-**为什么默认用 `npm run dev`**：`nsh dev` 会按端口接管上一次的开发会话（记录在 `%LOCALAPPDATA%\nsh\dev-sessions`）。如果上次的宿主窗口还开着，或者桌面上还开着 **旧打包版 `Mend.exe`**（它读的是打包时写死的 bundle，永远停在那个构建），新代码看起来就"没生效"。`scripts/dev.mjs` 会先结束 `target\debug\nsh-app-*-windows-host.exe`、`.nsh\out\Mend\Mend.exe` 与残留的 nsh 开发服务器，清掉会话记录，再启动开发宿主，所以每次都是最新代码。只想看会清理什么可加 `--dry-run`。
-
-仓库根的 `.cargo/config.toml` 已把 Cargo 构建脚本的临时目录固定到仓库内 `.cargo/tmp`，因此 Windows 上 cc-rs 的临时目录报错（`Cannot create temporary file ... Permission denied`）不会再挡住 `nsh dev`，**无需任何额外初始化**。该目录由 `.cargo/tmp/.gitkeep` 随仓库分发；若被误删（报 `No such file or directory`），执行 `New-Item -ItemType Directory -Force .cargo/tmp` 或运行下面的 `dev-env.ps1` 即可恢复。
-
-需要更快的构建或统一的会话 PATH 时，可选执行（不安装、不修改系统设置）：
+From the repository root:
 
 ```powershell
-. .\scripts\dev-env.ps1   # 把 CARGO_HOME 指到仓库内缓存，并让官方 nsh 的 PATH 优先
+npm run dev        # clean start: stop old host/dev sessions, then nsh dev .
+npm run dev:raw    # plain `nsh dev .` (no cleanup)
 ```
 
-`nsh run .` 不再是主开发入口，仅在需要 `--target web` / `--target tui` 预览时使用。
+`nsh dev` runs the official native host with TSX hot reload; it compiles the Rust module on first run, and later changes take effect immediately.
 
-## ✅ 检查与测试
+**Why `npm run dev` by default:** `nsh dev` takes over the previous dev session by port (recorded in `%LOCALAPPDATA%\nsh\dev-sessions`). If an old host window is still open — or an old packaged `Mend.exe` is running on the desktop (it reads a bundle baked in at build time) — new code looks like it "didn't take effect". `scripts/dev.mjs` first stops `target\debug\nsh-app-*-windows-host.exe`, `.nsh\out\Mend\Mend.exe` and leftover dev servers, then clears the session records and starts a fresh host. Use `--dry-run` to see what would be cleaned up.
+
+The repository's `.cargo/config.toml` pins Cargo build-script temp files to `.cargo/tmp` inside the repo, so Windows cc-rs temp-directory errors no longer block `nsh dev` — no extra setup is needed. That directory ships via `.cargo/tmp/.gitkeep`; if it is accidentally deleted, run `New-Item -ItemType Directory -Force .cargo/tmp` or the script below.
+
+Optional, for faster builds and a consistent session PATH (installs nothing, changes no system settings):
 
 ```powershell
-nsh check .        # 官方类型检查
-npm run typecheck  # 等价的 TypeScript 检查（备用）
-
-nsh test .         # native cargo test + TSX headless 测试
-cargo test --manifest-path core\Cargo.toml   # 加密 / SQLite / 备份等核心测试
+. .\scripts\dev-env.ps1   # point CARGO_HOME at the in-repo cache, prefer official nsh on PATH
 ```
 
-## 📦 构建与打包
+`nsh run .` is no longer the main development entry; use it only for `--target web` / `--target tui` previews.
+
+## Checks and tests
 
 ```powershell
-nsh build .                    # 输出到 .nsh/out
-nsh package . --target windows # 产物：Mend/Mend.exe、Mend.zip、Mend-<版本>-windows-x86_64.zip、Mend.iss
+nsh check .        # official type check
+npm run typecheck  # equivalent TypeScript check (fallback)
+
+nsh test .         # native cargo test + TSX headless tests
+cargo test --manifest-path core\Cargo.toml   # crypto / SQLite / backup core tests
 ```
 
-安装了 Inno Setup 6 时，`nsh package` 还会额外产出 `setup.exe` 安装包（未安装则只写 `Mend.iss`，属正常）。整个打包不需要签名密钥。发布正式版：打 `v*` tag 后由 `.github/workflows/release.yml` 自动构建并发布 GitHub Release。
+## Build and package
 
-`package.json` 同时提供等价的 npm scripts：`dev` / `build` / `package` / `test` / `check` / `typecheck`。
+```powershell
+nsh build .                    # output: .nsh/out
+nsh package . --target windows # artifacts: Mend/Mend.exe, Mend.zip, Mend-<version>-windows-x86_64.zip, Mend.iss
+```
 
-**VS Code**：仓库内置 `.vscode/tasks.json`，任务覆盖开发、检查、测试、打包与格式化等常用流程，从 `Terminal → Run Task` 选择即可。
+With Inno Setup 6 installed, `nsh package` also produces a `setup.exe` installer (otherwise it only writes `Mend.iss`, which is normal). Packaging needs no signing key. To publish an official release, push a `v*` tag and `.github/workflows/release.yml` builds and publishes a GitHub Release automatically.
 
-## 📁 项目结构
+Equivalent npm scripts are available in `package.json`: `dev` / `build` / `package` / `test` / `check` / `typecheck`.
 
-- `App.tsx`：应用入口（boot → setup / unlock → main）。
-- `screens/`：UnlockScreen、MainScreen 等界面。
-- `components/`：原生 UI 组件（列表、详情、编辑器、设置等）。
-- `lib/`：native 封装、状态、错误、格式化、偏好。
-- `native/`：nsh 原生模块（`mend/native`），封装 core 与文件操作。
-- `core/`：`mend-core`，无 GUI 的 Rust 核心（SQLite + Argon2id + XChaCha20-Poly1305）。
-- `locales/`：中英文文案（`en.json`、`zh-CN.json`）。
+**VS Code**: the repo includes `.vscode/tasks.json` covering development, checks, tests, packaging and formatting — pick one from `Terminal → Run Task`.
 
-另有 `nsh.json`（应用元数据与 `rust: native` 声明）、`theme.json`（设计令牌）与 `assets/`。
+## Project structure
 
-## 💾 数据与备份
+- `App.tsx`: app entry (boot → setup / unlock → main).
+- `screens/`: UnlockScreen, MainScreen and other screens.
+- `components/`: native UI components (list, detail, editor, settings, etc.).
+- `lib/`: native wrappers, state, errors, formatting, preferences.
+- `native/`: nsh native module (`mend/native`), wrapping core and file operations.
+- `core/`: `mend-core`, GUI-free Rust core (SQLite + Argon2id + XChaCha20-Poly1305).
+- `locales/`: English and Chinese strings (`en.json`, `zh-CN.json`).
 
-- 数据目录：Windows 为 `%APPDATA%\com.mend.app`（macOS 为 `~/Library/Application Support/com.mend.app`，Linux 为 `$XDG_DATA_HOME/com.mend.app`），可在应用内「设置」中查看。
-- 密码库为单文件 `mend.db`；敏感字段在 Rust 侧加密后才写入 SQLite。
-- 备份为 `mend-backup-*.mendbak` 加密文件：导出写入数据目录，恢复通过系统文件选择器读取。
-- 与旧 Tauri 版本完全兼容：应用 id、库名、schema、加密参数与备份格式均未改变，旧库和旧备份可直接打开，无需迁移。
+Also `nsh.json` (app metadata and `rust: native` declaration), `theme.json` (design tokens) and `assets/`.
 
-## 📚 文档索引
+## Data and backup
 
-- [`AGENTS.md`](./AGENTS.md)：给后续 Agent / 开发者的规则与硬性约束。
-- [`docs/11-native-shell.md`](./docs/11-native-shell.md)：0.4.0 重构后的当前架构事实来源。
-- `docs/01`–`10`：历史设计记录；其中 Tauri / Vue / WebView 段落已不适用，以 `docs/11` 与 `AGENTS.md` 为准。
+- Data directory: `%APPDATA%\com.mend.app` on Windows (`~/Library/Application Support/com.mend.app` on macOS, `$XDG_DATA_HOME/com.mend.app` on Linux); viewable in the app's Settings.
+- The vault is a single file, `mend.db`; sensitive fields are encrypted in Rust before being written to SQLite.
+- Backups are encrypted `mend-backup-*.mendbak` files: export writes into the data directory, restore reads through the system file picker.
+- Fully compatible with the old Tauri version: app id, vault name, schema, crypto parameters and backup format are unchanged, so old vaults and backups open directly with no migration.
 
-## 📄 License
+## Documentation
+
+- [`AGENTS.md`](./AGENTS.md): rules and hard constraints for agents / developers.
+- [`docs/11-native-shell.md`](./docs/11-native-shell.md): source of truth for the current architecture after the 0.4.0 rewrite.
+- `docs/01`–`10`: historical design records; their Tauri / Vue / WebView sections are obsolete — treat `docs/11` and `AGENTS.md` as authoritative.
+
+## License
 
 [MIT](./LICENSE)
