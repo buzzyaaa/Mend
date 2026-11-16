@@ -17,9 +17,9 @@ Mend 是一款本地离线、存盘加密的个人密码管理器，基于 **Nat
 
 ## 🔏 Code signing / 代码签名
 
-Mend's Windows releases are code-signed using a free code signing certificate provided by the **SignPath Foundation** (integration in progress). Signing is performed in GitHub Actions and verified against the trusted build origin, so users can confirm the publisher and Windows SmartScreen warnings are reduced over time.
+Windows releases are signed with a project key. We plan to move to a publicly trusted code signing certificate as the project grows; until then, Windows SmartScreen may show a publisher warning on first download.
 
-Mend 的 Windows 发布包使用 **SignPath Foundation** 提供的免费代码签名证书进行签名（集成进行中），签名在 GitHub Actions 中完成并校验构建来源，便于用户确认发布者并逐步消除 Windows SmartScreen 警告。
+Windows 发布包使用项目密钥签名。项目成熟后计划改用公共信任的代码签名证书；在此之前，Windows SmartScreen 可能在首次下载时显示发布者警告。
 
 ## ⚠️ Important / 重要提示
 
