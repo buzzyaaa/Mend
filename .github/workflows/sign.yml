@@ -1,0 +1,80 @@
+name: Sign (SignPath verification)
+
+# 用于验证 SignPath 集成是否打通「来源验证 → 高完整性 → 签名放行」。
+# 独立于 release.yml：从现有 Release 下载 Windows zip，重新上传为 GitHub artifact，
+# 再由 SignPath 官方 action 提交签名请求（带 origin verification 所需的构建元数据），
+# 最后校验 zip 内 Mend.exe 的 Authenticode 签名。
+# 验证通过后再决定是否把同样的步骤并入 release.yml。
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要签名的 Release tag（例如 v0.4.2）'
+        required: true
+        default: 'v0.4.2'
+
+# SignPath 的 GitHub connector 需要读取 job 详情和下载 artifact 才能验证来源。
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  sign-windows:
+    name: Sign Windows archive via SignPath
+    runs-on: windows-latest
+
+    steps:
+      - name: Download unsigned Windows archive from Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ inputs.tag }}"
+          $version = $tag.TrimStart('v')
+          $asset = "Mend-$version-windows-x86_64.zip"
+          gh release download $tag --repo "${{ github.repository }}" --pattern $asset --dir unsigned
+          if (-not (Test-Path (Join-Path 'unsigned' $asset))) {
+            throw "Asset $asset not found in release $tag"
+          }
+          Get-Item (Join-Path 'unsigned' $asset) | Select-Object FullName, Length
+
+      # SignPath 要求待签文件先作为 GitHub Actions artifact 上传，
+      # connector 据此确认「这个文件确实来自一次真实的 CI 构建」。
+      - name: Upload unsigned artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-windows
+          path: unsigned/*.zip
+          if-no-files-found: error
+
+      - name: Submit signing request to SignPath
+        id: sign
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Verify Authenticode signature
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -Path signed -Filter *.zip | Select-Object -First 1
+          if (-not $zip) { throw 'Signed zip not found' }
+          Expand-Archive -Path $zip.FullName -DestinationPath extracted -Force
+          $exe = Get-ChildItem -Path extracted -Filter Mend.exe -Recurse | Select-Object -First 1
+          if (-not $exe) { throw 'Mend.exe not found in signed archive' }
+          $sig = Get-AuthenticodeSignature -FilePath $exe.FullName
+          Write-Host "Signature status : $($sig.Status)"
+          Write-Host "Status message   : $($sig.StatusMessage)"
+          if ($sig.SignerCertificate) {
+            Write-Host "Signer           : $($sig.SignerCertificate.Subject)"
+          } else {
+            throw 'No signer certificate found - signing did not take effect'
+          }
