@@ -272,7 +272,12 @@
     "restarting": "重启中…",
     "failed": "更新失败：%{message}",
     "runningPackage": "正在运行的代码包",
-    "shellInfo": "外壳 %{version}（构建号 %{build}，运行时 %{runtime}）"
+    "shellInfo": "外壳 %{version}（构建号 %{build}，运行时 %{runtime}）",
+    "promptTitle": "发现新版本 %{version}",
+    "promptPackageTitle": "发现新代码包 %{version}",
+    "notesTitle": "更新内容",
+    "noNotes": "本次更新暂无说明。",
+    "running": "正在更新，完成后将自动重启"
   },
   "toast": {
     "copied": "已复制到剪贴板",

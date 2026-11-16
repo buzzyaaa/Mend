@@ -272,7 +272,12 @@
     "restarting": "Restarting…",
     "failed": "Update failed: %{message}",
     "runningPackage": "Running package",
-    "shellInfo": "Shell %{version} (build %{build}, runtime %{runtime})"
+    "shellInfo": "Shell %{version} (build %{build}, runtime %{runtime})",
+    "promptTitle": "Version %{version} is available",
+    "promptPackageTitle": "New code package %{version} is available",
+    "notesTitle": "What's new",
+    "noNotes": "No release notes for this update.",
+    "running": "Updating — the app will restart when it finishes"
   },
   "toast": {
     "copied": "Copied to clipboard",

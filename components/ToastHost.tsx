@@ -1,5 +1,6 @@
 import { Overlay, Text, token, View } from 'nsh'
 
+import { updateRunning } from '../lib/update'
 import { dismissToast, toasts } from '../lib/state'
 import { Icon } from './Icon'
 
@@ -17,7 +18,7 @@ export function ToastHost() {
       style={{
         left: 0,
         right: 0,
-        bottom: 18,
+        bottom: updateRunning() ? 72 : 18,
         alignItems: 'center',
         pointerEvents: 'box-none',
       }}

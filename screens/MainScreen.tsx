@@ -11,6 +11,8 @@ import { EntryList } from '../components/EntryList'
 import { PresetsDialog } from '../components/PresetsDialog'
 import { SettingsDialog } from '../components/SettingsDialog'
 import { Sidebar } from '../components/Sidebar'
+import { UpdateDialog } from '../components/UpdateDialog'
+import { UpdateProgressHost } from '../components/UpdateProgressHost'
 import { IconButton, MODAL_BACKDROP_CLASS, MODAL_CLASS, ModalFrame } from '../components/ui'
 import { preferences, setColumnSizes } from '../lib/preferences'
 import {
@@ -80,8 +82,10 @@ export function MainScreen() {
       <If when={categoryEditor()}>{(state) => <CategoryEditor state={state()} />}</If>
 
       <SettingsDialog />
+      <UpdateDialog />
       <PresetsDialog />
       <ConfirmDialog />
+      <UpdateProgressHost />
 
       <Dialog
         open={categoriesSheetOpen()}

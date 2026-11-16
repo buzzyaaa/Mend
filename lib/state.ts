@@ -61,6 +61,10 @@ export const settingsOpen = signal(false)
 export const presetsOpen = signal(false)
 export const categoryEditor = signal<{ id: string | null } | null>(null)
 export const categoriesSheetOpen = signal(false)
+/** 更新确认弹窗：由设置页的「立即更新」打开，确认后交给 lib/update 下载安装。 */
+export type UpdateTarget = 'app' | 'package'
+export const updatePromptOpen = signal(false)
+export const updateTarget = signal<UpdateTarget | null>(null)
 /** 免主密码解锁是否已开启（由密钥文件是否存在决定）。 */
 export const deviceUnlockOn = signal(false)
 
@@ -77,7 +81,8 @@ export const modalOpen = computed<boolean>(
     confirm() !== null ||
     entryEditor() !== null ||
     categoryEditor() !== null ||
-    categoriesSheetOpen(),
+    categoriesSheetOpen() ||
+    updatePromptOpen(),
 )
 
 // ---------------------------------------------------------------------------

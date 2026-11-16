@@ -1,20 +1,18 @@
 import { appInfo, effect, signal, Text, token, View, windowSize } from 'nsh'
-import { Dialog, Progress } from 'nsh/base'
+import { Dialog } from 'nsh/base'
 import { Scroll } from 'nsh'
 import { t } from 'nsh/i18n'
 
 import { errorText } from '../lib/errors'
 import {
-  applyAppUpdate,
-  applyPackage,
   checkForUpdates,
   currentShell,
-  resetUpdateState,
+  openUpdatePrompt,
+  resetUpdateCheckState,
   updateApp,
   updateBusy,
   updateError,
   updatePackage,
-  updateProgress,
 } from '../lib/update'
 import {
   authBusy,
@@ -70,7 +68,7 @@ export function SettingsDialog() {
     newPassword.set('')
     confirmPassword.set('')
     passwordError.set('')
-    resetUpdateState()
+    resetUpdateCheckState()
     shell.set(null)
     settingsOpen.set(false)
   }
@@ -363,68 +361,51 @@ export function SettingsDialog() {
                   : '…'}
               </Text>
               <ActionButton
-                label={t('update.checkNow')}
+                label={updateBusy() ? t('common.loading') : t('update.checkNow')}
                 icon="refresh"
                 disabled={updateBusy()}
                 onPress={() => void checkForUpdates()}
               />
             </View>
 
-            <If when={updateBusy()}>
-              <View class="flex-row items-center gap-2">
-                <Progress
-                  value={updateProgress()}
-                  class="flex-1"
-                  trackClass="h-1.5 w-full rounded-full bg-muted"
-                  indicatorClass="h-1.5 rounded-full bg-primary"
-                />
-                <Text class="w-20 text-right text-[11px] text-muted-foreground">
-                  {`${updateProgress()}%`}
-                </Text>
-              </View>
-            </If>
-
             <If when={updatePackage()}>
-              <View class="rounded-lg border border-success/30 bg-success/10 p-3">
-                <Text class="text-xs font-medium text-success">{t('update.packageFound')}</Text>
-                <Text class="mt-1 text-xs text-foreground">
-                  {t('update.packageVersion', {
-                    version: updatePackage()?.version ?? '',
-                    build: updatePackage()?.build ?? 0,
-                  })}
-                </Text>
-                {updatePackage()?.notes ? (
-                  <Text class="mt-1  text-xs text-muted-foreground">{updatePackage()?.notes}</Text>
-                ) : null}
-                <View class="mt-2 flex-row justify-end">
-                  <ActionButton
-                    label={t('update.packageInstall')}
-                    icon="download"
-                    variant="primary"
-                    disabled={updateBusy()}
-                    onPress={() => void applyPackage()}
-                  />
+              <View class="flex-row items-center gap-3 rounded-lg border border-success/30 bg-success/10 p-3">
+                <Icon name="download" size={15} color={token('success')} />
+                <View class="flex-1 gap-0.5">
+                  <Text class="text-xs font-medium text-success">{t('update.packageFound')}</Text>
+                  <Text class="text-[11px] text-muted-foreground">
+                    {t('update.packageVersion', {
+                      version: updatePackage()?.version ?? '',
+                      build: updatePackage()?.build ?? 0,
+                    })}
+                  </Text>
                 </View>
+                <ActionButton
+                  label={t('update.updateNow')}
+                  icon="download"
+                  variant="primary"
+                  disabled={updateBusy()}
+                  onPress={() => openUpdatePrompt('package')}
+                />
               </View>
             </If>
 
             <If when={!updatePackage() && updateApp()}>
-              <View class="rounded-lg border border-border bg-card p-3">
-                <Text class="text-xs font-medium text-foreground">
-                  {t('update.appAvailable', { version: updateApp()?.version ?? '' })}
-                </Text>
-                {updateApp()?.notes ? (
-                  <Text class="mt-1  text-xs text-muted-foreground">{updateApp()?.notes}</Text>
-                ) : null}
-                <View class="mt-2 flex-row justify-end">
-                  <ActionButton
-                    label={t('update.updateNow')}
-                    icon="download"
-                    variant="primary"
-                    disabled={updateBusy() || !updateApp()?.canInstall}
-                    onPress={() => void applyAppUpdate()}
-                  />
+              <View class="flex-row items-center gap-3 rounded-lg border border-border bg-card p-3">
+                <Icon name="download" size={15} color={token('foreground')} />
+                <View class="flex-1 gap-0.5">
+                  <Text class="text-xs font-medium text-foreground">
+                    {t('update.appAvailable', { version: updateApp()?.version ?? '' })}
+                  </Text>
+                  <Text class="text-[11px] text-muted-foreground">{t('update.notesTitle')}</Text>
                 </View>
+                <ActionButton
+                  label={t('update.updateNow')}
+                  icon="download"
+                  variant="primary"
+                  disabled={updateBusy() || !updateApp()?.canInstall}
+                  onPress={() => openUpdatePrompt('app')}
+                />
               </View>
             </If>
 
