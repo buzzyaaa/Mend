@@ -5,6 +5,14 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.4.5] - 2026-11-16
+
+Documentation-only release: the English README is now the primary one, with a linked Chinese translation. The bundled binaries are functionally identical to 0.4.4.
+
+#### Changed
+- README rewritten in English as the primary version; added `README.zh-CN.md` with the full Chinese text and language links in both files.
+- Clarified the Windows code-signing note (project-key signing; SmartScreen warning until a publicly trusted certificate is adopted).
+
 ## [0.4.4] - 2026-11-16
 
 更新流程改为独立确认弹窗 + 底部悬浮进度条，检查更新时不再把设置页撑长。

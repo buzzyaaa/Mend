@@ -1,7 +1,7 @@
 {
   "name": "Mend",
   "id": "com.mend.app",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "build": 17,
   "icon": "assets/icon.png",
   "rust": "native",
