@@ -1,4 +1,6 @@
 {
+  // Mend 常用任务。Ctrl+Shift+B 直接跑「一键验证」；
+  // 任务按前缀分组：开发 / 检查 / 测试 / 打包 / 维护。
   "version": "2.0.0",
   "options": {
     "cwd": "${workspaceFolder}",
@@ -11,19 +13,13 @@
     }
   },
   "tasks": [
+    // ---------------------------------------------------------------- 开发
     {
-      "label": "开发：nsh dev（官方入口）",
-      "detail": "node scripts/dev.mjs：先结束本仓库旧的开发宿主/打包版进程、清空 %LOCALAPPDATA%\\nsh\\dev-sessions 会话记录，再启动 nsh dev .，避免沿用旧会话看到旧界面；Ctrl+C 结束。",
+      "label": "开发桌面版",
+      "detail": "npm run dev = node scripts/dev.mjs。先结束本仓库遗留的开发宿主/旧打包版进程、清空 %LOCALAPPDATA%\\nsh\\dev-sessions 会话记录，再启动 nsh dev .，避免沿用旧会话看到旧界面。改代码自动热重载；Ctrl+C 结束。",
       "type": "shell",
-      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-      "args": [
-        "-NoLogo",
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        "Set-Location '${workspaceFolder}'; node scripts/dev.mjs"
-      ],
+      "command": "npm",
+      "args": ["run", "dev"],
       "isBackground": true,
       "problemMatcher": [],
       "presentation": {
@@ -33,18 +29,11 @@
       }
     },
     {
-      "label": "开发：Web 预览（nsh run --target web）",
-      "detail": "nsh run . --target web：浏览器里的 Web 运行时，仅用于快速看布局；日常开发用「开发：nsh dev（官方入口）」。",
+      "label": "开发：Web 预览",
+      "detail": "nsh run . --target web：在浏览器里跑同一套界面，只为快速看布局/对齐；没有原生模块（数据库、文件对话框、更新都不可用），功能验证请用「开发桌面版」。",
       "type": "shell",
-      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-      "args": [
-        "-NoLogo",
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        "Set-Location '${workspaceFolder}'; nsh run . --target web"
-      ],
+      "command": "npx",
+      "args": ["nsh", "run", ".", "--target", "web"],
       "isBackground": true,
       "problemMatcher": [],
       "presentation": {
@@ -53,9 +42,31 @@
         "clear": true
       }
     },
+
+    // ---------------------------------------------------------------- 检查
     {
-      "label": "检查：nsh check（官方）",
-      "detail": "nsh check .：官方类型检查，先 cargo check native crate，再用 nsh 内置的 TypeScript 7 检查 TSX。",
+      "label": "检查：nsh check（默认门禁）",
+      "detail": "nsh check .：先 cargo check native crate，再用 nsh 内置的 TypeScript 7 检查全部 TSX/TS。改了 native 或 TSX 都先跑这个；失败信息里带文件:行号。",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "check"],
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "检查：TypeScript 严格模式",
+      "detail": "npm run typecheck = tsc --noEmit -p tsconfig.json：仓库 node_modules 里的 tsc（版本与 CI 一致）。需要看更细的类型错误、或 nsh check 的 TS7 报错看不懂时用这个；首次需 npm install。",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "typecheck"],
+      "group": "test",
+      "problemMatcher": []
+    },
+
+    // ---------------------------------------------------------------- 测试
+    {
+      "label": "测试：全量（native + TSX UI）",
+      "detail": "清空 .tmp/mend-test-data → 设 MEND_DATA_DIR 指向该目录 → nsh test .。含 cargo test（native）+ 全部 *.test.tsx。MEND_DATA_DIR 必须设：headless 运行器拿不到 process.dataDir，不设会有用例挂在 Fatal 页。",
       "type": "shell",
       "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
       "args": [
@@ -64,108 +75,38 @@
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        "Set-Location '${workspaceFolder}'; nsh check ."
+        "$env:MEND_DATA_DIR = '${workspaceFolder}\\.tmp\\mend-test-data'; Remove-Item -Recurse -Force $env:MEND_DATA_DIR -ErrorAction SilentlyContinue; nsh test ."
       ],
       "group": "test",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      }
+      "problemMatcher": []
     },
     {
-      "label": "检查：TypeScript（npm run typecheck）",
-      "detail": "npm run typecheck：用仓库 node_modules 里的 tsc 检查 TSX（首次需 npm install）；nsh check 不可用时的备用门禁。",
+      "label": "测试：Rust 核心（core）",
+      "detail": "cargo test --manifest-path core/Cargo.toml：加密（Argon2 / AES-GCM）、SQLite 迁移、条目与备份格式的单元测试，不依赖 nsh 与 GUI，跑得最快。",
       "type": "shell",
-      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-      "args": [
-        "-NoLogo",
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        "Set-Location '${workspaceFolder}'; npm run typecheck"
-      ],
+      "command": "cargo",
+      "args": ["test", "--manifest-path", "core/Cargo.toml"],
       "group": "test",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      }
+      "problemMatcher": []
     },
+
+    // ---------------------------------------------------------------- 打包
     {
-      "label": "测试：nsh test（native + TSX）",
-      "detail": "先清空 .tmp/test-data，再 nsh test .：native cargo test + TSX headless UI 测试；MEND_DATA_DIR 指向该目录，测试库与真实库隔离。",
+      "label": "打包：Windows（Mend.exe + 安装包）",
+      "detail": "nsh package . --target windows（依赖「检查：nsh check」先通过）。产物在 .nsh/out：Mend/ 目录（Mend.exe 等）、Mend.zip、带版本的更新压缩包、Mend.iss；装了 Inno Setup 6 时同目录还会有安装程序。",
       "type": "shell",
-      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-      "args": [
-        "-NoLogo",
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        "Set-Location '${workspaceFolder}'; $env:MEND_DATA_DIR = '${workspaceFolder}\\.tmp\\test-data'; Remove-Item -Recurse -Force $env:MEND_DATA_DIR -ErrorAction SilentlyContinue; nsh test ."
-      ],
-      "group": {
-        "kind": "test",
-        "isDefault": true
-      },
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      }
-    },
-    {
-      "label": "测试：Rust 核心（cargo test）",
-      "detail": "cargo test --manifest-path core/Cargo.toml：加密、SQLite、备份、迁移等核心测试，不依赖 nsh/GUI。",
-      "type": "shell",
-      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-      "args": [
-        "-NoLogo",
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        "Set-Location '${workspaceFolder}'; cargo test --manifest-path core/Cargo.toml"
-      ],
-      "group": "test",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      }
-    },
-    {
-      "label": "打包：Windows（nsh package）",
-      "detail": "先跑 nsh check，再 nsh package . --target windows：产物在 .nsh/out（Mend/ 含 Mend.exe、Mend.zip、带版本的更新压缩包、Mend.iss）；装有 Inno Setup 6 时另有 setup.exe。",
-      "type": "shell",
-      "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-      "args": [
-        "-NoLogo",
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        "Set-Location '${workspaceFolder}'; nsh package . --target windows"
-      ],
-      "dependsOn": ["检查：nsh check（官方）"],
+      "command": "npm",
+      "args": ["run", "package"],
+      "dependsOn": ["检查：nsh check（默认门禁）"],
       "dependsOrder": "sequence",
       "group": "build",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      }
+      "problemMatcher": []
     },
+
+    // ---------------------------------------------------------------- 维护
     {
-      "label": "格式化：cargo fmt + Prettier",
-      "detail": "cargo fmt（core + native）就地格式化 Rust，Prettier 就地格式化 TSX / JSON；不改 docs/。",
+      "label": "维护：格式化代码",
+      "detail": "cargo fmt（core + native）+ Prettier（TSX/TS/JSON/Markdown）。会就地改写文件；只改代码不动 docs 之外的东西。提交前跑一次。",
       "type": "shell",
       "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
       "args": [
@@ -174,18 +115,13 @@
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        "Set-Location '${workspaceFolder}'; cargo fmt --manifest-path core/Cargo.toml; cargo fmt --manifest-path native/Cargo.toml; npx prettier --write \"App.tsx\" \"App.test.tsx\" \"components/**/*.tsx\" \"screens/**/*.tsx\" \"lib/**/*.ts\" \"nsh.json\" \"theme.json\" \"tsconfig.json\" \"locales/*.json\""
+        "cargo fmt --manifest-path core/Cargo.toml; cargo fmt --manifest-path native/Cargo.toml; npx prettier --write ."
       ],
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      }
+      "problemMatcher": []
     },
     {
-      "label": "清理：构建产物与临时文件",
-      "detail": "删除 .nsh/out、.tmp/test-data 与 .cargo/tmp 里的 gcc 临时残留（保留 .gitkeep）；保留 .nsh/types、依赖缓存与真实库。",
+      "label": "维护：清理构建产物与临时文件",
+      "detail": "删除 .nsh/out（打包产物）、.tmp/mend-test-data（测试库）与 .cargo/tmp 里的临时残留。不动 .nsh/types（类型声明，删了要重跑 nsh build）、依赖缓存和你真实的库文件。",
       "type": "shell",
       "command": "${env:SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
       "args": [
@@ -194,31 +130,22 @@
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        "Set-Location '${workspaceFolder}'; Remove-Item -Recurse -Force '.nsh/out','.tmp/test-data' -ErrorAction SilentlyContinue; Get-ChildItem '.cargo/tmp' -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne '.gitkeep' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue; Write-Host '已清理 .nsh/out、.tmp/test-data 与 .cargo/tmp 残留（保留 .gitkeep）' -ForegroundColor Green"
+        "Remove-Item -Recurse -Force '.nsh/out', '.tmp/mend-test-data' -ErrorAction SilentlyContinue; Get-ChildItem '.cargo/tmp' -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne '.gitkeep' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue; Write-Host 'cleaned'"
       ],
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      }
+      "problemMatcher": []
     },
     {
-      "label": "一键验证：check + typecheck + 测试",
-      "detail": "按顺序跑 nsh check、npm run typecheck、nsh test 与核心 cargo test；全部通过可作为提交前门禁。",
-      "dependsOrder": "sequence",
+      "label": "一键验证：提交前门禁",
+      "detail": "按顺序跑：nsh check → tsc typecheck → 全量测试（native + UI）→ core 单测。四个都绿再提交；任一步失败即停（dependsOrder: sequence）。",
       "dependsOn": [
-        "检查：nsh check（官方）",
-        "检查：TypeScript（npm run typecheck）",
-        "测试：nsh test（native + TSX）",
-        "测试：Rust 核心（cargo test）"
+        "检查：nsh check（默认门禁）",
+        "检查：TypeScript 严格模式",
+        "测试：全量（native + TSX UI）",
+        "测试：Rust 核心（core）"
       ],
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      }
+      "dependsOrder": "sequence",
+      "group": "build",
+      "problemMatcher": []
     }
   ]
 }
