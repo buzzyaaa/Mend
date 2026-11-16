@@ -108,6 +108,7 @@ SQLite 单文件（应用层字段加密）
 | 自研 Markdown 渲染 | nsh `TextView`（原生 Markdown） | 不再处理 HTML/白名单 |
 | naïve-ui 组件 | nsh `View`/`Text`/`Input`/`Dialog`/`Select`/`Sheet` + Tailwind 类 | 全部自绘，适配浅/深色 |
 | Material 分类图标 | emoji + 颜色点 | 旧 Material 图标名保留在 DB，仅显示时映射 |
+| 条目图标只用分类 emoji | 网址匹配品牌 SVG，未匹配回退分类图标 | 116 个离线品牌 glyph（`assets/site-icons/`，Simple Icons / MDI），分类色做底色 |
 | localStorage 偏好 | 数据目录下的 `preferences.json`（`loadPreferences`/`savePreferences`） | 解锁前也能应用语言/主题；**不再用 nsh `Storage`**——它会往 `%APPDATA%` 写 `storage.json`，进程权限不足时报「拒绝访问」 |
 | 加密快照导出/恢复（`.mendbak`） | 移除：库文件本身就是完整数据，提供「在文件夹中显示」让人直接拷走 | 少一套「导出→选目录→再导入」的仪式；受限权限下也不再需要解释「为什么导不进桌面」（§4.2） |
 | Tauri updater | 暂不启用 | 需要新的 nsh 签名清单与发布密钥；UI 保留版本信息 |

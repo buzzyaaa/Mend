@@ -5,9 +5,9 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.4.3] - 2026-11-16
 
-解锁不再卡顿、库文件可自选、备份简化为「直接拷走库文件」、弹窗内的提示不再被遮罩压住，并新增「免主密码解锁」开关。
+解锁不再卡顿、库文件可自选、备份简化为「直接拷走库文件」、弹窗内的提示不再被遮罩压住，新增「免主密码解锁」开关；条目按网址显示品牌图标，列表菜单重排。
 
 #### Added
 - **数据库文件自选**：设置 → 数据库文件、解锁页底部都能选一个库文件（打开已有 / 新建 / 恢复默认）。库文件本身就带主密码（`salt` + Argon2 参数 + 被包裹的 DEK 都在文件里），可以自己拷贝到 U 盘或同步盘、换机器继续用，也可以同时维护多座库随时切换。位置记在数据目录的 `vault-location.json`；切换后应用重新走一遍启动流程（等价刷新页面）。新增 `Vault.switchVault` / `pickVaultFile` / `pickNewVaultFile`。
@@ -16,6 +16,7 @@
 - 页面切换增加淡入过渡（`components/ui.tsx` 的 `FadeIn`）；解锁按钮在派生密钥期间显示「解锁中…／建库中…」。
 - `core::vault` 拆出 `UnlockChallenge`/`PreparedWrap`（`prepare_*` 纯计算 + `apply_*` 写库），供原生层把 Argon2 挪到后台线程；新增 `session_from_dek` 支持免密码解锁。
 - `native` 新增异步变体 `setup_async`/`unlock_async`/`change_password_async`，昂贵工作统一走 `nsh_core::prelude::blocking`。
+- **网站品牌图标**：条目列表按网址离线匹配 116 个品牌 SVG（Simple Icons / Material Design Icons，均随包内置、零网络请求），未匹配时回退分类图标与分类底色；支持完整 URL、裸域名与子域名。
 
 #### Changed
 - **解锁卡顿修复**：Argon2id（64 MiB / t=3 / p=4）原本在引擎线程同步执行，debug 构建实测 1.46–1.61s、release 0.11–0.17s，这段时间界面完全冻结；现在派生在 `spawn_blocking` 线程池执行，界面不再卡死（debug 下总耗时仍约 1.5s，但可交互且有进度文案）。
@@ -23,6 +24,7 @@
 - UI 偏好从 nsh `Storage` 迁到数据目录的 `preferences.json`；语言列表抽成 `lib/preferences.ts` 的 `LANGUAGES`，以后加语言只改一处。
 - 解锁页右上角地球图标改为**悬停弹出菜单**选语言（`HoverCard`），移除按钮下方那两个语言切换按钮。
 - 错误提示不再只显示「操作失败」：`vault` / `internal` / `io` 类错误会把原生消息（含路径与 OS 错误码）拼在本地化文案后面，权限/路径类问题一眼可辨。
+- 列表「更多」弹出菜单重排：统一 32px 行高、固定图标列与右对齐展开位置，所有菜单项补齐 hover/focus 背景，去掉原先的拥挤与参差。
 
 #### Removed
 - **移除加密快照的导出/恢复**（`.mendbak` 的 UI 入口、`Vault.exportBackup` / `exportBackupToFolder` / `pickFolder` / `importBackup` / `importBackupBase64`）：库文件本身就是完整、受主密码保护的数据，直接拷贝即可备份，恢复就是把别的文件切回来。少一层「导出→选目录→再导入」的仪式，也少一类「导不进桌面」的困惑。`mend-core` 的 `backup` 模块与测试保留，需要时再加回入口。
