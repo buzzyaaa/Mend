@@ -1,4 +1,4 @@
-import { appInfo, effect, signal, Text, View, windowSize } from 'nsh'
+import { appInfo, effect, signal, Text, token, View, windowSize } from 'nsh'
 import { Dialog, Progress } from 'nsh/base'
 import { Scroll } from 'nsh'
 import { t } from 'nsh/i18n'
@@ -17,17 +17,26 @@ import {
   updateProgress,
 } from '../lib/update'
 import {
+  authBusy,
   changeMasterPassword,
   confirm,
-  exportBackup,
-  importBackup,
-  pickBackupFile,
+  deviceUnlockOn,
+  pickExistingVaultFile,
+  pickNewVaultFile,
+  setDeviceUnlock,
   settingsOpen,
   showError,
+  status,
+  useDefaultVaultFile,
 } from '../lib/state'
-import { preferences, setAutoLockMinutes, setLanguage, setTheme } from '../lib/preferences'
+import {
+  LANGUAGES,
+  preferences,
+  setAutoLockMinutes,
+  setLanguage,
+  setTheme,
+} from '../lib/preferences'
 import * as native from '../lib/native'
-import type { AppPaths } from '../lib/types'
 
 import {
   ActionButton,
@@ -37,25 +46,22 @@ import {
   PasswordField,
   SectionTitle,
   SelectField,
+  SwitchField,
   TextField,
   MODAL_BACKDROP_CLASS,
   MODAL_CLASS,
   ModalFrame,
 } from './ui'
+import { Icon } from './Icon'
 
 const AUTO_LOCK_OPTIONS = [0, 1, 5, 10, 15, 30, 60]
 
 export function SettingsDialog() {
-  const paths = signal<AppPaths | null>(null)
   const oldPassword = signal('')
   const newPassword = signal('')
   const confirmPassword = signal('')
   const passwordError = signal('')
   const passwordBusy = signal(false)
-
-  const backupPassword = signal('')
-  const backupError = signal('')
-  const backupBusy = signal(false)
 
   const shell = signal<ReturnType<typeof currentShell> | null>(null)
 
@@ -64,8 +70,6 @@ export function SettingsDialog() {
     newPassword.set('')
     confirmPassword.set('')
     passwordError.set('')
-    backupPassword.set('')
-    backupError.set('')
     resetUpdateState()
     shell.set(null)
     settingsOpen.set(false)
@@ -74,13 +78,33 @@ export function SettingsDialog() {
   effect(() => {
     if (!settingsOpen()) return
     try {
-      paths.set(native.appPaths())
       shell.set(currentShell())
     } catch {
-      paths.set(null)
       shell.set(null)
     }
+    try {
+      deviceUnlockOn.set(native.deviceUnlockEnabled())
+    } catch {
+      deviceUnlockOn.set(false)
+    }
   })
+
+  /** 免主密码解锁是「降低安全性换方便」的开关：开之前必须显式确认。 */
+  function toggleDeviceUnlock(next: boolean) {
+    if (!next) {
+      void setDeviceUnlock(false)
+      return
+    }
+    confirm.set({
+      title: t('settings.deviceUnlock'),
+      message: t('settings.deviceUnlockConfirm'),
+      confirmLabel: t('settings.deviceUnlockEnable'),
+      destructive: true,
+      onConfirm: async () => {
+        await setDeviceUnlock(true)
+      },
+    })
+  }
 
   async function changePassword() {
     if (passwordBusy()) return
@@ -110,58 +134,10 @@ export function SettingsDialog() {
     }
   }
 
-  async function doExport() {
-    if (backupBusy()) return
-    backupError.set('')
-    if (!backupPassword()) {
-      backupError.set(t('backup.passwordPlaceholder'))
-      return
-    }
-    backupBusy.set(true)
-    try {
-      const ok = await exportBackup(backupPassword())
-      if (ok) {
-        backupPassword.set('')
-        const current = paths()
-        if (current) paths.set({ ...current })
-      }
-    } finally {
-      backupBusy.set(false)
-    }
-  }
-
-  async function doImport() {
-    if (backupBusy()) return
-    backupError.set('')
-    if (!backupPassword()) {
-      backupError.set(t('backup.passwordPlaceholder'))
-      return
-    }
-    const file = await pickBackupFile()
-    if (!file) return
-    confirm.set({
-      title: t('backup.import'),
-      message: t('backup.importConfirm'),
-      confirmLabel: t('backup.importAction'),
-      destructive: true,
-      onConfirm: async () => {
-        backupBusy.set(true)
-        try {
-          const result = await importBackup(file, backupPassword())
-          if (result) {
-            backupPassword.set('')
-            closeSettings()
-          }
-        } finally {
-          backupBusy.set(false)
-        }
-      },
-    })
-  }
-
+  /** 库文件就是完整数据：直接选中它，用户拷走即可备份。 */
   async function reveal() {
     try {
-      await native.revealDataDir()
+      await native.revealVaultFile()
     } catch (cause) {
       showError(cause)
     }
@@ -224,8 +200,10 @@ export function SettingsDialog() {
                   <SelectField
                     items={[
                       { value: '', title: t('settings.languageSystem') },
-                      { value: 'zh-CN', title: '简体中文' },
-                      { value: 'en', title: 'English' },
+                      ...LANGUAGES.map((language) => ({
+                        value: language.value,
+                        title: language.label,
+                      })),
                     ]}
                     value={preferences().language ?? ''}
                     onChange={(value) => setLanguage(value ? value : null)}
@@ -252,6 +230,18 @@ export function SettingsDialog() {
                 class="w-48"
               />
             </Field>
+
+            {/* 免主密码解锁：自用场景常见诉求，但确实降低了安全性，所以
+                默认关闭、开启前弹确认、常驻一行风险提示。 */}
+            <View class="gap-1.5 rounded-lg border border-border bg-muted/30 p-3">
+              <SwitchField
+                checked={deviceUnlockOn()}
+                onChange={toggleDeviceUnlock}
+                label={t('settings.deviceUnlock')}
+                hint={t('settings.deviceUnlockHint')}
+              />
+              <Text class="text-[11px] text-warning">{t('settings.deviceUnlockWarning')}</Text>
+            </View>
 
             <View class="gap-2 rounded-lg border border-border bg-muted/30 p-3">
               <Text class="text-xs font-medium text-foreground">
@@ -313,51 +303,48 @@ export function SettingsDialog() {
 
           <Divider />
 
+          {/* 库文件自选：文件本身就是完整的保险库（主密码的 salt/参数/被包裹的
+              DEK 都在里面），所以「换一座库」＝换一个文件。切换后应用会重新走
+              一遍启动流程（等于刷新页面）。 */}
           <View class="gap-3">
-            <SectionTitle title={t('backup.title')} hint={t('backup.hint')} />
-            <Field label={t('backup.passwordPlaceholder')}>
-              <PasswordField
-                value={backupPassword()}
-                onChange={backupPassword.set}
-                placeholder={t('backup.passwordPlaceholder')}
-                reveal={false}
-                autoComplete="current-password"
-                accessibilityLabel={t('backup.passwordPlaceholder')}
-              />
-            </Field>
-            <Text class="text-[11px] text-muted-foreground">{t('backup.exportHint')}</Text>
-            <If when={backupError()}>
-              <Text class="text-xs text-destructive">{backupError()}</Text>
-            </If>
+            <SectionTitle title={t('vault.sectionTitle')} hint={t('vault.hint')} />
+            <View class="gap-1.5 rounded-lg border border-border bg-muted/30 p-3">
+              <View class="flex-row items-center gap-1.5">
+                <Icon name="database" size={13} color={token('muted-foreground')} />
+                <Text class="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  {t('vault.current')}
+                </Text>
+              </View>
+              <Text class="text-xs text-foreground" style={{ numberOfLines: 2 }}>
+                {status().dbPath || '…'}
+              </Text>
+            </View>
             <View class="flex-row flex-wrap gap-2">
               <ActionButton
-                label={t('backup.exportAction')}
-                icon="download"
-                variant="primary"
-                disabled={backupBusy()}
-                onPress={() => void doExport()}
-              />
-              <ActionButton
-                label={t('backup.importAction')}
-                icon="upload"
-                disabled={backupBusy()}
-                onPress={() => void doImport()}
-              />
-              <ActionButton
-                label={t('backup.revealData')}
-                icon="folder"
+                label={t('vault.reveal')}
+                icon="eye"
                 variant="ghost"
                 onPress={() => void reveal()}
               />
-            </View>
-            <View class="gap-1 rounded-md border border-border bg-muted/30 px-3 py-2">
-              <Text class="text-[11px] uppercase tracking-wide text-muted-foreground">
-                {t('backup.dataDir')}
-              </Text>
-              <Text class="text-xs text-foreground" style={{ numberOfLines: 2 }}>
-                {paths()?.dataDir ?? '…'}
-              </Text>
-              <Text class="text-[11px] text-muted-foreground">{paths()?.dbPath ?? ''}</Text>
+              <ActionButton
+                label={t('vault.switch')}
+                icon="folder"
+                disabled={authBusy()}
+                onPress={() => void pickExistingVaultFile()}
+              />
+              <ActionButton
+                label={t('vault.create')}
+                icon="plus"
+                disabled={authBusy()}
+                onPress={() => void pickNewVaultFile()}
+              />
+              <ActionButton
+                label={t('vault.useDefault')}
+                icon="restore"
+                variant="ghost"
+                disabled={authBusy()}
+                onPress={() => void useDefaultVaultFile()}
+              />
             </View>
           </View>
 

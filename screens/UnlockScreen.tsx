@@ -1,12 +1,28 @@
 import { appInfo, signal, Text, token, View } from 'nsh'
+import { HoverCard, Menu, MenuItem } from 'nsh/base'
 import { t } from 'nsh/i18n'
 
 import { Icon } from '../components/Icon'
-import { ActionButton, Badge, Field, IconButton, PasswordField, TextField } from '../components/ui'
+import { ActionButton, Badge, Field, PasswordField } from '../components/ui'
 import { errorText } from '../lib/errors'
 import { passwordStrength } from '../lib/format'
-import { preferences, setLanguage } from '../lib/preferences'
-import { authBusy, setupVault, unlockVault } from '../lib/state'
+import { LANGUAGES, preferences, setLanguage } from '../lib/preferences'
+import {
+  authBusy,
+  pickExistingVaultFile,
+  pickNewVaultFile,
+  setupVault,
+  status,
+  unlockVault,
+  useDefaultVaultFile,
+} from '../lib/state'
+
+/** 解锁页只显示库文件名（完整路径在设置里），路径分隔符跨平台都处理。 */
+function databaseName(): string {
+  const path = status().dbPath
+  const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+  return cut >= 0 ? path.slice(cut + 1) : path || '…'
+}
 
 export function UnlockScreen(props: { mode: 'setup' | 'unlock' }) {
   const password = signal('')
@@ -57,6 +73,19 @@ export function UnlockScreen(props: { mode: 'setup' | 'unlock' }) {
     setLanguage(locale)
   }
 
+  /** 语言入口：鼠标指上去就弹出菜单（可扩展多语言，不再需要底部那一排按钮）。
+   *  触发器用普通 View 而不是 `IconButton`：后者自带 tooltip，悬停时会和
+   *  这个浮层抢着弹，看起来像两个东西。触屏上按压同样能打开（HoverCard 负责）。 */
+  const languageTrigger = (
+    <View
+      class="h-7 w-7 items-center justify-center rounded-md hover:bg-accent"
+      role="button"
+      accessibilityLabel={t('header.language')}
+    >
+      <Icon name="globe" size={16} color={token('muted-foreground')} />
+    </View>
+  )
+
   return (
     <View class="flex-1 items-center justify-center bg-background p-4">
       <View
@@ -76,11 +105,40 @@ export function UnlockScreen(props: { mode: 'setup' | 'unlock' }) {
             </View>
           </View>
           <View class="flex-row items-center gap-1">
-            <IconButton
-              icon="globe"
-              label={t('header.language')}
-              onPress={() => switchLanguage(preferences().language === 'zh-CN' ? 'en' : 'zh-CN')}
-            />
+            <HoverCard
+              openDelay={120}
+              closeDelay={200}
+              placement="bottom"
+              align="end"
+              offset={6}
+              popupClass="w-40 rounded-lg border border-border bg-card p-1 shadow-lg"
+              trigger={languageTrigger}
+            >
+              <View class="gap-0.5">
+                <Each of={LANGUAGES}>
+                  {(item) => {
+                    const language = item()
+                    const active = () => preferences().language === language.value
+                    return (
+                      <View
+                        class={
+                          'h-7 flex-row items-center justify-between gap-2 rounded px-2 ' +
+                          (active() ? 'bg-accent' : 'hover:bg-accent')
+                        }
+                        onPress={() => switchLanguage(language.value)}
+                        role="button"
+                        accessibilityLabel={language.label}
+                      >
+                        <Text class="text-xs text-foreground">{language.label}</Text>
+                        {active() ? (
+                          <Icon name="check" size={12} color={token('foreground')} />
+                        ) : null}
+                      </View>
+                    )
+                  }}
+                </Each>
+              </View>
+            </HoverCard>
           </View>
         </View>
 
@@ -149,7 +207,13 @@ export function UnlockScreen(props: { mode: 'setup' | 'unlock' }) {
           ) : null}
 
           <ActionButton
-            label={isSetup() ? t('unlock.create') : t('unlock.unlock')}
+            label={
+              busy()
+                ? t(isSetup() ? 'unlock.creating' : 'unlock.unlocking')
+                : isSetup()
+                  ? t('unlock.create')
+                  : t('unlock.unlock')
+            }
             variant="primary"
             icon={isSetup() ? 'shield' : 'unlock'}
             disabled={busy()}
@@ -159,29 +223,53 @@ export function UnlockScreen(props: { mode: 'setup' | 'unlock' }) {
         </View>
 
         <View class="gap-2">
-          <View class="flex-row items-center justify-center gap-3">
-            <View
-              class={
-                preferences().language === 'zh-CN'
-                  ? 'rounded-md bg-accent px-2.5 py-1'
-                  : 'rounded-md px-2.5 py-1 hover:bg-accent'
+          {/* 数据库文件：解锁前也得能换库。换一座库＝换一个文件，所以这里给的是
+              「文件」而不是「账户」。文件名只显示 basename，完整路径在设置里。 */}
+          <View class="items-center">
+            <Menu
+              placement="top"
+              align="center"
+              offset={4}
+              popupClass="rounded-lg border border-border bg-popover p-1 shadow-lg"
+              trigger={
+                <View
+                  class="h-7 flex-row items-center gap-1.5 rounded-md px-2 hover:bg-accent"
+                  role="button"
+                  accessibilityLabel={t('vault.sectionTitle')}
+                >
+                  <Icon name="database" size={12} color={token('muted-foreground')} />
+                  <Text
+                    class="max-w-[260px] text-[11px] text-muted-foreground"
+                    style={{ numberOfLines: 1 }}
+                  >
+                    {databaseName()}
+                  </Text>
+                  <Icon name="chevron-down" size={11} color={token('muted-foreground')} />
+                </View>
               }
-              onPress={() => switchLanguage('zh-CN')}
-              role="button"
             >
-              <Text class="text-xs text-foreground">简体中文</Text>
-            </View>
-            <View
-              class={
-                preferences().language === 'en'
-                  ? 'rounded-md bg-accent px-2.5 py-1'
-                  : 'rounded-md px-2.5 py-1 hover:bg-accent'
-              }
-              onPress={() => switchLanguage('en')}
-              role="button"
-            >
-              <Text class="text-xs text-foreground">English</Text>
-            </View>
+              <MenuItem
+                class="h-7 min-w-[180px] flex-row items-center rounded px-2 hover:bg-accent"
+                accessibilityLabel={t('vault.switch')}
+                onSelect={() => void pickExistingVaultFile()}
+              >
+                <Text class="text-xs text-popover-foreground">{t('vault.switch')}</Text>
+              </MenuItem>
+              <MenuItem
+                class="h-7 min-w-[180px] flex-row items-center rounded px-2 hover:bg-accent"
+                accessibilityLabel={t('vault.create')}
+                onSelect={() => void pickNewVaultFile()}
+              >
+                <Text class="text-xs text-popover-foreground">{t('vault.create')}</Text>
+              </MenuItem>
+              <MenuItem
+                class="h-7 min-w-[180px] flex-row items-center rounded px-2 hover:bg-accent"
+                accessibilityLabel={t('vault.useDefault')}
+                onSelect={() => void useDefaultVaultFile()}
+              >
+                <Text class="text-xs text-popover-foreground">{t('vault.useDefault')}</Text>
+              </MenuItem>
+            </Menu>
           </View>
           <Text class="text-center text-[11px] text-muted-foreground">
             {`v${appInfo().version ?? '0.4.0'} · ${t('unlock.cannotRecover')}`}

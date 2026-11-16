@@ -4,15 +4,12 @@
  * declarations in `.nsh/types/mend/native.d.ts`.
  */
 export type {
-  AppPaths,
   Category,
   CategoryInput,
   EntryInput,
   EntrySummary,
   EntryView,
-  ExportResult,
   GeneratorOptions,
-  ImportResult,
   ListFilter,
   Preset,
   PresetInput,

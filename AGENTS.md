@@ -16,8 +16,8 @@
 ## 2. 当前状态（0.4.0）
 
 - 旧 Tauri 2 + Vue 3 代码已移除；`src/`、`src-tauri/`、Vite/Tailwind 配置不再存在。
-- 数据兼容：应用 id 仍为 `com.mend.app`，库文件 `mend.db`、schema v4、Argon2 参数、XChaCha20 AAD、`.mendbak` 格式全部保持；旧库和旧备份可直接打开。
-- 已保留：建库/解锁/锁定/改主密码、条目 CRUD、分类 CRUD、标签、搜索、排序、收藏、归档、回收站、预设值、强密码生成器、Markdown 备注、复制、打开网址、自动锁定、深浅色主题、中英文、加密备份导出/恢复、数据目录展示。
+- 数据兼容：应用 id 仍为 `com.mend.app`，库文件 `mend.db`、schema v4、Argon2 参数、XChaCha20 AAD 全部保持；旧库直接可用（`.mendbak` 容器仍在 core 里，但 UI 已不再提供导出/恢复）。
+- 已保留：建库/解锁/锁定/改主密码、条目 CRUD、分类 CRUD、标签、搜索、排序、收藏、归档、回收站、预设值、强密码生成器、Markdown 备注、复制、打开网址、自动锁定、深浅色主题、中英文、**数据库文件自选**（打开/新建/恢复默认 + 在文件夹中显示；库文件自带主密码，拷走即备份，不做加密快照导出）。
 - 主要 UI 结构：桌面 master-detail（侧栏 + 列表 + 详情）；手机单栏（详情页 + 分类 Sheet）。系统标题栏；应用内 Header 放搜索/新增/预设/设置/锁定。
 - 测试：`nsh test .`（native cargo test + TSX headless）；`cargo test --manifest-path core\Cargo.toml`；`npm run typecheck`。
 - 发布：`.github/workflows/release.yml` 打 `v*` tag 时构建 Windows/Linux/macOS 包、签名 OTA 包、生成签名 `latest.json` 并发布 GitHub Release；应用更新与 OTA 共用 `nsh.json` 的 `"updater"`，详见 `docs/10-release-update.md`。
@@ -28,10 +28,12 @@
 1. **落盘即加密**：账号、密码、邮箱、手机号、备注、预设值在写入 SQLite 前必须在 Rust 侧加密；数据库文件中不得出现这些字段的明文。
 2. **前端不直连数据库**：TSX 只通过 `mend/native` 的类型化接口读写；不接触 SQLite 连接或原始密钥。
 3. **密钥不落盘**：主密码不存储；KEK 仅内存；DEK 由 KEK 包裹后存 `meta`；锁定/退出时清零会话密钥。
-4. **离线优先**：默认零网络请求；备份只写本地密文；WebDAV 仍是未实现的预留。
+4. **离线优先**：默认零网络请求；库文件本地单文件、整库加密；WebDAV 仍是未实现的预留。
 5. **i18n 先行**：所有界面文案走 `locales/`，组件不硬编码中/英文字符串。
-6. **同步原生导出**：除 `revealDataDir` 外，`Vault` 导出保持同步，以保证 signal 写入发生在引擎线程；不要改回自定义 `async fn` 后再在 TSX `await` 后写 signal（会触发 `no reactive runtime`）。
-7. **公开仓库只放规则**：`docs/` 与 `AGENTS.md` 只收录开发规则、设计约定、验收标准；开发日志、调研与个人/本机信息只放 `local/`。
+6. **原生导出的同步/异步分界**：默认同步（引擎线程执行，signal 写入天然在引擎线程）；只有「昂贵 CPU（Argon2id）或阻塞 I/O（文件对话框、备份读写）」才用 `async fn`，且昂贵段走 `nsh_core::prelude::blocking`。两条红线：
+   - **同步导出里不能调 ambient 服务**（`data_dir()` 等），否则 panic `no reactive runtime`；所以 `init` 是 `async`，其余同步函数只读 `Backend.data_dir` 字段。
+   - **`async fn` 里不能写 signal**：`async fn` 在 tokio 线程完成，续体不在引擎线程。约定「异步函数只返回数据，调用方的 `await` 续体（回到引擎线程）写 signal」，即 `status.set(await native.unlock(...))`。
+   7. **公开仓库只放规则**：`docs/` 与 `AGENTS.md` 只收录开发规则、设计约定、验收标准；开发日志、调研与个人/本机信息只放 `local/`。
 8. **不公开个人与本机信息**：代码、注释、文档、配置、提交信息中不得出现真实姓名、个人账号、邮箱、手机号、住址/城市、内网地址、绝对路径、SSH 材料、网络受限情况等；提交身份使用 GitHub noreply 邮箱。
 
 ## 4. 工作约定

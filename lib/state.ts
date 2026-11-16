@@ -1,9 +1,8 @@
-import { Clipboard, computed, effect, cleanup, lifecycle, openUrl, Picker, signal } from 'nsh'
+import { Clipboard, computed, effect, cleanup, lifecycle, openUrl, signal } from 'nsh'
 import { t } from 'nsh/i18n'
-import { btoa } from 'buffer'
 
-import { errorText, isCancelled, parseError } from './errors'
-import { formatBytes, normalizeUrl, sortEntries } from './format'
+import { errorText, parseError } from './errors'
+import { normalizeUrl, sortEntries } from './format'
 import * as native from './native'
 import { loadPreferences, preferences } from './preferences'
 import {
@@ -15,7 +14,6 @@ import {
   type EntryInput,
   type EntrySummary,
   type EntryView,
-  type ImportResult,
   type ListFilter,
   type Preset,
   type PresetInput,
@@ -63,6 +61,24 @@ export const settingsOpen = signal(false)
 export const presetsOpen = signal(false)
 export const categoryEditor = signal<{ id: string | null } | null>(null)
 export const categoriesSheetOpen = signal(false)
+/** 免主密码解锁是否已开启（由密钥文件是否存在决定）。 */
+export const deviceUnlockOn = signal(false)
+
+/** 是否有弹窗（Dialog）正在显示。
+ *
+ *  nsh 的 `Dialog` 在桌面端是**独立原生窗口层**，「永远在最上面」的主界面
+ *  Overlay 盖不住它的遮罩。因此 toast 层必须渲染进当前打开的那个弹窗里
+ *  （见 `components/ui.tsx` 的 `ModalFrame`），并在弹窗打开时隐藏主界面那份，
+ *  否则同一句提示会出现两次（一份被遮罩压暗、一份清晰）。 */
+export const modalOpen = computed<boolean>(
+  () =>
+    settingsOpen() ||
+    presetsOpen() ||
+    confirm() !== null ||
+    entryEditor() !== null ||
+    categoryEditor() !== null ||
+    categoriesSheetOpen(),
+)
 
 // ---------------------------------------------------------------------------
 // Toasts
@@ -140,21 +156,30 @@ export async function boot(): Promise<void> {
   if (bootStarted) return
   bootStarted = true
   bootRetrying.set(true)
-  // 偏好（语言/主题/自动锁定）存在 Storage，与库无关，必须在 initVault 之前
-  // 读回并应用：否则设置里改过的语言/主题/自动锁定会在重启后丢失。
-  // loadPreferences 自己吞掉 Storage/JSON 错误并回退默认值；这里再兜一层，
-  // 保证偏好绝不是进 Fatal 的原因（只有 initVault/status/loadAll 失败才进）。
-  try {
-    await loadPreferences()
-  } catch {
-    // 偏好不是启动必需品：读不出来就用模块里的默认值。
-  }
+  // 先让出一拍再碰原生接口。
+  //
+  // nsh 的 Rust 运行时是在「挂载之外的后续 turn」里才进入的：`boot()` 由挂载
+  // 期间的 effect 直接调用时，同步原生接口内部调用 `data_dir()` 这类 ambient
+  // 服务会 panic（`no reactive runtime: signals are used on the engine thread,
+  // while components run`）。这里先 await 一个 0ms 定时器，把真正的启动挪到
+  // 下一拍，与旧代码里 `await Storage.getItem()` 起到的效果一致。
+  await sleep(0)
   let lastError: unknown = null
   for (let attempt = 0; attempt <= BOOT_MAX_RETRIES; attempt += 1) {
     if (attempt > 0) await sleep(BOOT_RETRY_DELAY_MS)
     try {
       await native.initVault()
+      // 偏好（语言/主题/自动锁定）紧跟 initVault：偏好文件就放在原生层刚
+      // 解析出来的数据目录里。loadPreferences 自己吞掉读写/JSON 错误并回退
+      // 默认值，绝不让偏好问题把启动推进 Fatal。
+      try {
+        await loadPreferences()
+      } catch {
+        // 偏好不是启动必需品：读不出来就用模块里的默认值。
+      }
       status.set(await native.status())
+      // 用户开过「免主密码解锁」就直接进主界面，不再要求输密码。
+      tryDeviceUnlock()
       if (status().unlocked) await loadAll()
       lastError = null
       break
@@ -183,6 +208,119 @@ export async function boot(): Promise<void> {
     fatalError.set(errorText(lastError))
   }
   bootReady.set(true)
+}
+
+/** 免主密码解锁：只有用户显式打开过才存在密钥文件。
+ *  文件失效（例如刚恢复过备份）时退回输密码，不阻断启动。 */
+function tryDeviceUnlock(): void {
+  try {
+    // 严格比较 `=== true`：跨桥对接时除 true 以外的任何返回值都当「未开启」，
+    // 免得一个包装对象被当成真值。
+    deviceUnlockOn.set(native.deviceUnlockEnabled() === true)
+    if (!deviceUnlockOn() || !status().initialized) return
+    status.set(native.unlockWithDeviceKey())
+    touchActivity()
+  } catch (error) {
+    deviceUnlockOn.set(false)
+    showError(error)
+  }
+}
+
+/** 切换「免主密码解锁」。开启时把当前会话密钥写到数据目录，
+ *  关闭时删除该文件。需要已解锁（密钥来自当前会话）。 */
+export async function setDeviceUnlock(enabled: boolean): Promise<void> {
+  try {
+    deviceUnlockOn.set(
+      enabled ? native.enableDeviceUnlock() === true : native.disableDeviceUnlock() === true,
+    )
+    toast(
+      enabled ? t('settings.deviceUnlockOn') : t('settings.deviceUnlockOff'),
+      enabled ? 'info' : 'success',
+      4000,
+    )
+  } catch (error) {
+    showError(error)
+    try {
+      deviceUnlockOn.set(native.deviceUnlockEnabled())
+    } catch {
+      deviceUnlockOn.set(false)
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 库文件（用户自选）
+// ---------------------------------------------------------------------------
+//
+//  库文件本身就是完整的保险库：主密码的 salt / Argon2 参数 / 被包裹的 DEK
+//  都在文件里。所以「换一座库」＝换一个文件，不需要任何账户或同步机制；
+//  用户自己拷贝文件、换台机器带走，或者在设置里随时切回另一座库。
+
+/** 当前库文件所在目录，给文件选择框一个合理的起点。 */
+function vaultDir(): string | null {
+  const path = status().dbPath
+  const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+  return cut > 0 ? path.slice(0, cut) : status().dataDir || null
+}
+
+/** 切换库文件并重新走一遍启动流程（等价于「刷新页面」）。 */
+async function applyVaultFile(path: string | null): Promise<void> {
+  authBusy.set(true)
+  try {
+    const next = native.switchVault(path)
+    // 切换后原库的列表还在内存里，先清掉：新库没解锁时界面不该闪出旧数据。
+    entries.set([])
+    categories.set([])
+    presets.set([])
+    selectedId.set(null)
+    selected.set(null)
+    // 弹窗是独立原生窗口层，不会随主界面重建而消失，这里显式关掉。
+    settingsOpen.set(false)
+    presetsOpen.set(false)
+    entryEditor.set(null)
+    categoryEditor.set(null)
+    categoriesSheetOpen.set(false)
+    confirm.set(null)
+    status.set(next)
+    deviceUnlockOn.set(native.deviceUnlockEnabled() === true)
+    toast(t('vault.switched', { path: next.dbPath }), 'info', 5000)
+  } catch (error) {
+    showError(error)
+    return
+  } finally {
+    authBusy.set(false)
+  }
+  await retryBoot()
+}
+
+/** 选一个已有的库文件并切换过去。 */
+export async function pickExistingVaultFile(): Promise<void> {
+  try {
+    const path = await native.pickVaultFile(t('vault.pickTitle'), t('vault.pickButton'), vaultDir())
+    if (path) await applyVaultFile(path)
+  } catch (error) {
+    showError(error)
+  }
+}
+
+/** 指定一个新库文件的位置并切过去；空文件会在设好主密码后建库。 */
+export async function pickNewVaultFile(): Promise<void> {
+  try {
+    const path = await native.pickNewVaultFile(
+      t('vault.createTitle'),
+      t('vault.createButton'),
+      vaultDir(),
+      'mend-vault.menddb',
+    )
+    if (path) await applyVaultFile(path)
+  } catch (error) {
+    showError(error)
+  }
+}
+
+/** 回到数据目录里的默认库（`mend.db`）。原有自选文件的指针会被删掉。 */
+export async function useDefaultVaultFile(): Promise<void> {
+  await applyVaultFile(null)
 }
 
 export async function retryBoot(): Promise<void> {
@@ -591,87 +729,6 @@ export async function openExternal(raw: string): Promise<void> {
     if (!result.opened) toast(t('toast.failed'), 'error')
   } catch {
     toast(t('toast.failed'), 'error')
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Backup
-// ---------------------------------------------------------------------------
-
-function stamp(): string {
-  const date = new Date()
-  const pad = (value: number) => String(value).padStart(2, '0')
-  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(
-    date.getHours(),
-  )}${pad(date.getMinutes())}${pad(date.getSeconds())}`
-}
-
-function defaultBackupName(): string {
-  return `mend-backup-${stamp()}.mendbak`
-}
-
-export async function exportBackup(masterPassword: string): Promise<boolean> {
-  try {
-    const result = await native.exportBackup(null, defaultBackupName(), masterPassword)
-    toast(
-      t('backup.exported', {
-        path: result.path,
-        size: formatBytes(result.bytes),
-      }),
-      'success',
-      4500,
-    )
-    return true
-  } catch (error) {
-    if (!isCancelled(error)) showError(error)
-    return false
-  }
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = ''
-  const chunk = 0x8000
-  for (let offset = 0; offset < bytes.length; offset += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk))
-  }
-  return btoa(binary)
-}
-
-export async function pickBackupFile(): Promise<File | null> {
-  try {
-    const picked = await Picker.pickFiles({
-      multiple: false,
-      filters: [{ name: 'Mend backup', extensions: ['mendbak'] }],
-    })
-    return picked[0]?.file ?? null
-  } catch (error) {
-    showError(error)
-    return null
-  }
-}
-
-export async function importBackup(
-  file: File,
-  masterPassword: string,
-): Promise<ImportResult | null> {
-  try {
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    const base64 = bytesToBase64(bytes)
-    const result = await native.importBackupBase64(base64, masterPassword)
-    clearSensitiveState()
-    status.update((current) => ({ ...current, initialized: true, unlocked: false }))
-    toast(
-      t('backup.imported', {
-        entries: result.entries,
-        categories: result.categories,
-      }),
-      'success',
-      4500,
-    )
-    return result
-  } catch (error) {
-    showError(error)
-    return null
   }
 }
 

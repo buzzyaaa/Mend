@@ -1,10 +1,8 @@
 import { setColorScheme, signal } from 'nsh'
-import { Storage } from 'nsh'
 import { setLocale } from 'nsh/i18n'
 
+import * as native from './native'
 import type { Preferences, ThemeMode } from './types'
-
-const KEY = 'mend.preferences.v1'
 
 const DEFAULT_COLUMN_SIZES = [240, 360]
 const COLUMN_MIN = 160
@@ -20,6 +18,13 @@ const DEFAULTS: Preferences = {
 }
 
 export const preferences = signal<Preferences>({ ...DEFAULTS })
+
+/** 界面可用的语言。新增语言只需改这里（加上 `locales/<tag>.json`）：
+ *  解锁页的悬停语言菜单与设置里的语言下拉都从这里生成。 */
+export const LANGUAGES: ReadonlyArray<{ value: string; label: string }> = [
+  { value: 'zh-CN', label: '简体中文' },
+  { value: 'en', label: 'English' },
+]
 
 function isTheme(value: unknown): value is ThemeMode {
   return value === 'system' || value === 'light' || value === 'dark'
@@ -62,16 +67,21 @@ export function applyPreferences(next: Preferences): void {
   setLocale(next.language)
 }
 
-/** 启动时读回持久化偏好并应用（`boot()` 在初始化 Vault 之前调用一次）。
- *  Storage 是异步 API，读出后再 set signal；失败一律回退默认值，
- *  绝不让偏好问题阻断启动或把应用推进 Fatal 页。 */
+/** 启动时读回持久化偏好并应用（`boot()` 在 `Vault.init` 之后调用一次：
+ *  偏好文件就放在解析出来的数据目录里）。失败一律回退默认值，
+ *  绝不让偏好问题阻断启动或把应用推进 Fatal 页。
+ *
+ *  为什么不用 nsh 的 `Storage`：它把 `storage.json` 写到
+ *  `%APPDATA%\com.mend.app`，而被系统以更低权限启动的进程永远写不进去
+ *  （写入失败只会进日志），表现为「设置里的语言/主题重启后又变回去」。
+ *  数据目录是应用自己解析、并且已经验证过可写的位置。 */
 export async function loadPreferences(): Promise<Preferences> {
   let next = { ...DEFAULTS }
   try {
-    const raw = await Storage.getItem(KEY)
-    if (raw) next = sanitize(JSON.parse(raw))
+    const raw = await native.loadPreferences()
+    if (raw.trim()) next = sanitize(JSON.parse(raw))
   } catch {
-    // Storage 不可用（平台不支持 / 被拒）或内容损坏：回到默认偏好。
+    // 读不出来（首次运行 / 文件损坏 / 数据目录未就绪）：回到默认偏好。
     next = { ...DEFAULTS }
   }
   preferences.set(next)
@@ -87,9 +97,11 @@ export async function loadPreferences(): Promise<Preferences> {
 export function savePreferences(next: Preferences): void {
   preferences.set(next)
   applyPreferences(next)
-  void Storage.setItem(KEY, JSON.stringify(next)).catch(() => {
-    // Preferences are non-essential; a full storage does not break the app.
-  })
+  try {
+    native.savePreferences(JSON.stringify(next))
+  } catch {
+    // 偏好不是必需品：写不进去也不影响使用，下次启动用默认值。
+  }
 }
 
 export function updatePreferences(patch: Partial<Preferences>): Preferences {

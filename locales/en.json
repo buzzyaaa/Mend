@@ -129,9 +129,11 @@
     "passwordPlaceholder": "Enter your password",
     "confirmPasswordPlaceholder": "Confirm your password",
     "unlock": "Unlock",
+    "unlocking": "Unlocking…",
     "setupSubtitle": "First time here? Set a master password. It cannot be recovered if lost.",
     "confirm": "Confirm master password",
     "create": "Create and enter",
+    "creating": "Creating…",
     "strengthLabel": "Strength",
     "strength": {
       "weak": "Weak",
@@ -144,8 +146,10 @@
       "tooShort": "Master password must be at least 4 characters",
       "mismatch": "The two passwords do not match",
       "wrongPassword": "Wrong master password",
+      "deviceKey": "The password-less unlock key is no longer valid. Unlock with your master password and turn it on again in Settings.",
       "preview": "Browser preview only: unlock and vault access require the desktop app"
-    }
+    },
+    "dbFile": "Database"
   },
   "generator": {
     "length": "Length",
@@ -192,27 +196,22 @@
     "purged": "Permanently deleted",
     "purgedMany": "Removed %{count} entries"
   },
-  "backup": {
-    "title": "Backup & restore",
-    "hint": "Exports an encrypted snapshot of the whole vault, protected by the master password. The file name carries no sensitive data. Restore overwrites the current vault and keeps the old file as a backup.",
-    "export": "Export backup",
-    "import": "Restore backup",
-    "dataDir": "Data directory",
-    "dataDirHint": "Manual backup: lock or quit first, then copy the vault file to a USB drive; unlock with the same master password on another machine.",
-    "pickHint": "Click “Choose save location / Choose backup file” to open the system file dialog — pick from the OS dialog, no manual path typing.",
-    "chooseExport": "Choose save location",
-    "chooseImport": "Choose backup file",
-    "noLocation": "Not selected",
-    "passwordPlaceholder": "Verify identity for export/restore",
-    "exportAction": "Export",
-    "importAction": "Restore & overwrite",
-    "exported": "Backup written: %{path} (%{size})",
-    "importConfirm": "Restore will overwrite the current vault; the existing file is kept as a backup. Continue?",
-    "imported": "Restored %{entries} entries and %{categories} categories. Unlock again with the backup's master password.",
-    "revealData": "Show data folder",
-    "invalidFile": "That is not a valid Mend backup.",
-    "wrongPassword": "Wrong password or corrupted backup.",
-    "exportHint": "The backup is written to the data folder shown below."
+  "vault": {
+    "sectionTitle": "Database file",
+    "current": "Current file",
+    "switch": "Open another database file…",
+    "create": "Create a database file…",
+    "useDefault": "Use the default location",
+    "defaultBadge": "Default location",
+    "hint": "Every entry, category and your master password live in this one file — it is the whole backup. Copy it to a USB stick, a sync folder or another machine, or switch to a different file at any time.",
+    "pickTitle": "Choose a database file",
+    "pickButton": "Use this file",
+    "createTitle": "Create a database file",
+    "createButton": "Create here",
+    "switched": "Switched to: %{path}",
+    "notDb": "That file is not a Mend database.",
+    "reveal": "Show in folder",
+    "dirUnwritable": "That location is not writable (read-only folder or restricted permissions) — please pick another folder."
   },
   "settings": {
     "appearance": "Appearance & behavior",
@@ -237,6 +236,13 @@
     "language": "Language",
     "languageSystem": "Follow system",
     "security": "Security",
+    "deviceUnlock": "Unlock without master password",
+    "deviceUnlockHint": "Open the vault with the key stored on this machine, without asking for the master password",
+    "deviceUnlockWarning": "The key is stored in plain text in the data folder: anyone who can reach this machine or that folder can read the vault. Only turn this on when this machine is yours alone.",
+    "deviceUnlockConfirm": "The master password will no longer be asked at startup, and the key will sit in plain text in the data folder — anyone with access to this machine can open the vault. Turn it on?",
+    "deviceUnlockEnable": "Turn on anyway",
+    "deviceUnlockOn": "Password-less unlock is on",
+    "deviceUnlockOff": "Password-less unlock is off — the master password is required at startup",
     "version": "Version"
   },
   "update": {

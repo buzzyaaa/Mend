@@ -1,6 +1,18 @@
 import { expect, open, test } from 'nsh/test'
 
-const PREFERENCES_KEY = 'mend.preferences.v1'
+const EMPTY_STATUS = { initialized: false, unlocked: false, dataDir: '', dbPath: '' }
+
+/** 只替换偏好读写：`Vault.init/status` 保持真实实现，启动流程与生产一致。 */
+function preferencesModule(raw: string) {
+  return {
+    modules: {
+      'mend/native': {
+        'Vault.loadPreferences': () => raw,
+        'Vault.savePreferences': () => {},
+      },
+    },
+  }
+}
 
 // 回归：开发期曾为可视化验证把 Vault.init 硬编码到仓库内临时目录且忘记还原，
 // 结果发布版会去读写开发机路径，headless 测试也会复用上次遗留的库。
@@ -8,7 +20,7 @@ const PREFERENCES_KEY = 'mend.preferences.v1'
 // 由 resolve_data_dir 回落到 MEND_DATA_DIR 隔离目录。
 test('does not hardcode a development data directory on boot', async () => {
   let passed: unknown = 'not-called'
-  const empty = { initialized: false, unlocked: false, dataDir: '', dbPath: '' }
+  const empty = EMPTY_STATUS
   const app = await open('./App.tsx', {
     modules: {
       'mend/native': {
@@ -24,31 +36,30 @@ test('does not hardcode a development data directory on boot', async () => {
   expect(passed).toBe(null)
 })
 
-// 偏好持久化（修复前 `loadPreferences()` 全仓库没有调用方，设置里改的语言/主题/
-// 自动锁定在重启后丢失）：启动时 boot() 必须在 initVault 之前读回 Storage。
+// 偏好持久化：boot() 在 `Vault.init` 之后从数据目录读回偏好（原生 `Vault.loadPreferences`，
+// 不再用 nsh Storage —— 它写的 `%APPDATA%\storage.json` 在低权限进程下写不进去）。
 // 测试默认系统语言是 en-US，种下 zh-CN 后首屏就是中文，才能证明偏好真的被应用。
 test('applies saved language preference on boot', async () => {
-  const app = await open('./App.tsx', {
-    storage: {
-      [PREFERENCES_KEY]: JSON.stringify({
+  const app = await open(
+    './App.tsx',
+    preferencesModule(
+      JSON.stringify({
         language: 'zh-CN',
-        theme: 'dark',
+        theme: 'system',
         autoLockMinutes: 60,
         updateCheckIntervalDays: 30,
         lastUpdateCheckTs: 0,
       }),
-    },
-  })
+    ),
+  )
   // 全新空库：首次设置主密码页；中文说明语言在首屏已生效。
   await app.waitFor('label:主密码')
   expect(app.texts()).toContain('创建并进入')
 })
 
-// 存储内容损坏（截断的 JSON）或字段非法时只能回退默认偏好，不能把启动推进 Fatal。
+// 偏好内容损坏（截断的 JSON）或字段非法时只能回退默认偏好，不能把启动推进 Fatal。
 test('falls back to default preferences when the stored value is corrupt', async () => {
-  const app = await open('./App.tsx', {
-    storage: { [PREFERENCES_KEY]: '{"language": "zh-CN"' },
-  })
+  const app = await open('./App.tsx', preferencesModule('{"language": "zh-CN"'))
   await app.waitFor('label:Master password')
   expect(app.shows('text:出了点问题')).toBe(false)
 })
@@ -58,7 +69,7 @@ test('falls back to default preferences when the stored value is corrupt', async
 // 用模块替身制造 `db|database is locked`，不碰真实库。
 test('retries transient db lock, then recovers from the fatal page', async () => {
   let failing = true
-  const uninitialized = { initialized: false, unlocked: false, dataDir: '', dbPath: '' }
+  const uninitialized = EMPTY_STATUS
   const app = await open('./App.tsx', {
     modules: {
       'mend/native': {

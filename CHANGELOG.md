@@ -7,6 +7,31 @@
 
 ## [Unreleased]
 
+解锁不再卡顿、库文件可自选、备份简化为「直接拷走库文件」、弹窗内的提示不再被遮罩压住，并新增「免主密码解锁」开关。
+
+#### Added
+- **数据库文件自选**：设置 → 数据库文件、解锁页底部都能选一个库文件（打开已有 / 新建 / 恢复默认）。库文件本身就带主密码（`salt` + Argon2 参数 + 被包裹的 DEK 都在文件里），可以自己拷贝到 U 盘或同步盘、换机器继续用，也可以同时维护多座库随时切换。位置记在数据目录的 `vault-location.json`；切换后应用重新走一遍启动流程（等价刷新页面）。新增 `Vault.switchVault` / `pickVaultFile` / `pickNewVaultFile`。
+- 设置 → 安全新增**免主密码解锁**开关：开启后把会话密钥写到数据目录的 `device-unlock.key`，启动时直接进主界面。开关旁常驻风险提示，开启前弹高危确认；改主密码会刷新该文件，恢复备份会作废它并在下次启动退回输密码。
+- 数据库文件区块新增**在文件夹中显示**（`Vault.revealVaultFile`，Windows `explorer /select,` 直接选中库文件）：备份 = 拷走这个文件，不用再找目录。
+- 页面切换增加淡入过渡（`components/ui.tsx` 的 `FadeIn`）；解锁按钮在派生密钥期间显示「解锁中…／建库中…」。
+- `core::vault` 拆出 `UnlockChallenge`/`PreparedWrap`（`prepare_*` 纯计算 + `apply_*` 写库），供原生层把 Argon2 挪到后台线程；新增 `session_from_dek` 支持免密码解锁。
+- `native` 新增异步变体 `setup_async`/`unlock_async`/`change_password_async`，昂贵工作统一走 `nsh_core::prelude::blocking`。
+
+#### Changed
+- **解锁卡顿修复**：Argon2id（64 MiB / t=3 / p=4）原本在引擎线程同步执行，debug 构建实测 1.46–1.61s、release 0.11–0.17s，这段时间界面完全冻结；现在派生在 `spawn_blocking` 线程池执行，界面不再卡死（debug 下总耗时仍约 1.5s，但可交互且有进度文案）。
+- `Vault.init` 改为 `async`：`resolve_data_dir` 里的 `nsh_core::element::data_dir()` 在同步导出函数中调用会触发 `no reactive runtime` panic。
+- UI 偏好从 nsh `Storage` 迁到数据目录的 `preferences.json`；语言列表抽成 `lib/preferences.ts` 的 `LANGUAGES`，以后加语言只改一处。
+- 解锁页右上角地球图标改为**悬停弹出菜单**选语言（`HoverCard`），移除按钮下方那两个语言切换按钮。
+- 错误提示不再只显示「操作失败」：`vault` / `internal` / `io` 类错误会把原生消息（含路径与 OS 错误码）拼在本地化文案后面，权限/路径类问题一眼可辨。
+
+#### Removed
+- **移除加密快照的导出/恢复**（`.mendbak` 的 UI 入口、`Vault.exportBackup` / `exportBackupToFolder` / `pickFolder` / `importBackup` / `importBackupBase64`）：库文件本身就是完整、受主密码保护的数据，直接拷贝即可备份，恢复就是把别的文件切回来。少一层「导出→选目录→再导入」的仪式，也少一类「导不进桌面」的困惑。`mend-core` 的 `backup` 模块与测试保留，需要时再加回入口。
+
+#### Fixed
+- 选库文件位置时报「操作失败」：进程以**低完整性级别**运行时（典型是 `nsh dev` 宿主），往「桌面」「文档」这类中等完整性目录写文件必然被 `ACCESS_DENIED` 拒绝，而错误码被统一映射成了「操作失败」。现在先把探针结果换成专用码 `export_dir`，UI 直接提示「该位置不可写，请换一个文件夹」（打包版以正常权限运行，不受此限）。
+- 导出/恢复等弹窗里的 toast 被遮罩压暗：`Dialog` 是独立原生窗口层，主界面 `Overlay` 盖不住它。现在 `ModalFrame` 内部也挂一份 `ToastHost`，弹窗打开时隐藏根层那份，避免重复提示。
+- 「打开数据目录」报 `Windows: the app's storage could not be written to ...\storage.json: 拒绝访问。(os error 5)`：根因是 nsh `Storage` 往 `%APPDATA%` 写文件失败 + `SHOpenFolderAndSelectItems` 完整性级别不一致。改为原生 `spawn` 系统文件管理器（Windows 走 `explorer.exe`，隐藏控制台窗口），失败再退回 nsh 的 `revealPath`/`openPath`；偏好迁出 `Storage` 后该错误不再出现。
+
 ## [0.4.2] - 2026-11-14
 
 输入框回归原生组件、下拉改为浮层、控件高度与星标状态统一。

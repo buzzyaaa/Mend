@@ -2,8 +2,11 @@
 //!
 //! One process-wide SQLite connection and one in-memory session DEK. Every
 //! call is serialized by a mutex; expensive work (Argon2, whole-database
-//! reads/writes) runs on the nsh blocking thread pool through `blocking`.
-//! The domain rules and the on-disk formats live in `mend-core` unchanged.
+//! reads/writes) runs on the nsh blocking thread pool through `blocking`, so
+//! the engine thread keeps drawing while a key is derived. Only the cheap part
+//! (reading `meta`, writing what was prepared) touches the connection on the
+//! engine thread. The domain rules and the on-disk formats live in `mend-core`
+//! unchanged.
 
 use std::{
     fs,
@@ -13,18 +16,22 @@ use std::{
 
 use base64::{Engine, engine::general_purpose::STANDARD as B64};
 use mend_core::{
-    backup, db,
+    db,
     db::{Connection, EntryRowEnc},
     entries, generator, presets,
     session::Session,
     vault,
 };
-use nsh_core::prelude::{data_dir, reveal_path};
+use nsh_core::{
+    file_dialog::{FileFilter, OpenDialog, SaveDialog},
+    prelude::{blocking, data_dir, open_path, pick_paths, pick_save_path, reveal_path},
+};
 use uuid::Uuid;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::dto::{
-    AppPaths, Category, CategoryInput, EntryInput, EntrySummary, EntryView, ExportResult,
-    GeneratorOptions, ImportResult, ListFilter, Preset, PresetInput, Settings, VaultStatus,
+    Category, CategoryInput, EntryInput, EntrySummary, EntryView, GeneratorOptions, ListFilter,
+    Preset, PresetInput, Settings, VaultStatus,
 };
 use crate::error::{coded, domain};
 
@@ -34,6 +41,17 @@ const SETTING_AUTO_LOCK: &str = "ui.auto_lock_minutes";
 const SETTING_UPDATE_DAYS: &str = "ui.update_check_interval_days";
 const SETTING_LAST_UPDATE: &str = "ui.last_update_check_ts";
 const SQLITE_MAGIC: &[u8] = b"SQLite format 3\0";
+
+/// 免主密码解锁的密钥文件名前缀（实际文件名带库路径哈希，见 `device_key_path`）。
+const DEVICE_KEY_FILE: &str = "device-unlock.key";
+/// UI 偏好（语言/主题/自动锁定/列宽），非敏感，解锁前就要读。
+const PREFERENCES_FILE: &str = "preferences.json";
+/// 指向「当前使用的库文件」的指针（非敏感，只存一个绝对路径）。
+///
+/// 用户可以把库文件放到任意位置（自己的 U 盘、同步盘、任意目录）并随时切换。
+/// 应用本身总得有个固定的地方记住选了哪个文件，这就是那个锚点；删除它即
+/// 回到数据目录里的默认 `mend.db`。
+const LOCATION_FILE: &str = "vault-location.json";
 
 struct Backend {
     data_dir: PathBuf,
@@ -207,6 +225,112 @@ fn migrate_vault(src: &Path, dst: &Path) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// 库文件位置：用户可以在设置或解锁页自选一个 .menddb 文件
+// ---------------------------------------------------------------------------
+//
+// 设计取舍：**库文件本身就是完整的保险库**——主密码校验所需的 salt / Argon2
+// 参数 / 被包裹的 DEK 全在库文件里，所以「记住主密码」这件事不需要额外的
+// 账户体系。用户要做的只是选中一个文件，应用把绝对路径写进数据目录的
+// `vault-location.json`，之后所有读写都走这个文件；用户可以自己拷贝它、
+// 换台机器带着走，或者同时维护多个库（工作 / 个人）随时切换。
+//
+// 切换 = 关掉当前连接 + 清会话密钥（等价于锁定）+ 用新路径重新打开。
+// 新文件不存在时它就是一座空库，UI 会走「首次设置主密码」的流程。
+
+fn location_path(data_dir: &Path) -> PathBuf {
+    data_dir.join(LOCATION_FILE)
+}
+
+/// 读取用户选定的库文件路径；没有选过（或文件损坏）时为 `None`。
+fn read_located_vault(data_dir: &Path) -> Option<PathBuf> {
+    let raw = fs::read_to_string(location_path(data_dir)).ok()?;
+    let value: serde_json::Value = serde_json::from_str(raw.trim()).ok()?;
+    let path = value.get("path")?.as_str()?.trim().to_string();
+    if path.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(path))
+}
+
+fn write_located_vault(data_dir: &Path, path: &Path) -> Result<(), String> {
+    let body = serde_json::json!({
+        "v": 1,
+        "path": path.display().to_string(),
+    });
+    let text = serde_json::to_string_pretty(&body)
+        .map_err(|err| coded("vault", format!("序列化库文件位置失败: {err}")))?;
+    let target = location_path(data_dir);
+    write_private_file(&target, text.as_bytes())
+        .map_err(|_| coded("vault", format!("保存库文件位置失败: {}", target.display())))
+}
+
+fn clear_located_vault(data_dir: &Path) -> Result<(), String> {
+    let target = location_path(data_dir);
+    match fs::remove_file(&target) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(coded(
+            "vault",
+            format!("清除库文件位置失败 ({err}): {}", target.display()),
+        )),
+    }
+}
+
+/// 一个目录（以及可选的既有文件）当前是否真的能写。
+///
+/// 目录存在 ≠ 能写：Windows 上以低完整性级别运行的进程连「我的文档」「桌面」
+/// 都会被拒绝（ACCESS_DENIED），而 `fs::write` 的错误信息又很难读懂。先真写
+/// 一个探针文件，能给出确定的结论，也让 UI 可以在导出时体面地退回数据目录。
+fn probe_writable(dir: &Path, existing_file: Option<&Path>) -> Result<(), String> {
+    if !dir.is_dir() {
+        return Err(coded(
+            "export_dir",
+            format!("目录不存在: {}", dir.display()),
+        ));
+    }
+    let probe = dir.join(format!(".mend-write-probe-{}", Uuid::new_v4()));
+    match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+    {
+        Ok(_) => {
+            let _ = fs::remove_file(&probe);
+        }
+        Err(err) => {
+            return Err(coded(
+                "export_dir",
+                format!("目录不可写 ({err}): {}", dir.display()),
+            ));
+        }
+    }
+    if let Some(file) = existing_file.filter(|file| file.exists()) {
+        if let Err(err) = fs::OpenOptions::new().read(true).write(true).open(file) {
+            return Err(coded(
+                "export_dir",
+                format!("文件不可写 ({err}): {}", file.display()),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// 文件开头是否像 SQLite 库。空文件放行（SQLite 会把它初始化成一座库）；
+/// 用户误选了图片或 `.mendbak` 备份时，早点给出明确提示，而不是让 SQLite
+/// 抛一句 `file is not a database`。
+fn looks_like_sqlite(path: &Path) -> Result<bool, String> {
+    use std::io::Read;
+    let mut file = fs::File::open(path)
+        .map_err(|err| coded("vault", format!("读取 {} 失败: {err}", path.display())))?;
+    let mut head = vec![0u8; SQLITE_MAGIC.len()];
+    let read = file
+        .read(&mut head)
+        .map_err(|err| coded("vault", format!("读取 {} 失败: {err}", path.display())))?;
+    head.truncate(read);
+    Ok(head.is_empty() || head == SQLITE_MAGIC)
+}
+
 fn ensure_conn(backend: &mut Backend) -> Result<(), String> {
     if backend.conn.is_none() {
         // busy_timeout 由 db::open_and_migrate 在任何读写之前统一设置
@@ -281,6 +405,92 @@ fn local_low_dir() -> Option<PathBuf> {
 }
 
 // ---------------------------------------------------------------------------
+// Small file helpers
+// ---------------------------------------------------------------------------
+
+/// 只在 Unix 上收窄权限：Windows 上文件继承所在目录的 ACL，
+/// 与该目录里的 `mend.db` 同级同权，改不了更多。
+fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    fs::write(path, bytes)
+        .map_err(|err| coded("vault", format!("写入 {} 失败: {err}", path.display())))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
+}
+
+/// 用系统文件管理器打开一个目录。
+///
+/// 不用 nsh 的 `reveal_path`（`SHOpenFolderAndSelectItems`）作为首选：
+/// 进程的完整性级别与 Explorer 不一致时它返回 `access denied`，而且它要经
+/// nsh 的文件请求通道，那条链路在部分环境里还会把 `storage.json` 的写入
+/// 错误暴露出来（用户实际遇到的就是这条）。自己起进程最简单也最稳。
+#[cfg(target_os = "windows")]
+fn spawn_opener(dir: &Path) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    /// 不弹控制台窗口。
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    std::process::Command::new("explorer.exe")
+        .arg(dir)
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+        .map(|_| ())
+        .map_err(|err| err.to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn spawn_opener(dir: &Path) -> Result<(), String> {
+    std::process::Command::new("open")
+        .arg(dir)
+        .spawn()
+        .map(|_| ())
+        .map_err(|err| err.to_string())
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn spawn_opener(dir: &Path) -> Result<(), String> {
+    std::process::Command::new("xdg-open")
+        .arg(dir)
+        .spawn()
+        .map(|_| ())
+        .map_err(|err| err.to_string())
+}
+
+#[cfg(not(any(target_os = "windows", unix)))]
+fn spawn_opener(_dir: &Path) -> Result<(), String> {
+    Err("当前平台没有文件管理器".into())
+}
+
+/// 打开文件管理器并**选中**该文件（Windows 的 `/select,`）。
+#[cfg(target_os = "windows")]
+fn spawn_revealer(file: &Path) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    /// 不弹控制台窗口。
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    std::process::Command::new("explorer.exe")
+        .arg(format!("/select,{}", file.display()))
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+        .map(|_| ())
+        .map_err(|err| err.to_string())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn spawn_revealer(file: &Path) -> Result<(), String> {
+    match file.parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => spawn_opener(dir),
+        _ => Err("无法定位文件所在目录".into()),
+    }
+}
+
+/// 后台任务失败（panic / 运行时关闭）时的统一错误。
+fn join_error(err: impl std::fmt::Display) -> String {
+    coded("internal", format!("后台任务失败: {err}"))
+}
+
+// ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
 
@@ -294,17 +504,37 @@ pub fn init_sync(data_dir: Option<String>) -> Result<VaultStatus, String> {
     for candidate in &candidates {
         match prepare_dir(candidate) {
             Ok(()) => {
-                if candidate != &primary {
-                    migrate_vault(&primary, candidate);
-                }
+                // 用户自选的库文件优先：它的位置与数据目录无关，所以先读指针。
+                // 指针指向的文件所在目录必须可写（可能是被拔掉的移动硬盘或只读
+                // 目录），不可写就带着路径报错，而不是静默换回默认库。
+                let located = read_located_vault(candidate);
+                let db_path = match &located {
+                    Some(path) => {
+                        if let Some(parent) =
+                            path.parent().filter(|dir| !dir.as_os_str().is_empty())
+                        {
+                            if let Err(err) = probe_writable(parent, Some(path)) {
+                                return Err(rewrap_probe_error(err, "库文件"));
+                            }
+                        }
+                        path.clone()
+                    }
+                    None => {
+                        if candidate != &primary {
+                            migrate_vault(&primary, candidate);
+                        }
+                        db::db_file_path(candidate)
+                    }
+                };
                 let mut backend = backend()?;
-                let db_path = db::db_file_path(candidate);
                 if backend.db_path != db_path {
                     backend.conn = None;
                     backend.session = None;
                 }
                 backend.data_dir = candidate.clone();
                 backend.db_path = db_path;
+                // 老版本的单文件密钥 → 按库命名的密钥（只影响升级后的第一次启动）。
+                migrate_legacy_device_key(&backend);
                 ensure_conn(&mut backend)?;
                 return status_of(&backend);
             }
@@ -321,11 +551,22 @@ pub fn init_sync(data_dir: Option<String>) -> Result<VaultStatus, String> {
     ))
 }
 
+/// `probe_writable` 用的是导出场景的错误码（`export_dir`）。库文件场景下它
+/// 意味着「库文件不可用」，换成 `db_readonly` 才能命中 UI 已有的操作指引文案。
+fn rewrap_probe_error(err: String, what: &str) -> String {
+    let message = err
+        .split_once('|')
+        .map(|(_, message)| message.to_string())
+        .unwrap_or(err);
+    coded("db_readonly", format!("{what}不可用: {message}"))
+}
+
 pub fn status_sync() -> Result<VaultStatus, String> {
     let backend = backend()?;
     status_of(&backend)
 }
 
+#[cfg(test)]
 fn setup_sync(master_password: String) -> Result<VaultStatus, String> {
     let mut backend = backend()?;
     ensure_conn(&mut backend)?;
@@ -341,6 +582,7 @@ fn setup_sync(master_password: String) -> Result<VaultStatus, String> {
     status_of(&backend)
 }
 
+#[cfg(test)]
 fn unlock_sync(master_password: String) -> Result<VaultStatus, String> {
     let mut backend = backend()?;
     ensure_conn(&mut backend)?;
@@ -362,15 +604,421 @@ fn lock_sync() -> Result<(), String> {
     Ok(())
 }
 
-fn change_password_sync(old_password: String, new_password: String) -> Result<(), String> {
+// ---------------------------------------------------------------------------
+// 切换库文件 / 选择库文件
+// ---------------------------------------------------------------------------
+
+/// 切换到 `path` 指向的库文件；`None` 表示回到数据目录里的默认 `mend.db`。
+///
+/// 切换会关闭当前连接并清掉会话密钥（等价于锁定），然后用新文件重新建连接。
+/// 所有校验都在动状态之前完成；`ensure_conn` 万一失败会把指针回滚，避免应用
+/// 停在「记住了一个打不开的库」这种状态。
+pub fn switch_vault_sync(path: Option<String>) -> Result<VaultStatus, String> {
+    // 数据库文件的校验与位置写入不碰连接，先在锁外算清楚（少占一次锁）。
+    let mut backend = backend()?;
+    if backend.data_dir.as_os_str().is_empty() {
+        return Err(coded("vault", "数据目录尚未就绪，请重启应用"));
+    }
+    let data_dir = backend.data_dir.clone();
+    let previous = read_located_vault(&data_dir);
+
+    let target = match path.as_deref().map(str::trim).filter(|raw| !raw.is_empty()) {
+        Some(raw) => {
+            let path = PathBuf::from(raw);
+            if path.is_dir() {
+                return Err(coded(
+                    "vault",
+                    format!("这是一个文件夹，请选择数据库文件: {}", path.display()),
+                ));
+            }
+            let parent = path
+                .parent()
+                .filter(|dir| !dir.as_os_str().is_empty())
+                .ok_or_else(|| coded("vault", format!("路径不合法: {}", path.display())))?
+                .to_path_buf();
+            if !parent.is_dir() {
+                return Err(coded("vault", format!("目录不存在: {}", parent.display())));
+            }
+            if path.exists() && !looks_like_sqlite(&path)? {
+                return Err(coded(
+                    "vault_not_db",
+                    format!("这个文件不是 Mend 数据库: {}", path.display()),
+                ));
+            }
+            probe_writable(&parent, Some(&path))
+                .map_err(|err| rewrap_probe_error(err, "库文件所在目录"))?;
+            write_located_vault(&data_dir, &path)?;
+            Some(path)
+        }
+        None => {
+            clear_located_vault(&data_dir)?;
+            None
+        }
+    };
+
+    let db_path = target.unwrap_or_else(|| db::db_file_path(&data_dir));
+    if backend.db_path != db_path {
+        backend.conn = None;
+        backend.session = None;
+        backend.db_path = db_path;
+    }
+    match ensure_conn(&mut backend) {
+        Ok(()) => status_of(&backend),
+        Err(err) => {
+            // 回滚到切换前的指针与路径，让用户还能回到原来那座库。
+            if let Some(path) = previous.as_deref() {
+                let _ = write_located_vault(&data_dir, path);
+            } else {
+                let _ = clear_located_vault(&data_dir);
+            }
+            backend.conn = None;
+            backend.session = None;
+            backend.db_path = previous.unwrap_or_else(|| db::db_file_path(&data_dir));
+            let _ = ensure_conn(&mut backend);
+            Err(err)
+        }
+    }
+}
+
+/// 用系统「打开文件」对话框选一个已有库文件；取消时 `None`。
+pub async fn pick_vault_file(
+    title: String,
+    button_label: String,
+    start_dir: Option<String>,
+) -> Result<Option<String>, String> {
+    let mut dialog = OpenDialog::files().multiple(false).filter(FileFilter::new(
+        "Mend 数据库",
+        ["menddb", "db", "sqlite", "sqlite3"],
+    ));
+    if !button_label.trim().is_empty() {
+        dialog = dialog.button_label(button_label);
+    }
+    if !title.trim().is_empty() {
+        dialog = dialog.title(title);
+    }
+    if let Some(dir) = start_dir.filter(|dir| Path::new(dir).is_dir()) {
+        dialog = dialog.directory(dir);
+    }
+    match pick_paths(dialog).await {
+        Ok(Some(paths)) => Ok(paths
+            .into_iter()
+            .next()
+            .map(|path| path.display().to_string())),
+        Ok(None) => Ok(None),
+        Err(err) => Err(coded("vault", format!("打开文件选择窗口失败: {err}"))),
+    }
+}
+
+/// 用系统「保存文件」对话框指定一个新库文件的位置；取消时 `None`。
+///
+/// 只返回路径，不创建文件——真正的建库发生在用户设好主密码之后
+/// （`setup`），避免留下一个空文件让人误解成「已经有库了」。
+pub async fn pick_new_vault_file(
+    title: String,
+    button_label: String,
+    start_dir: Option<String>,
+    file_name: Option<String>,
+) -> Result<Option<String>, String> {
+    let mut dialog = SaveDialog::new().filter(FileFilter::new("Mend 数据库", ["menddb"]));
+    if let Some(name) = file_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+    {
+        dialog = dialog.file_name(name);
+    }
+    if !button_label.trim().is_empty() {
+        dialog = dialog.button_label(button_label);
+    }
+    if !title.trim().is_empty() {
+        dialog = dialog.title(title);
+    }
+    if let Some(dir) = start_dir.filter(|dir| Path::new(dir).is_dir()) {
+        dialog = dialog.directory(dir);
+    }
+    match pick_save_path(dialog).await {
+        Ok(Some(path)) => Ok(Some(path.display().to_string())),
+        Ok(None) => Ok(None),
+        Err(err) => Err(coded("vault", format!("打开保存窗口失败: {err}"))),
+    }
+}
+
+// --- 异步变体：把 Argon2 派生挪到运行时阻塞线程池 -----------------------
+//
+// 同步导出会让引擎线程在派生期间完全无法绘制（debug 构建下 64 MiB/t3 的
+// Argon2id 实测约 1.5 秒），用户看到的就是「点了解锁没反应，一秒后突然跳
+// 主界面」。这里只把**纯 CPU** 的部分（`vault::prepare_*` / `challenge.solve`）
+// 放进 `blocking`，读写连接与写 signal 仍留在引擎线程。
+
+pub async fn setup_async(master_password: String) -> Result<VaultStatus, String> {
+    {
+        let mut backend = backend()?;
+        ensure_conn(&mut backend)?;
+        if backend.session.is_some() {
+            return status_of(&backend);
+        }
+    }
+    let prepared = blocking(move || vault::prepare_setup(&master_password).map_err(domain))
+        .await
+        .map_err(join_error)??;
+    let mut backend = backend()?;
+    if backend.session.is_some() {
+        return status_of(&backend);
+    }
+    let conn = require_conn(&backend)?;
+    let keys = vault::apply_setup(conn, prepared).map_err(domain)?;
+    backend.session = Some(Session {
+        dek: keys.dek,
+        kdf: keys.kdf,
+    });
+    status_of(&backend)
+}
+
+pub async fn unlock_async(master_password: String) -> Result<VaultStatus, String> {
+    let challenge = {
+        let mut backend = backend()?;
+        ensure_conn(&mut backend)?;
+        if backend.session.is_some() {
+            return status_of(&backend);
+        }
+        let conn = require_conn(&backend)?;
+        vault::challenge(conn).map_err(domain)?
+    };
+    let keys = blocking(move || challenge.solve(&master_password).map_err(domain))
+        .await
+        .map_err(join_error)??;
+    let mut backend = backend()?;
+    backend.session = Some(Session {
+        dek: keys.dek,
+        kdf: keys.kdf,
+    });
+    status_of(&backend)
+}
+
+pub async fn change_password_async(
+    old_password: String,
+    new_password: String,
+) -> Result<(), String> {
+    let challenge = {
+        let mut backend = backend()?;
+        ensure_unlocked(&mut backend)?;
+        let conn = require_conn(&backend)?;
+        vault::challenge(conn).map_err(domain)?
+    };
+    let prepared = blocking(move || {
+        vault::prepare_rewrap(&challenge, &old_password, &new_password).map_err(domain)
+    })
+    .await
+    .map_err(join_error)??;
     let mut backend = backend()?;
     ensure_unlocked(&mut backend)?;
     let conn = require_conn(&backend)?;
-    let keys = vault::change_password(conn, &old_password, &new_password).map_err(domain)?;
+    let keys = vault::apply_rewrap(conn, prepared).map_err(domain)?;
     if let Some(session) = backend.session.as_mut() {
         session.kdf = keys.kdf;
     }
+    refresh_device_key(&backend)?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// 免主密码解锁（device key）
+// ---------------------------------------------------------------------------
+//
+// 打开这个开关时，把当前会话的 DEK 写进数据目录的 `device-unlock.key`，
+// 启动时直接用它建会话，不再向用户要主密码。
+//
+// 代价必须说清楚：这个文件就是明文密钥，能读数据目录的人就能读库——
+// 安全性等于「这台机器的系统账户」。主密码本身仍然有效，随时可以关掉开关
+// （删文件）恢复成必须输密码。
+//
+// 文件里同时记下库的 salt：恢复备份会把库换成另一套密钥，salt 不匹配时
+// 这个文件就作废，避免用旧 DEK 打开新库导致所有字段解密失败。
+
+/// 每个库文件一个密钥文件：`device-unlock-<path hash>.key`。
+///
+/// 两座库来回切换时，各自的免密码解锁互不覆盖；把库文件拷到别处（或换台机器）
+/// 也拿不到这把钥匙，仍然要输主密码——"这台机器"才是信任边界。
+fn device_key_path(backend: &Backend) -> PathBuf {
+    let key = fnv1a64(&backend.db_path.display().to_string().to_lowercase());
+    backend
+        .data_dir
+        .join(format!("device-unlock-{key:016x}.key"))
+}
+
+/// FNV-1a：稳定、无依赖，只用来给文件名做区分（撞车了还有 salt 校验兜底）。
+fn fnv1a64(text: &str) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in text.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+/// 早期版本只有一个不带后缀的 `device-unlock.key`。首次启动时把它挪到
+/// 「按库命名」的新文件名上，免得升级后免密码解锁悄悄失效。
+fn migrate_legacy_device_key(backend: &Backend) {
+    let legacy = backend.data_dir.join(DEVICE_KEY_FILE);
+    if !legacy.exists() {
+        return;
+    }
+    let target = device_key_path(backend);
+    if target.exists() {
+        return;
+    }
+    let _ = fs::rename(&legacy, &target);
+}
+
+fn device_key_body(salt: &[u8], dek: &[u8]) -> String {
+    format!(
+        "{{\"v\":1,\"salt\":\"{}\",\"dek\":\"{}\"}}",
+        B64.encode(salt),
+        B64.encode(dek)
+    )
+}
+
+fn parse_device_key(raw: &str) -> Result<(Vec<u8>, String), String> {
+    let value: serde_json::Value = serde_json::from_str(raw)
+        .map_err(|_| coded("device_key", "免密码解锁密钥文件已损坏，请在设置里重新开启"))?;
+    let salt = value
+        .get("salt")
+        .and_then(|item| item.as_str())
+        .and_then(|item| B64.decode(item).ok())
+        .ok_or_else(|| coded("device_key", "免密码解锁密钥文件已损坏，请在设置里重新开启"))?;
+    let dek = value
+        .get("dek")
+        .and_then(|item| item.as_str())
+        .ok_or_else(|| coded("device_key", "免密码解锁密钥文件已损坏，请在设置里重新开启"))?
+        .to_string();
+    Ok((salt, dek))
+}
+
+pub fn device_unlock_enabled_sync() -> Result<bool, String> {
+    let backend = backend()?;
+    if backend.data_dir.as_os_str().is_empty() {
+        return Ok(false);
+    }
+    Ok(device_key_path(&backend).exists())
+}
+
+pub fn enable_device_unlock_sync() -> Result<bool, String> {
+    let backend = backend()?;
+    let session = require_session(&backend)?;
+    if backend.data_dir.as_os_str().is_empty() {
+        return Err(coded("vault", "数据目录尚未就绪"));
+    }
+    let conn = require_conn(&backend)?;
+    let (salt, _) = vault::read_salt_and_kdf(conn).map_err(domain)?;
+    // 用完即清零（文件里是明文密钥，内存里不留第二份）。
+    let body = Zeroizing::new(device_key_body(&salt, &*session.dek));
+    let path = device_key_path(&backend);
+    write_private_file(&path, body.as_bytes())?;
+    Ok(true)
+}
+
+pub fn disable_device_unlock_sync() -> Result<bool, String> {
+    let backend = backend()?;
+    if backend.data_dir.as_os_str().is_empty() {
+        return Ok(false);
+    }
+    let path = device_key_path(&backend);
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(false),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(err) => Err(coded(
+            "vault",
+            format!("删除 {} 失败: {err}", path.display()),
+        )),
+    }
+}
+
+/// 改主密码会换 salt：免密码解锁的密钥文件里记着旧 salt，必须跟着刷新，
+/// 否则下次启动会被判成「密钥已失效」。文件不存在时什么也不做。
+fn refresh_device_key(backend: &Backend) -> Result<(), String> {
+    let path = device_key_path(backend);
+    if !path.exists() {
+        return Ok(());
+    }
+    let session = require_session(backend)?;
+    let conn = require_conn(backend)?;
+    let (salt, _) = vault::read_salt_and_kdf(conn).map_err(domain)?;
+    let body = Zeroizing::new(device_key_body(&salt, &*session.dek));
+    write_private_file(&path, body.as_bytes())
+}
+
+pub fn unlock_with_device_key_sync() -> Result<VaultStatus, String> {
+    let mut backend = backend()?;
+    ensure_conn(&mut backend)?;
+    if backend.session.is_some() {
+        return status_of(&backend);
+    }
+    let path = device_key_path(&backend);
+    let raw = fs::read_to_string(&path).map_err(|_| coded("vault", "未开启免主密码解锁"))?;
+    let (stored_salt, stored_dek) = parse_device_key(&raw)?;
+
+    let conn = require_conn(&backend)?;
+    let (current_salt, _) = vault::read_salt_and_kdf(conn).map_err(domain)?;
+    if stored_salt != current_salt {
+        // 库被换掉了（恢复备份），旧 DEK 已与新库不匹配：直接作废，让用户
+        // 用主密码解锁一次，而不是带着错密钥把整库读成「解密失败」。
+        let _ = fs::remove_file(&path);
+        return Err(coded(
+            "device_key",
+            "免主密码解锁密钥已失效（库已被替换），请用主密码解锁后在设置里重新开启",
+        ));
+    }
+
+    let mut bytes = B64
+        .decode(stored_dek.trim())
+        .map_err(|_| coded("device_key", "免密码解锁密钥文件已损坏，请在设置里重新开启"))?;
+    if bytes.len() != mend_core::crypto::DEK_LEN {
+        bytes.zeroize();
+        return Err(coded(
+            "device_key",
+            "免密码解锁密钥文件已损坏，请在设置里重新开启",
+        ));
+    }
+    let mut dek = Zeroizing::new([0u8; mend_core::crypto::DEK_LEN]);
+    dek.copy_from_slice(&bytes);
+    bytes.zeroize();
+
+    let keys = vault::session_from_dek(conn, dek).map_err(domain)?;
+    backend.session = Some(Session {
+        dek: keys.dek,
+        kdf: keys.kdf,
+    });
+    status_of(&backend)
+}
+
+// ---------------------------------------------------------------------------
+// UI 偏好（非敏感；解锁前就要读，因此不进数据库）
+// ---------------------------------------------------------------------------
+
+pub fn load_preferences_sync() -> Result<String, String> {
+    let backend = backend()?;
+    if backend.data_dir.as_os_str().is_empty() {
+        return Ok(String::new());
+    }
+    let path = backend.data_dir.join(PREFERENCES_FILE);
+    match fs::read_to_string(&path) {
+        Ok(text) => Ok(text),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(err) => Err(coded(
+            "vault",
+            format!("读取偏好失败 ({err}): {}", path.display()),
+        )),
+    }
+}
+
+pub fn save_preferences_sync(json: String) -> Result<(), String> {
+    let backend = backend()?;
+    if backend.data_dir.as_os_str().is_empty() {
+        return Ok(());
+    }
+    let path = backend.data_dir.join(PREFERENCES_FILE);
+    fs::write(&path, json.as_bytes())
+        .map_err(|err| coded("vault", format!("保存偏好失败 ({err}): {}", path.display())))
 }
 
 // ---------------------------------------------------------------------------
@@ -867,130 +1515,10 @@ fn save_settings_sync(settings: Settings) -> Result<Settings, String> {
 }
 
 // ---------------------------------------------------------------------------
-// Backup
-// ---------------------------------------------------------------------------
-
-fn app_paths_sync() -> Result<AppPaths, String> {
-    let backend = backend()?;
-    Ok(AppPaths {
-        data_dir: backend.data_dir.display().to_string(),
-        db_path: backend.db_path.display().to_string(),
-    })
-}
-
-fn export_to_path(path: PathBuf, master_password: String) -> Result<ExportResult, String> {
-    let backend = backend()?;
-    let session = require_session(&backend)?;
-    let conn = require_conn(&backend)?;
-    let (kek, dek, salt, kdf) =
-        vault::derive_kek_and_unwrap(conn, &master_password).map_err(domain)?;
-    if *dek != *session.dek {
-        return Err(coded("vault", "主密码与当前库不匹配"));
-    }
-    let db_bytes = fs::read(&backend.db_path)
-        .map_err(|err| coded("vault", format!("读取库文件失败: {err}")))?;
-    let blob = backup::export(&db_bytes, &kek, &salt, kdf).map_err(domain)?;
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)
-                .map_err(|err| coded("vault", format!("创建备份目录失败: {err}")))?;
-        }
-    }
-    fs::write(&path, &blob).map_err(|err| coded("vault", format!("写入备份失败: {err}")))?;
-    Ok(ExportResult {
-        path: path.display().to_string(),
-        bytes: blob.len() as u64,
-    })
-}
-
-fn default_backup_path(backend: &Backend, file_name: Option<String>) -> PathBuf {
-    let name = file_name
-        .map(|name| name.trim().to_string())
-        .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| format!("mend-backup-{}.mendbak", db::now_ms()));
-    let name = if name.to_ascii_lowercase().ends_with(".mendbak") {
-        name
-    } else {
-        format!("{name}.mendbak")
-    };
-    backend.data_dir.join(name)
-}
-
-fn validate_backup_file(path: &Path, master_password: &str) -> Result<(u64, u64), String> {
-    let conn = db::open_and_migrate(path).map_err(domain)?;
-    if !db::is_initialized(&conn).map_err(domain)? {
-        return Err(coded("vault", "备份中的库尚未初始化"));
-    }
-    vault::unlock(&conn, master_password).map_err(domain)?;
-    let entries = db::list_entries(&conn, None, None).map_err(domain)?.len() as u64;
-    let categories = db::list_categories(&conn).map_err(domain)?.len() as u64;
-    Ok((entries, categories))
-}
-
-fn import_blob_sync(blob: Vec<u8>, master_password: String) -> Result<ImportResult, String> {
-    let mut backend = backend()?;
-    ensure_unlocked(&mut backend)?;
-    if !backup::is_backup(&blob) {
-        return Err(coded("vault", "不是有效的 Mend 备份文件"));
-    }
-
-    let payload = backup::import(&blob, &master_password).map_err(domain)?;
-    if payload.len() < SQLITE_MAGIC.len() || &payload[..SQLITE_MAGIC.len()] != SQLITE_MAGIC {
-        return Err(coded("vault", "备份内容不是有效的数据库文件"));
-    }
-
-    let temp = backend
-        .data_dir
-        .join(format!("mend-import-{}.db", Uuid::new_v4()));
-    if let Err(err) = fs::write(&temp, &payload) {
-        let _ = fs::remove_file(&temp);
-        return Err(coded("vault", format!("写入临时文件失败: {err}")));
-    }
-    let counts = match validate_backup_file(&temp, &master_password) {
-        Ok(counts) => counts,
-        Err(err) => {
-            let _ = fs::remove_file(&temp);
-            return Err(err);
-        }
-    };
-
-    // The current connection must be closed before the file is replaced.
-    backend.session = None;
-    backend.conn = None;
-    let target = backend.db_path.clone();
-    let previous_backup = if target.exists() {
-        let stamp = db::now_ms();
-        let backup_name = format!("{}.bak-{stamp}", db::DB_FILE_NAME);
-        let backup_path = backend.data_dir.join(&backup_name);
-        if let Err(err) = fs::rename(&target, &backup_path) {
-            let _ = fs::remove_file(&temp);
-            return Err(coded("vault", format!("替换前留底失败: {err}")));
-        }
-        Some(backup_name)
-    } else {
-        None
-    };
-
-    if let Err(err) = fs::rename(&temp, &target) {
-        if let Some(name) = &previous_backup {
-            let _ = fs::rename(backend.data_dir.join(name), &target);
-        }
-        let _ = fs::remove_file(&temp);
-        return Err(coded("vault", format!("替换库文件失败: {err}")));
-    }
-
-    Ok(ImportResult {
-        entries: counts.0,
-        categories: counts.1,
-        previous_backup,
-    })
-}
-
-// ---------------------------------------------------------------------------
 // Exported module functions
 // ---------------------------------------------------------------------------
 
-pub fn init(data_dir: Option<String>) -> Result<VaultStatus, String> {
+pub async fn init(data_dir: Option<String>) -> Result<VaultStatus, String> {
     let resolved = resolve_data_dir(data_dir)?;
     init_sync(Some(resolved.display().to_string()))
 }
@@ -999,20 +1527,20 @@ pub fn status() -> Result<VaultStatus, String> {
     status_sync()
 }
 
-pub fn setup(master_password: String) -> Result<VaultStatus, String> {
-    setup_sync(master_password)
+pub async fn setup(master_password: String) -> Result<VaultStatus, String> {
+    setup_async(master_password).await
 }
 
-pub fn unlock(master_password: String) -> Result<VaultStatus, String> {
-    unlock_sync(master_password)
+pub async fn unlock(master_password: String) -> Result<VaultStatus, String> {
+    unlock_async(master_password).await
 }
 
 pub fn lock() -> Result<(), String> {
     lock_sync()
 }
 
-pub fn change_password(old_password: String, new_password: String) -> Result<(), String> {
-    change_password_sync(old_password, new_password)
+pub async fn change_password(old_password: String, new_password: String) -> Result<(), String> {
+    change_password_async(old_password, new_password).await
 }
 
 pub fn list_entries(filter: ListFilter) -> Result<Vec<EntrySummary>, String> {
@@ -1107,55 +1635,86 @@ pub fn save_settings(settings: Settings) -> Result<Settings, String> {
     save_settings_sync(settings)
 }
 
-pub fn app_paths() -> Result<AppPaths, String> {
-    app_paths_sync()
+/// Switch to another vault file (`None` = the default one in the data
+/// directory). Validates the file, records its path, reopens the connection,
+/// and leaves the vault locked.
+pub fn switch_vault(path: Option<String>) -> Result<VaultStatus, String> {
+    switch_vault_sync(path)
 }
 
-/// Export an encrypted backup. Without a path, the file is written into the
-/// app data directory (the UI shows the path and can reveal the folder).
-pub fn export_backup(
-    path: Option<String>,
-    file_name: Option<String>,
-    master_password: String,
-) -> Result<ExportResult, String> {
-    let target = match path
-        .as_deref()
-        .map(str::trim)
-        .filter(|path| !path.is_empty())
-    {
-        Some(path) => PathBuf::from(path),
-        None => {
-            let backend = backend()?;
-            default_backup_path(&backend, file_name)
-        }
-    };
-    export_to_path(target, master_password)
-}
-
-pub fn import_backup(path: String, master_password: String) -> Result<ImportResult, String> {
-    let path = PathBuf::from(path.trim());
-    let blob = fs::read(&path).map_err(|err| coded("vault", format!("读取备份文件失败: {err}")))?;
-    import_blob_sync(blob, master_password)
-}
-
-pub fn import_backup_base64(
-    data_base64: String,
-    master_password: String,
-) -> Result<ImportResult, String> {
-    let blob = B64
-        .decode(data_base64.trim())
-        .map_err(|_| coded("vault", "备份数据格式非法"))?;
-    import_blob_sync(blob, master_password)
-}
-
-pub async fn reveal_data_dir() -> Result<(), String> {
-    let path = {
+/// 在系统文件管理器里定位**当前库文件**（桌面端的「在文件夹中显示」）。
+///
+/// 库本身就是完整数据，用户「备份」的实际动作就是把这个文件拷走，所以入口
+/// 直接选中文件，而不是打开某个目录再让人自己找。首选自己起系统文件管理器：
+/// nsh 的 `reveal_path`（`SHOpenFolderAndSelectItems`）在进程与 Explorer 完整性
+/// 级别不一致时会返回 access denied，还会把 nsh 自己写 `storage.json` 的错误
+/// 一起带上来。失败时才退回 nsh 的 `reveal_path` / `open_path`。
+pub async fn reveal_vault_file() -> Result<(), String> {
+    let file = {
         let backend = backend()?;
-        backend.data_dir.clone()
+        backend.db_path.clone()
     };
-    reveal_path(path)
+    let dir = file
+        .parent()
+        .filter(|dir| !dir.as_os_str().is_empty())
+        .map(Path::to_path_buf)
+        .ok_or_else(|| coded("vault", "库文件位置尚未就绪"))?;
+    if !dir.exists() {
+        // 还没建库：把即将出现的位置建出来并打开，比报错有用。
+        fs::create_dir_all(&dir).map_err(|err| {
+            coded(
+                "vault",
+                format!("创建数据目录失败 ({err}): {}", dir.display()),
+            )
+        })?;
+    }
+    if spawn_revealer(&file).is_ok() {
+        return Ok(());
+    }
+    if reveal_path(file.clone()).await.is_ok() {
+        return Ok(());
+    }
+    if spawn_opener(&dir).is_ok() {
+        return Ok(());
+    }
+    open_path(dir)
         .await
-        .map_err(|err| coded("vault", format!("打开数据目录失败: {err}")))
+        .map_err(|err| coded("vault", format!("打开库文件所在目录失败: {err}")))
+}
+
+/// Whether the vault can be opened without asking for the master password.
+pub fn device_unlock_enabled() -> Result<bool, String> {
+    device_unlock_enabled_sync()
+}
+
+/// Turn the password-less unlock on: store the current session key next to the
+/// database. The vault must be unlocked (the key comes from the session, so the
+/// master password is never asked for twice).
+pub fn enable_device_unlock() -> Result<bool, String> {
+    enable_device_unlock_sync()
+}
+
+/// Turn it off again: delete the key file.
+pub fn disable_device_unlock() -> Result<bool, String> {
+    disable_device_unlock_sync()
+}
+
+/// Open the vault with the stored device key (no master password).
+pub fn unlock_with_device_key() -> Result<VaultStatus, String> {
+    unlock_with_device_key_sync()
+}
+
+/// Non-sensitive UI preferences as JSON (`""` when nothing was saved yet).
+///
+/// Prefer this over nsh's `Storage`: `Storage` writes `storage.json` into
+/// `%APPDATA%\com.mend.app`, which an app the system started with lower
+/// privileges than that folder can never write (the write only reaches the log).
+pub async fn load_preferences() -> Result<String, String> {
+    load_preferences_sync()
+}
+
+pub fn save_preferences(json: String) -> Result<(), String> {
+    save_preferences_sync(json)
 }
 
 #[cfg(test)]
@@ -1203,7 +1762,7 @@ mod tests {
     }
 
     #[test]
-    fn adapter_flow_with_backup_and_restore() {
+    fn adapter_flow_end_to_end() {
         let dir = std::env::temp_dir().join(format!("mend-native-test-{}", Uuid::new_v4()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
@@ -1303,25 +1862,94 @@ mod tests {
         .unwrap();
         assert_eq!(generated.chars().count(), 20);
 
-        // A second entry survives the backup round trip.
-        let kept = create_entry_sync(input("Keep me", Some(category.id.clone()))).unwrap();
-        let backup = dir.join("test.mendbak");
-        export_to_path(backup.clone(), password.into()).unwrap();
-        assert!(backup.exists());
+        // 免主密码解锁：开启后锁定仍能打开，关掉立刻失效。
+        assert!(!device_unlock_enabled_sync().unwrap());
+        enable_device_unlock_sync().unwrap();
+        assert!(device_unlock_enabled_sync().unwrap());
+        lock_sync().unwrap();
+        assert!(unlock_with_device_key_sync().unwrap().unlocked);
+        disable_device_unlock_sync().unwrap();
+        assert!(!device_unlock_enabled_sync().unwrap());
+        lock_sync().unwrap();
+        assert!(
+            unlock_with_device_key_sync().is_err(),
+            "关闭后不得免密码解锁"
+        );
 
-        let blob = fs::read(&backup).unwrap();
-        let restored = import_blob_sync(blob, password.into()).unwrap();
-        assert_eq!(restored.entries, 1);
+        // 偏好文件：默认空串，写入后可读回。
+        assert_eq!(load_preferences_sync().unwrap(), "");
+        save_preferences_sync("{\"language\":\"zh-CN\"}".into()).unwrap();
+        assert_eq!(load_preferences_sync().unwrap(), "{\"language\":\"zh-CN\"}");
+
+        // --- 库文件位置：自选文件、切换、拒绝非库文件、切回默认 ---
+        // 下面要验证「切回默认库数据还在」：先解锁留一条条目。
         unlock_sync(password.into()).unwrap();
-        let after = list_entries_sync(ListFilter {
-            bucket: "all".into(),
-            category_id: None,
-            keyword: None,
-            tag: None,
-        })
-        .unwrap();
-        assert_eq!(after.len(), 1);
-        assert_eq!(after[0].id, kept.id);
+        create_entry_sync(input("Before switch", Some(category.id.clone()))).unwrap();
+
+        let second = dir.join("second.menddb");
+        let switched = switch_vault_sync(Some(second.display().to_string())).unwrap();
+        assert!(!switched.initialized, "新文件应是一座空库");
+        assert!(!switched.unlocked, "切换后必须锁定");
+        assert_eq!(switched.db_path, second.display().to_string());
+        assert_eq!(
+            read_located_vault(&dir).unwrap().display().to_string(),
+            second.display().to_string()
+        );
+
+        // 新库与旧库的数据互不干扰。
+        setup_sync(password.into()).unwrap();
+        assert!(
+            list_entries_sync(ListFilter {
+                bucket: "all".into(),
+                category_id: None,
+                keyword: None,
+                tag: None,
+            })
+            .unwrap()
+            .is_empty()
+        );
+
+        // 误选非数据库文件必须被挡住，且不改动当前库。
+        let bogus = dir.join("not-a-vault.menddb");
+        fs::write(&bogus, b"\x89PNG\r\n\x1a\nnot a database").unwrap();
+        let err = switch_vault_sync(Some(bogus.display().to_string())).unwrap_err();
+        assert!(err.starts_with("vault_not_db|"), "{err}");
+        assert_eq!(status_sync().unwrap().db_path, second.display().to_string());
+
+        // 切回默认库：原数据还在，只是需要重新解锁。
+        let back = switch_vault_sync(None).unwrap();
+        assert!(back.initialized);
+        assert!(!back.unlocked);
+        assert_eq!(back.db_path, db::db_file_path(&dir).display().to_string());
+        assert!(read_located_vault(&dir).is_none(), "恢复默认应删掉位置指针");
+        unlock_sync(password.into()).unwrap();
+        assert_eq!(
+            list_entries_sync(ListFilter {
+                bucket: "all".into(),
+                category_id: None,
+                keyword: None,
+                tag: None,
+            })
+            .unwrap()
+            .len(),
+            1
+        );
+
+        // 免密码解锁的密钥按库区分：在默认库上开启后，切到第二座库应当仍是
+        //「未开启」，切回来则原钥匙还在（否则来回切库会把方便功能反复作废）。
+        enable_device_unlock_sync().unwrap();
+        assert!(device_unlock_enabled_sync().unwrap());
+        switch_vault_sync(Some(second.display().to_string())).unwrap();
+        assert!(
+            !device_unlock_enabled_sync().unwrap(),
+            "第二座库没有开过免密码解锁"
+        );
+        switch_vault_sync(None).unwrap();
+        assert!(
+            device_unlock_enabled_sync().unwrap(),
+            "切回默认库后原钥匙仍应存在"
+        );
+        disable_device_unlock_sync().unwrap();
 
         let _ = fs::remove_dir_all(&dir);
     }

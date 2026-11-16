@@ -191,35 +191,6 @@ pub struct GeneratorOptions {
     pub exclude_ambiguous: bool,
 }
 
-/// Paths shown in settings.
-#[derive(Debug, Clone, Default, PartialEq, JsObject)]
-pub struct AppPaths {
-    /// Data directory.
-    pub data_dir: String,
-    /// Database file.
-    pub db_path: String,
-}
-
-/// Result of an encrypted backup export.
-#[derive(Debug, Clone, Default, PartialEq, JsObject)]
-pub struct ExportResult {
-    /// Where the backup was written.
-    pub path: String,
-    /// File size in bytes.
-    pub bytes: u64,
-}
-
-/// Result of a backup restore.
-#[derive(Debug, Clone, Default, PartialEq, JsObject)]
-pub struct ImportResult {
-    /// Entries in the restored database.
-    pub entries: u64,
-    /// Categories in the restored database.
-    pub categories: u64,
-    /// Name of the previous database kept next to `mend.db`, if any.
-    pub previous_backup: Option<String>,
-}
-
 /// Non-sensitive UI settings stored in the database.
 #[derive(Debug, Clone, Default, PartialEq, JsObject)]
 pub struct Settings {

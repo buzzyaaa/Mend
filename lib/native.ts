@@ -3,15 +3,12 @@
 import { Vault } from 'mend/native'
 
 import type {
-  AppPaths,
   Category,
   CategoryInput,
   EntryInput,
   EntrySummary,
   EntryView,
-  ExportResult,
   GeneratorOptions,
-  ImportResult,
   ListFilter,
   Preset,
   PresetInput,
@@ -21,7 +18,7 @@ import type {
 /** `process.dataDir` is the per-app directory nsh gives us. Passing it
  * explicitly keeps the old Tauri data directory (`%APPDATA%\com.mend.app`)
  * as the single source of truth on every platform. */
-export function initVault(): VaultStatus {
+export function initVault(): Promise<VaultStatus> {
   const dir = typeof process !== 'undefined' ? process.dataDir : null
   return Vault.init(dir ?? null)
 }
@@ -30,11 +27,11 @@ export function status(): VaultStatus {
   return Vault.status()
 }
 
-export function setup(masterPassword: string): VaultStatus {
+export function setup(masterPassword: string): Promise<VaultStatus> {
   return Vault.setup(masterPassword)
 }
 
-export function unlock(masterPassword: string): VaultStatus {
+export function unlock(masterPassword: string): Promise<VaultStatus> {
   return Vault.unlock(masterPassword)
 }
 
@@ -42,7 +39,7 @@ export function lock(): void {
   return Vault.lock()
 }
 
-export function changePassword(oldPassword: string, newPassword: string): void {
+export function changePassword(oldPassword: string, newPassword: string): Promise<void> {
   return Vault.changePassword(oldPassword, newPassword)
 }
 
@@ -130,22 +127,62 @@ export function generatePassword(options: GeneratorOptions): string {
   return Vault.generatePassword(options)
 }
 
-export function appPaths(): AppPaths {
-  return Vault.appPaths()
+/** 切换当前使用的库文件；`null` = 回到数据目录里的默认库。
+ *  切换会锁定库（清掉会话密钥），调用方随后应重新走一次启动流程。 */
+export function switchVault(path: string | null): VaultStatus {
+  return Vault.switchVault(path)
 }
 
-export function exportBackup(
-  path: string | null,
+/** 系统「打开文件」对话框选一个已存在的库文件；取消时 `null`。 */
+export function pickVaultFile(
+  title: string,
+  buttonLabel: string,
+  startDir: string | null,
+): Promise<string | null> {
+  return Vault.pickVaultFile(title, buttonLabel, startDir)
+}
+
+/** 系统「保存文件」对话框指定新库文件的位置；取消时 `null`。
+ *  只返回路径，真正建库发生在设置主密码时。 */
+export function pickNewVaultFile(
+  title: string,
+  buttonLabel: string,
+  startDir: string | null,
   fileName: string | null,
-  masterPassword: string,
-): ExportResult {
-  return Vault.exportBackup(path, fileName, masterPassword)
+): Promise<string | null> {
+  return Vault.pickNewVaultFile(title, buttonLabel, startDir, fileName)
 }
 
-export function importBackupBase64(dataBase64: string, masterPassword: string): ImportResult {
-  return Vault.importBackupBase64(dataBase64, masterPassword)
+/** 在系统文件管理器里定位当前库文件（选中该文件）。 */
+export function revealVaultFile(): Promise<void> {
+  return Vault.revealVaultFile()
 }
 
-export function revealDataDir(): Promise<void> {
-  return Vault.revealDataDir()
+/** 免主密码解锁是否已开启。 */
+export function deviceUnlockEnabled(): boolean {
+  return Vault.deviceUnlockEnabled()
+}
+
+/** 打开免主密码解锁（把当前会话密钥存到数据目录）。 */
+export function enableDeviceUnlock(): boolean {
+  return Vault.enableDeviceUnlock()
+}
+
+/** 关闭免主密码解锁（删除密钥文件）。 */
+export function disableDeviceUnlock(): boolean {
+  return Vault.disableDeviceUnlock()
+}
+
+/** 用已保存的密钥解锁，不询问主密码。 */
+export function unlockWithDeviceKey(): VaultStatus {
+  return Vault.unlockWithDeviceKey()
+}
+
+/** 非敏感 UI 偏好的 JSON，未保存过时为空串。 */
+export function loadPreferences(): Promise<string> {
+  return Vault.loadPreferences()
+}
+
+export function savePreferences(json: string): void {
+  Vault.savePreferences(json)
 }

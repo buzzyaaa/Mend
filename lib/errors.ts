@@ -32,6 +32,8 @@ const CODE_KEYS: Record<string, string> = {
   vault: 'error.vault',
   io: 'error.vault',
   internal: 'error.vault',
+  export_dir: 'vault.dirUnwritable',
+  vault_not_db: 'vault.notDb',
   title_required: 'entry.titleRequired',
   title_too_long: 'entry.titleTooLong',
   tags_invalid: 'entry.tagsInvalid',
@@ -40,9 +42,13 @@ const CODE_KEYS: Record<string, string> = {
   password_too_short: 'unlock.errors.tooShort',
   preset_invalid: 'preset.invalid',
   generator_invalid: 'generator.invalidOptions',
-  backup_invalid: 'backup.invalidFile',
-  backup_password: 'backup.wrongPassword',
+  device_key: 'unlock.errors.deviceKey',
 }
+
+/** 这些 code 的文案只是一句「失败了」，光看它无法判断原因（磁盘权限、
+ *  文件路径、SQLite 状态……）。原生消息里带着路径与 OS 错误，对排查有用，
+ *  因此拼在本地化文案后面；其余 code 的文案本身已经说清了原因，不拼。 */
+const CODES_WITH_DETAIL = new Set(['vault', 'internal', 'io'])
 
 /** A localized message for a native error. Unknown codes fall back to the
  * native message, which is still human-readable and never contains secrets. */
@@ -52,10 +58,10 @@ export function errorText(error: unknown, context?: string): string {
     return t('unlock.errors.wrongPassword')
   }
   const key = CODE_KEYS[code]
-  if (key) return t(key)
-  return message || t('error.unknown')
-}
-
-export function isCancelled(error: unknown): boolean {
-  return parseError(error).code === 'cancelled'
+  if (!key) return message || t('error.unknown')
+  const text = t(key)
+  if (CODES_WITH_DETAIL.has(code) && message && message !== text) {
+    return `${text}：${message}`
+  }
+  return text
 }

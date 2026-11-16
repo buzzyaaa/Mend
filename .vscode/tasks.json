@@ -144,7 +144,7 @@
         "测试：Rust 核心（core）"
       ],
       "dependsOrder": "sequence",
-      "group": "build",
+      "group": { "kind": "build", "isDefault": true },
       "problemMatcher": []
     }
   ]

@@ -11,7 +11,6 @@ import { EntryList } from '../components/EntryList'
 import { PresetsDialog } from '../components/PresetsDialog'
 import { SettingsDialog } from '../components/SettingsDialog'
 import { Sidebar } from '../components/Sidebar'
-import { ToastHost } from '../components/ToastHost'
 import { IconButton, MODAL_BACKDROP_CLASS, MODAL_CLASS, ModalFrame } from '../components/ui'
 import { preferences, setColumnSizes } from '../lib/preferences'
 import {
@@ -83,7 +82,6 @@ export function MainScreen() {
       <SettingsDialog />
       <PresetsDialog />
       <ConfirmDialog />
-      <ToastHost />
 
       <Dialog
         open={categoriesSheetOpen()}

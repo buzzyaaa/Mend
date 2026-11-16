@@ -2,7 +2,8 @@ import { effect, mount, Text, token, View } from 'nsh'
 import { t } from 'nsh/i18n'
 
 import { Icon } from './components/Icon'
-import { ActionButton, Spinner } from './components/ui'
+import { ToastHost } from './components/ToastHost'
+import { ActionButton, FadeIn, Spinner } from './components/ui'
 import { MainScreen } from './screens/MainScreen'
 import { UnlockScreen } from './screens/UnlockScreen'
 import {
@@ -11,6 +12,7 @@ import {
   bootRetrying,
   fatalDetail,
   fatalError,
+  modalOpen,
   retryBoot,
   status,
 } from './lib/state'
@@ -74,16 +76,29 @@ function App() {
       </If>
       <If when={bootReady() && !fatalError()}>
         <View class="flex-1">
+          {/* 三个页面各自淡入：解锁 → 主界面不再硬切。 */}
           <If when={!status().initialized}>
-            <UnlockScreen mode="setup" />
+            <FadeIn>
+              <UnlockScreen mode="setup" />
+            </FadeIn>
           </If>
           <If when={status().initialized && !status().unlocked}>
-            <UnlockScreen mode="unlock" />
+            <FadeIn>
+              <UnlockScreen mode="unlock" />
+            </FadeIn>
           </If>
           <If when={status().initialized && status().unlocked}>
-            <MainScreen />
+            <FadeIn>
+              <MainScreen />
+            </FadeIn>
           </If>
         </View>
+      </If>
+
+      {/* 提示条放在最外层（解锁页也能提示）。弹窗打开时改由弹窗内的那份显示：
+          nsh 的 Dialog 是独立原生窗口层，这里的 Overlay 盖不住它的遮罩。 */}
+      <If when={!modalOpen()}>
+        <ToastHost />
       </If>
     </View>
   )

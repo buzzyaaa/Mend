@@ -3,15 +3,23 @@ import { Overlay, Text, token, View } from 'nsh'
 import { dismissToast, toasts } from '../lib/state'
 import { Icon } from './Icon'
 
+/** 提示条层。
+ *
+ *  必须渲染进「当前最上面那一层」：主界面的 Overlay 抬不到 `Dialog` 之上
+ *  （桌面端 Dialog 是独立原生窗口层），所以 `ModalFrame` 里也有一份，
+ *  弹窗打开时主界面那份隐藏（见 `lib/state.ts` 的 `modalOpen`）。
+ *
+ *  `pointerEvents: 'box-none'`：这条全宽底部区域不吃点击，只有提示条自己吃。
+ */
 export function ToastHost() {
   return (
     <Overlay
       style={{
-        position: 'absolute',
         left: 0,
         right: 0,
         bottom: 18,
         alignItems: 'center',
+        pointerEvents: 'box-none',
       }}
     >
       <View class="items-center gap-2">

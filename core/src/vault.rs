@@ -49,21 +49,120 @@ pub fn setup(conn: &Connection, master_password: &str) -> MendResult<VaultKeys> 
     if db::is_initialized(conn)? {
         return Err(MendError::Vault("库已初始化".into()));
     }
+    apply_setup(conn, prepare_setup(master_password)?)
+}
 
+/// 建库/改密的前半段结果：Argon2 派生与 DEK 包裹都已做完，
+/// 剩下的只有写 `meta`（廉价，需要数据库连接）。
+pub struct PreparedWrap {
+    salt: [u8; crypto::SALT_LEN],
+    kdf: KdfParams,
+    wrapped: String,
+    dek: Zeroizing<[u8; DEK_LEN]>,
+}
+
+/// 建库前半段（纯 CPU，可在后台线程执行）：校验主密码、生成 salt 与 DEK、
+/// 派生 KEK 并包裹 DEK。写库由 [`apply_setup`] 完成。
+pub fn prepare_setup(master_password: &str) -> MendResult<PreparedWrap> {
+    validate_master_password(master_password)?;
     let salt = crypto::random_salt();
-    let params = KdfParams::default();
-    let kek = crypto::derive_kek(master_password, &salt, params)?;
+    let kdf = KdfParams::default();
+    let kek = crypto::derive_kek(master_password, &salt, kdf)?;
     let dek = crypto::random_dek();
     let wrapped = crypto::wrap_dek(&kek, &dek)?;
-
-    db::meta_set(conn, META_SALT, &B64.encode(salt))?;
-    db::meta_set(conn, META_KDF, &params.to_meta_value())?;
-    db::meta_set(conn, META_DEK, &wrapped)?;
-
     // KEK 用完即弃（Zeroizing 负责清零）。
     drop(kek);
+    Ok(PreparedWrap {
+        salt,
+        kdf,
+        wrapped,
+        dek,
+    })
+}
 
-    Ok(VaultKeys { dek, kdf: params })
+/// 建库后半段（持连接）：确认为空库后把 salt / KDF / 包裹后的 DEK 写进 `meta`。
+pub fn apply_setup(conn: &Connection, prepared: PreparedWrap) -> MendResult<VaultKeys> {
+    if db::is_initialized(conn)? {
+        return Err(MendError::Vault("库已初始化".into()));
+    }
+    db::meta_set(conn, META_SALT, &B64.encode(prepared.salt))?;
+    db::meta_set(conn, META_KDF, &prepared.kdf.to_meta_value())?;
+    db::meta_set(conn, META_DEK, &prepared.wrapped)?;
+    Ok(VaultKeys {
+        dek: prepared.dek,
+        kdf: prepared.kdf,
+    })
+}
+
+/// 解锁的前半段：读 `salt` / KDF 参数 / 包裹后的 DEK。
+///
+/// 只做三次 `meta` 查询（微秒级），因此可以在引擎线程上直接执行；
+/// 昂贵的 Argon2 派生留在 [`UnlockChallenge::solve`] 里，方便调用方把它
+/// 挪到后台线程（debug 构建下一次派生约 1.5 秒，同步跑会把 UI 冻住）。
+#[derive(Clone)]
+pub struct UnlockChallenge {
+    salt: [u8; crypto::SALT_LEN],
+    kdf: KdfParams,
+    wrapped: String,
+}
+
+impl UnlockChallenge {
+    /// 后半段：Argon2 派生 KEK → 解包 DEK。纯 CPU 计算，不持有数据库连接，
+    /// 可以安全地放进 `Send` 闭包。认证失败视为主密码错误。
+    pub fn solve(&self, master_password: &str) -> MendResult<VaultKeys> {
+        if master_password.is_empty() {
+            return Err(MendError::Vault("主密码不能为空".into()));
+        }
+        let kek = crypto::derive_kek(master_password, &self.salt, self.kdf)?;
+        let dek = crypto::unwrap_dek(&kek, &self.wrapped)?;
+        drop(kek);
+        Ok(VaultKeys { dek, kdf: self.kdf })
+    }
+
+    /// 备份导出用：除了 DEK 还要 KEK 本身（它才是加密整库快照的密钥）。
+    pub fn solve_with_kek(
+        &self,
+        master_password: &str,
+    ) -> MendResult<(Zeroizing<[u8; DEK_LEN]>, VaultKeys)> {
+        if master_password.is_empty() {
+            return Err(MendError::Vault("主密码不能为空".into()));
+        }
+        let kek = crypto::derive_kek(master_password, &self.salt, self.kdf)?;
+        let dek = crypto::unwrap_dek(&kek, &self.wrapped)?;
+        Ok((kek, VaultKeys { dek, kdf: self.kdf }))
+    }
+
+    /// 库的 KDF 参数（导出备份时要写进 `.mendbak` 头部）。
+    pub fn kdf(&self) -> KdfParams {
+        self.kdf
+    }
+
+    /// 库的 salt：免主密码解锁用它判断「密钥文件是否还属于这个库」。
+    pub fn salt(&self) -> [u8; crypto::SALT_LEN] {
+        self.salt
+    }
+}
+
+/// 读解锁所需的材料（廉价部分，见 [`UnlockChallenge`]）。
+pub fn challenge(conn: &Connection) -> MendResult<UnlockChallenge> {
+    if !db::is_initialized(conn)? {
+        return Err(MendError::Vault("库尚未初始化".into()));
+    }
+    let salt_b64 =
+        db::meta_get(conn, META_SALT)?.ok_or_else(|| MendError::Db("缺少 salt".into()))?;
+    let raw = B64
+        .decode(salt_b64)
+        .map_err(|_| MendError::Db("salt 数据损坏".into()))?;
+    if raw.len() != crypto::SALT_LEN {
+        return Err(MendError::Db("salt 长度非法".into()));
+    }
+    let mut salt = [0u8; crypto::SALT_LEN];
+    salt.copy_from_slice(&raw);
+    let kdf = db::meta_get(conn, META_KDF)?
+        .ok_or_else(|| MendError::Db("缺少 KDF 参数".into()))
+        .and_then(|value| KdfParams::from_meta_value(&value))?;
+    let wrapped = db::meta_get(conn, META_DEK)?.ok_or_else(|| MendError::Db("缺少 DEK".into()))?;
+    Ok(UnlockChallenge { salt, kdf, wrapped })
 }
 
 /// 解锁：读 salt/KDF 参数 → 派生 KEK → 解包 DEK；认证失败视为主密码错误。
@@ -71,25 +170,21 @@ pub fn unlock(conn: &Connection, master_password: &str) -> MendResult<VaultKeys>
     if master_password.is_empty() {
         return Err(MendError::Vault("主密码不能为空".into()));
     }
-    if !db::is_initialized(conn)? {
-        return Err(MendError::Vault("库尚未初始化".into()));
-    }
+    challenge(conn)?.solve(master_password)
+}
 
-    let salt_b64 =
-        db::meta_get(conn, META_SALT)?.ok_or_else(|| MendError::Db("缺少 salt".into()))?;
-    let salt = B64
-        .decode(salt_b64)
-        .map_err(|_| MendError::Db("salt 数据损坏".into()))?;
-    let params = db::meta_get(conn, META_KDF)?
+/// 从已有的 DEK 直接建立会话密钥材料（免主密码解锁用）。
+///
+/// 只有调用方自己拿得出一个已被验证过的 DEK 时才该调用它；KDF 参数仍然从
+/// `meta` 读回，便于后续改主密码时沿用同一套参数。
+pub fn session_from_dek(
+    conn: &Connection,
+    dek: zeroize::Zeroizing<[u8; DEK_LEN]>,
+) -> MendResult<VaultKeys> {
+    let kdf = db::meta_get(conn, META_KDF)?
         .ok_or_else(|| MendError::Db("缺少 KDF 参数".into()))
         .and_then(|value| KdfParams::from_meta_value(&value))?;
-    let wrapped = db::meta_get(conn, META_DEK)?.ok_or_else(|| MendError::Db("缺少 DEK".into()))?;
-
-    let kek = crypto::derive_kek(master_password, &salt, params)?;
-    let dek = crypto::unwrap_dek(&kek, &wrapped)?;
-    drop(kek);
-
-    Ok(VaultKeys { dek, kdf: params })
+    Ok(VaultKeys { dek, kdf })
 }
 
 /// 修改主密码：校验旧密码后生成新 salt/KEK，重新包裹**同一个 DEK**，事务更新 meta。
@@ -103,27 +198,47 @@ pub fn change_password(
     if !db::is_initialized(conn)? {
         return Err(MendError::Vault("库尚未初始化".into()));
     }
+    let challenge = challenge(conn)?;
+    apply_rewrap(
+        conn,
+        prepare_rewrap(&challenge, old_password, new_password)?,
+    )
+}
 
-    // 旧密码校验：派生旧 KEK 解包 DEK，认证失败即旧密码错误。
-    let (_, dek, _, _) = derive_kek_and_unwrap(conn, old_password)?;
+/// 改密前半段（纯 CPU，可在后台线程执行）：校验旧密码解出 DEK，再用新密码
+/// 派生新 KEK 重新包裹同一个 DEK。
+pub fn prepare_rewrap(
+    challenge: &UnlockChallenge,
+    old_password: &str,
+    new_password: &str,
+) -> MendResult<PreparedWrap> {
+    validate_master_password(new_password)?;
+    let old = challenge.solve(old_password)?;
+    let salt = crypto::random_salt();
+    let kdf = KdfParams::default();
+    let kek = crypto::derive_kek(new_password, &salt, kdf)?;
+    let wrapped = crypto::wrap_dek(&kek, &old.dek)?;
+    drop(kek);
+    Ok(PreparedWrap {
+        salt,
+        kdf,
+        wrapped,
+        dek: old.dek,
+    })
+}
 
-    let new_salt = crypto::random_salt();
-    let new_params = KdfParams::default();
-    let new_kek = crypto::derive_kek(new_password, &new_salt, new_params)?;
-    let wrapped = crypto::wrap_dek(&new_kek, &dek)?;
-    drop(new_kek);
-
+/// 改密后半段（持连接）：一个事务里替换 salt / KDF / 包裹后的 DEK。
+pub fn apply_rewrap(conn: &Connection, prepared: PreparedWrap) -> MendResult<VaultKeys> {
     let tx = conn
         .unchecked_transaction()
         .map_err(|err| MendError::Db(err.to_string()))?;
-    db::meta_set(&tx, META_SALT, &B64.encode(new_salt))?;
-    db::meta_set(&tx, META_KDF, &new_params.to_meta_value())?;
-    db::meta_set(&tx, META_DEK, &wrapped)?;
+    db::meta_set(&tx, META_SALT, &B64.encode(prepared.salt))?;
+    db::meta_set(&tx, META_KDF, &prepared.kdf.to_meta_value())?;
+    db::meta_set(&tx, META_DEK, &prepared.wrapped)?;
     tx.commit().map_err(|err| MendError::Db(err.to_string()))?;
-
     Ok(VaultKeys {
-        dek,
-        kdf: new_params,
+        dek: prepared.dek,
+        kdf: prepared.kdf,
     })
 }
 

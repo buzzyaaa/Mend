@@ -17,6 +17,7 @@ import chevronLeft from '../assets/icons/chevron-left.svg'
 import chevronRight from '../assets/icons/chevron-right.svg'
 import close from '../assets/icons/close.svg'
 import copy from '../assets/icons/copy.svg'
+import database from '../assets/icons/database.svg'
 import download from '../assets/icons/download.svg'
 import edit from '../assets/icons/edit.svg'
 import eye from '../assets/icons/eye.svg'
@@ -61,6 +62,7 @@ export type IconName =
   | 'chevron-right'
   | 'close'
   | 'copy'
+  | 'database'
   | 'download'
   | 'edit'
   | 'eye'
@@ -105,6 +107,7 @@ const ICON_ASSETS: Record<IconName, ImageAsset> = {
   'chevron-right': chevronRight,
   close,
   copy,
+  database,
   download,
   edit,
   eye,

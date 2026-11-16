@@ -6,8 +6,8 @@
 use nsh_core::prelude::*;
 
 use crate::dto::{
-    AppPaths, Category, CategoryInput, EntryInput, EntrySummary, EntryView, ExportResult,
-    GeneratorOptions, ImportResult, ListFilter, Preset, PresetInput, Settings, VaultStatus,
+    Category, CategoryInput, EntryInput, EntrySummary, EntryView, GeneratorOptions, ListFilter,
+    Preset, PresetInput, Settings, VaultStatus,
 };
 use crate::service;
 
@@ -19,8 +19,8 @@ pub struct Vault;
 impl Vault {
     /// Open the database in the app's data directory (or `dataDir`), run
     /// migrations, and report its state. Safe to call more than once.
-    pub fn init(data_dir: Option<String>) -> Result<VaultStatus, String> {
-        service::init(data_dir)
+    pub async fn init(data_dir: Option<String>) -> Result<VaultStatus, String> {
+        service::init(data_dir).await
     }
 
     /// Current initialized/unlocked state and the database paths.
@@ -29,14 +29,15 @@ impl Vault {
     }
 
     /// Create the vault with `masterPassword` (minimum 4 characters) and
-    /// leave it unlocked.
-    pub fn setup(master_password: String) -> Result<VaultStatus, String> {
-        service::setup(master_password)
+    /// leave it unlocked. The key derivation runs off the UI thread.
+    pub async fn setup(master_password: String) -> Result<VaultStatus, String> {
+        service::setup(master_password).await
     }
 
-    /// Unlock the vault with `masterPassword`.
-    pub fn unlock(master_password: String) -> Result<VaultStatus, String> {
-        service::unlock(master_password)
+    /// Unlock the vault with `masterPassword`. The key derivation runs off
+    /// the UI thread, so the window keeps drawing while it happens.
+    pub async fn unlock(master_password: String) -> Result<VaultStatus, String> {
+        service::unlock(master_password).await
     }
 
     /// Drop the session key from memory.
@@ -46,8 +47,39 @@ impl Vault {
 
     /// Re-wrap the data key with a new master password. The session stays
     /// unlocked and existing ciphertext is not rewritten.
-    pub fn change_password(old_password: String, new_password: String) -> Result<(), String> {
-        service::change_password(old_password, new_password)
+    pub async fn change_password(old_password: String, new_password: String) -> Result<(), String> {
+        service::change_password(old_password, new_password).await
+    }
+
+    /// Whether the vault can be opened without the master password.
+    pub fn device_unlock_enabled() -> Result<bool, String> {
+        service::device_unlock_enabled()
+    }
+
+    /// Store the session key next to the database so the vault opens without
+    /// the master password. Requires an unlocked vault.
+    pub fn enable_device_unlock() -> Result<bool, String> {
+        service::enable_device_unlock()
+    }
+
+    /// Delete the stored key: the master password is required again.
+    pub fn disable_device_unlock() -> Result<bool, String> {
+        service::disable_device_unlock()
+    }
+
+    /// Open the vault with the stored key (no master password).
+    pub fn unlock_with_device_key() -> Result<VaultStatus, String> {
+        service::unlock_with_device_key()
+    }
+
+    /// Non-sensitive UI preferences as a JSON string, `""` when unset.
+    pub async fn load_preferences() -> Result<String, String> {
+        service::load_preferences().await
+    }
+
+    /// Persist the UI preferences (non-sensitive).
+    pub fn save_preferences(json: String) -> Result<(), String> {
+        service::save_preferences(json)
     }
 
     /// List entries for a bucket (`all`, `favorites`, `uncategorized`,
@@ -167,38 +199,39 @@ impl Vault {
         service::save_settings(settings)
     }
 
-    /// The data directory and database path shown in settings.
-    pub fn app_paths() -> Result<AppPaths, String> {
-        service::app_paths()
+    /// Use another vault file, or the default one in the data directory when
+    /// `path` is `null`. Validates that the file is a SQLite database (or does
+    /// not exist yet), records its location, reopens it, and leaves the vault
+    /// locked. The UI reloads afterwards.
+    pub fn switch_vault(path: Option<String>) -> Result<VaultStatus, String> {
+        service::switch_vault(path)
     }
 
-    /// Export an encrypted `.mendbak`; without `path` it is written into the
-    /// app data directory. The UI shows the resulting path.
-    pub fn export_backup(
-        path: Option<String>,
+    /// Ask the user for an existing vault file with the system dialog;
+    /// `null` when cancelled.
+    pub async fn pick_vault_file(
+        title: String,
+        button_label: String,
+        start_dir: Option<String>,
+    ) -> Result<Option<String>, String> {
+        service::pick_vault_file(title, button_label, start_dir).await
+    }
+
+    /// Ask the user where a new vault file should live (save dialog);
+    /// `null` when cancelled. The file itself is created by `setup`.
+    pub async fn pick_new_vault_file(
+        title: String,
+        button_label: String,
+        start_dir: Option<String>,
         file_name: Option<String>,
-        master_password: String,
-    ) -> Result<ExportResult, String> {
-        service::export_backup(path, file_name, master_password)
+    ) -> Result<Option<String>, String> {
+        service::pick_new_vault_file(title, button_label, start_dir, file_name).await
     }
 
-    /// Restore a `.mendbak` from a local path (desktop).
-    pub fn import_backup(path: String, master_password: String) -> Result<ImportResult, String> {
-        service::import_backup(path, master_password)
-    }
-
-    /// Restore a `.mendbak` from base64 bytes (works on every platform,
-    /// including the mobile file picker).
-    pub fn import_backup_base64(
-        data_base64: String,
-        master_password: String,
-    ) -> Result<ImportResult, String> {
-        service::import_backup_base64(data_base64, master_password)
-    }
-
-    /// Show the database's data directory in the system file manager
-    /// (desktop only).
-    pub async fn reveal_data_dir() -> Result<(), String> {
-        service::reveal_data_dir().await
+    /// Show the **current vault file** in the system file manager, with the
+    /// file selected (desktop only). Copying that file elsewhere is the
+    /// backup story: it holds every entry plus the master password material.
+    pub async fn reveal_vault_file() -> Result<(), String> {
+        service::reveal_vault_file().await
     }
 }

@@ -1,10 +1,11 @@
-import { computed, Text, token, View } from 'nsh'
+import { cleanup, computed, effect, signal, Text, token, View } from 'nsh'
 import type { JSX } from 'nsh'
 import { Button, Input, Menu, MenuItem, Switch, Tooltip, type SelectItem } from 'nsh/base'
 
 import { touchActivity } from '../lib/state'
 
 import { Icon, type IconName } from './Icon'
+import { ToastHost } from './ToastHost'
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 
@@ -457,10 +458,45 @@ export function Spinner(props: { label?: string }) {
 }
 
 /** 弹窗内容框：只负责尺寸与最大高度。
- *  拖动功能已移除（原 mouse 事件实现不稳定、易卡住）。 */
+ *  拖动功能已移除（原 mouse 事件实现不稳定、易卡住）。
+ *
+ *  这里同时挂一份 `ToastHost`：桌面端 `Dialog` 是**独立原生窗口层**，主界面
+ *  里的 Overlay 永远盖不住它的遮罩，所以提示条必须跟着弹窗一起抬上去
+ *  （`Overlay` 会自动挂到最近的 Dialog 根视图）。弹窗打开时主界面那份由
+ *  `modalOpen` 隐藏，避免同一句提示出现两次。 */
 export function ModalFrame(props: { class?: string; maxHeight?: number; children: JSX.Element }) {
   return (
     <View class={props.class} style={{ maxHeight: props.maxHeight }}>
+      {props.children}
+      <ToastHost />
+    </View>
+  )
+}
+
+/** 页面进入时的淡入：切换解锁页 / 主界面时不再硬切。
+ *
+ *  首帧必须停在起点、下一帧再切到终点，声明式的 `transition` 才会补间；
+ *  组件函数体只执行一次（Solid 语义），所以起点由 signal 决定、在挂载后的
+ *  第一帧里翻过来。 */
+export function FadeIn(props: { children: JSX.Element; duration?: number }) {
+  const shown = signal(false)
+  const duration = props.duration ?? 200
+
+  effect(() => {
+    const frame = requestAnimationFrame(() => shown.set(true))
+    cleanup(() => cancelAnimationFrame(frame))
+  })
+
+  return (
+    <View
+      class="flex-1"
+      style={{
+        opacity: shown() ? 1 : 0,
+        transitionProperty: 'opacity',
+        transitionDuration: duration,
+        transitionTimingFunction: 'ease-out',
+      }}
+    >
       {props.children}
     </View>
   )

@@ -129,9 +129,11 @@
     "passwordPlaceholder": "请输入密码",
     "confirmPasswordPlaceholder": "请再次输入主密码",
     "unlock": "解锁",
+    "unlocking": "解锁中…",
     "setupSubtitle": "首次使用，请设置一个主密码。主密码丢失将无法找回数据。",
     "confirm": "确认主密码",
     "create": "创建并进入",
+    "creating": "创建中…",
     "strengthLabel": "密码强度",
     "strength": {
       "weak": "弱",
@@ -144,8 +146,10 @@
       "tooShort": "主密码至少 4 位",
       "mismatch": "两次输入的主密码不一致",
       "wrongPassword": "主密码错误",
+      "deviceKey": "免主密码解锁的密钥已失效，请用主密码解锁后在设置里重新开启。",
       "preview": "当前为浏览器预览，解锁与读写仅在桌面应用中可用"
-    }
+    },
+    "dbFile": "数据库"
   },
   "generator": {
     "length": "长度",
@@ -192,27 +196,22 @@
     "purged": "已彻底删除",
     "purgedMany": "已清空 %{count} 条"
   },
-  "backup": {
-    "title": "备份与恢复",
-    "hint": "导出的是整库密文快照，受主密码保护；文件名不含敏感信息。恢复会覆盖当前库，旧库自动留底。",
-    "export": "导出备份",
-    "import": "恢复备份",
-    "dataDir": "数据目录",
-    "dataDirHint": "手动备份：先锁定或退出，再把库文件拷到 U 盘 / 移动硬盘；换机器后用同一主密码解锁",
-    "pickHint": "点“选择保存位置 / 选择备份文件”会弹出系统文件选择窗口，从系统弹窗里选，不用手动填路径。",
-    "chooseExport": "选择保存位置",
-    "chooseImport": "选择备份文件",
-    "noLocation": "未选择",
-    "passwordPlaceholder": "导出/恢复时验证身份",
-    "exportAction": "导出",
-    "importAction": "恢复并覆盖",
-    "exported": "已导出备份：%{path}（%{size}）",
-    "importConfirm": "恢复将用备份覆盖当前库，现有库会改名留底。继续？",
-    "imported": "恢复完成：%{entries} 条条目、%{categories} 个分类。请用该备份的主密码重新解锁。",
-    "revealData": "打开数据目录",
-    "invalidFile": "不是有效的 Mend 备份文件。",
-    "wrongPassword": "主密码错误或备份已损坏。",
-    "exportHint": "备份会写入下方显示的数据目录。"
+  "vault": {
+    "sectionTitle": "数据库文件",
+    "current": "当前文件",
+    "switch": "打开其他数据库文件…",
+    "create": "新建数据库文件…",
+    "useDefault": "使用默认位置",
+    "defaultBadge": "默认位置",
+    "hint": "所有条目、分类和主密码都在这一个文件里，它本身就是完整备份——直接拷贝这个文件（U 盘、同步盘、另一台机器）即可。也可以随时切换成别的库文件。",
+    "pickTitle": "选择数据库文件",
+    "pickButton": "使用此文件",
+    "createTitle": "新建数据库文件",
+    "createButton": "在这里新建",
+    "switched": "已切换到：%{path}",
+    "notDb": "选中的文件不是 Mend 数据库。",
+    "reveal": "在文件夹中显示",
+    "dirUnwritable": "该位置不可写（可能是只读目录或权限受限），请换一个文件夹。"
   },
   "settings": {
     "appearance": "外观与行为",
@@ -237,6 +236,13 @@
     "language": "语言",
     "languageSystem": "跟随系统",
     "security": "安全",
+    "deviceUnlock": "免主密码解锁",
+    "deviceUnlockHint": "启动时用本机保存的密钥直接打开密码库，不再询问主密码",
+    "deviceUnlockWarning": "开启后密钥会以明文保存在数据目录：任何能访问这台电脑或该目录的人都能直接读到密码库内容。只在确认这台电脑只有你自己使用时开启。",
+    "deviceUnlockConfirm": "开启后主密码将不再用于启动解锁，密钥会明文存放在数据目录，能访问这台电脑的人可以直接打开密码库。确定开启？",
+    "deviceUnlockEnable": "仍然开启",
+    "deviceUnlockOn": "已开启免主密码解锁",
+    "deviceUnlockOff": "已关闭免主密码解锁，下次启动需要输入主密码",
     "version": "版本"
   },
   "update": {
