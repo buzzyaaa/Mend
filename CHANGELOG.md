@@ -5,6 +5,19 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.4.6] - 2026-11-17
+
+预设值管理重做、条目预设改为展示值、密码生成器独立弹窗。
+
+#### Added
+- **预设排序**：预设弹窗内可用上移/下移按钮调整顺序，按类型分别持久化。
+- **预设说明选填**：预设「名称」改为「说明」且可留空；值必填。新增表单置顶并压成一行【值】【说明】【新增 X 预设】，按钮文案随所选类型变化。
+- **行内编辑保存按钮**：预设值/说明点击就地编辑，除失焦/回车外新增显式保存按钮。
+- **条目预设选择弹窗**：新增/编辑条目时，预设选择器弹层显示预设值（长文本可换行），说明以灰色小字显示在下方，条目间有浅灰分隔线。
+
+#### Changed
+- **密码生成器改为独立弹窗**：不再在条目表单内原地展开挤占布局；长度改为只允许数字的独立输入框，去掉重复显示的数字。
+
 ## [0.4.5] - 2026-11-16
 
 Documentation-only release: the English README is now the primary one, with a linked Chinese translation. The bundled binaries are functionally identical to 0.4.4.
