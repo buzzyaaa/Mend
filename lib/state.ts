@@ -695,6 +695,32 @@ export async function removePreset(id: string): Promise<void> {
   await refreshPresets()
 }
 
+/** 按给定顺序持久化某一类型的预设（只写 sort_order，不动密文）。 */
+export async function reorderPresets(fieldType: string, ids: string[]): Promise<void> {
+  try {
+    native.reorderPresets(fieldType, ids)
+    await refreshPresets()
+  } catch (error) {
+    showError(error)
+  }
+}
+
+/** 在当前类型的预设里上移 / 下移一位。 */
+export async function movePreset(preset: Preset, delta: number): Promise<void> {
+  const list = presets().filter((item) => item.fieldType === preset.fieldType)
+  const index = list.findIndex((item) => item.id === preset.id)
+  if (index < 0) return
+  const target = index + delta
+  if (target < 0 || target >= list.length) return
+  const next = [...list]
+  const [moved] = next.splice(index, 1)
+  next.splice(target, 0, moved)
+  await reorderPresets(
+    preset.fieldType,
+    next.map((item) => item.id),
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Password
 // ---------------------------------------------------------------------------

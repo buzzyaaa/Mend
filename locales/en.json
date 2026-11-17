@@ -152,6 +152,7 @@
     "dbFile": "Database"
   },
   "generator": {
+    "title": "Generate password",
     "length": "Length",
     "uppercase": "A-Z",
     "lowercase": "a-z",
@@ -162,6 +163,7 @@
     "fill": "Fill in",
     "hint": "Length 6–64, at least one character class; generated locally, no network",
     "open": "Generate",
+    "result": "Generated password",
     "placeholder": "Generated password appears here",
     "invalidOptions": "Choose at least one character set and a length that fits."
   },
@@ -170,11 +172,13 @@
     "hint": "Preset candidates for usernames, emails, phones and common passwords; encrypted at rest, visible only when unlocked",
     "empty": "No presets yet",
     "add": "Add preset",
+    "addFor": "Add %{type} preset",
     "edit": "Edit preset",
     "type": "Type",
-    "label": "Name",
-    "labelPlaceholder": "e.g. forum default",
+    "label": "Note",
+    "labelPlaceholder": "Note (optional)",
     "value": "Value",
+    "valuePlaceholder": "Value (required)",
     "choose": "Pick a preset",
     "deleteConfirm": "Delete this preset?",
     "types": {
@@ -183,7 +187,7 @@
       "phone": "Phone",
       "password": "Common password"
     },
-    "invalid": "Preset label and value are required."
+    "invalid": "Preset value is required."
   },
   "trash": {
     "empty": "Trash is empty",

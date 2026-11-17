@@ -123,6 +123,11 @@ export function deletePreset(id: string): void {
   return Vault.deletePreset(id)
 }
 
+/** Persist a manual order for presets of one field type (sort_order only). */
+export function reorderPresets(fieldType: string, ids: string[]): void {
+  return Vault.reorderPresets(fieldType, ids)
+}
+
 export function generatePassword(options: GeneratorOptions): string {
   return Vault.generatePassword(options)
 }

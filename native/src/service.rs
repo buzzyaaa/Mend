@@ -1408,6 +1408,12 @@ fn delete_preset_sync(id: String) -> Result<(), String> {
     db::delete_preset(require_conn(&backend)?, &id).map_err(domain)
 }
 
+fn reorder_presets_sync(field_type: String, ids: Vec<String>) -> Result<(), String> {
+    let backend = backend()?;
+    require_session(&backend)?;
+    db::reorder_presets(require_conn(&backend)?, &field_type, &ids).map_err(domain)
+}
+
 // ---------------------------------------------------------------------------
 // Generator
 // ---------------------------------------------------------------------------
@@ -1621,6 +1627,10 @@ pub fn update_preset(id: String, input: PresetInput) -> Result<Preset, String> {
 
 pub fn delete_preset(id: String) -> Result<(), String> {
     delete_preset_sync(id)
+}
+
+pub fn reorder_presets(field_type: String, ids: Vec<String>) -> Result<(), String> {
+    reorder_presets_sync(field_type, ids)
 }
 
 pub fn generate_password(options: GeneratorOptions) -> Result<String, String> {

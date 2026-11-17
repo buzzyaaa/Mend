@@ -174,6 +174,8 @@ export function TextField(props: {
   autoFocus?: boolean
   maxLength?: number
   onSubmit?: () => void
+  /** 失焦回调；行内编辑用它做「失焦即保存」。 */
+  onBlur?: () => void
   class?: string
   style?: Record<string, unknown>
   accessibilityLabel?: string
@@ -187,6 +189,7 @@ export function TextField(props: {
         touchActivity()
         props.onChange(event.value)
       }}
+      onBlur={props.onBlur ? () => props.onBlur?.() : undefined}
       placeholder={props.placeholder}
       multiline={!!props.multiline}
       autoFocus={props.autoFocus}

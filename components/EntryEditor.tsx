@@ -1,14 +1,16 @@
-import { effect, Scroll, signal, Text, token, View, windowSize } from 'nsh'
-import { Dialog, NumberInput, Tab, Tabs, TextView } from 'nsh/base'
+import { effect, Scroll, signal, Text, View, windowSize } from 'nsh'
+import { Dialog, Tab, Tabs, TextView } from 'nsh/base'
 import { t } from 'nsh/i18n'
 
 import { errorText } from '../lib/errors'
 import { categoryEmoji } from '../lib/category-icons'
 import { categories, confirm, entryEditor, presets, saveEntry } from '../lib/state'
-import type { EntryEditorState, EntryInput, Preset } from '../lib/types'
+import type { EntryEditorState, EntryInput } from '../lib/types'
 import { splitTags } from '../lib/format'
 import * as native from '../lib/native'
 import { Icon } from './Icon'
+import { GeneratorDialog } from './GeneratorDialog'
+import { PresetPicker } from './PresetPicker'
 import {
   ActionButton,
   Field,
@@ -42,12 +44,6 @@ function formKey(form: EntryInput, tagsText: string): string {
   return JSON.stringify({ ...form, tags: splitTags(tagsText) })
 }
 
-function presetItems(type: string): { value: string; title: string }[] {
-  return presets()
-    .filter((preset: Preset) => preset.fieldType === type)
-    .map((preset) => ({ value: preset.id, title: preset.label }))
-}
-
 function applyPreset(
   type: string,
   value: string | null,
@@ -74,16 +70,6 @@ export function EntryEditor(props: { state: EntryEditorState }) {
   const error = signal('')
   const tab = signal<'edit' | 'preview'>('edit')
   const generatorOpen = signal(false)
-  const generated = signal('')
-  const generatorError = signal('')
-  const generator = signal({
-    length: 16,
-    uppercase: true,
-    lowercase: true,
-    digits: true,
-    symbols: true,
-    excludeAmbiguous: false,
-  })
 
   effect(() => {
     const id = props.state.id
@@ -162,21 +148,6 @@ export function EntryEditor(props: { state: EntryEditorState }) {
     }
   }
 
-  async function generate() {
-    generatorError.set('')
-    try {
-      generated.set(await native.generatePassword(generator()))
-    } catch (cause) {
-      generatorError.set(errorText(cause))
-    }
-  }
-
-  function useGenerated() {
-    if (!generated()) return
-    form.update((current) => ({ ...current, password: generated() }))
-    generatorOpen.set(false)
-  }
-
   const categoryItems = [
     { value: '', title: t('entry.uncategorized') },
     ...categories().map((category) => ({
@@ -241,13 +212,11 @@ export function EntryEditor(props: { state: EntryEditorState }) {
                 />
               </Field>
             </View>
-            <If when={presetItems('username').length > 0}>
-              <View class="w-24 self-end">
-                <SelectField
-                  items={presetItems('username')}
-                  value={null}
-                  onChange={(value) => applyPreset('username', value, form)}
-                  placeholder={t('preset.choose')}
+            <If when={presets().some((preset) => preset.fieldType === 'username')}>
+              <View class="w-40 self-end">
+                <PresetPicker
+                  type="username"
+                  onPick={(id) => applyPreset('username', id, form)}
                 />
               </View>
             </If>
@@ -270,119 +239,20 @@ export function EntryEditor(props: { state: EntryEditorState }) {
                   <IconButton
                     icon="sparkles"
                     label={t('generator.open')}
-                    active={generatorOpen()}
-                    onPress={() => {
-                      generatorOpen.update((value) => !value)
-                      if (generatorOpen() && !generated()) void generate()
-                    }}
+                    onPress={() => generatorOpen.set(true)}
                   />
                 </View>
               </Field>
             </View>
-            <If when={presetItems('password').length > 0}>
-              <View class="w-24 self-end">
-                <SelectField
-                  items={presetItems('password')}
-                  value={null}
-                  onChange={(value) => applyPreset('password', value, form)}
-                  placeholder={t('preset.choose')}
+            <If when={presets().some((preset) => preset.fieldType === 'password')}>
+              <View class="w-40 self-end">
+                <PresetPicker
+                  type="password"
+                  onPick={(id) => applyPreset('password', id, form)}
                 />
               </View>
             </If>
           </View>
-
-          <If when={generatorOpen()}>
-            <View class="gap-3 rounded-lg border border-border bg-muted/40 p-3">
-              <View class="flex-row items-center justify-between gap-3">
-                <Text class="text-xs font-medium text-muted-foreground">
-                  {t('generator.length')}
-                </Text>
-                <View class="flex-row items-center gap-2">
-                  <Text class="text-xs text-muted-foreground">{String(generator().length)}</Text>
-                  <NumberInput
-                    value={generator().length}
-                    min={6}
-                    max={64}
-                    onChange={(event) => {
-                      const value = event.value
-                      if (value === null) return
-                      generator.update((current) => ({ ...current, length: value }))
-                    }}
-                    class="w-24"
-                  />
-                </View>
-              </View>
-              <View class="flex-row flex-wrap gap-x-6">
-                <View class="w-[45%]">
-                  <SwitchField
-                    label={t('generator.uppercase')}
-                    checked={generator().uppercase}
-                    onChange={(checked) =>
-                      generator.update((current) => ({ ...current, uppercase: checked }))
-                    }
-                  />
-                </View>
-                <View class="w-[45%]">
-                  <SwitchField
-                    label={t('generator.lowercase')}
-                    checked={generator().lowercase}
-                    onChange={(checked) =>
-                      generator.update((current) => ({ ...current, lowercase: checked }))
-                    }
-                  />
-                </View>
-                <View class="w-[45%]">
-                  <SwitchField
-                    label={t('generator.digits')}
-                    checked={generator().digits}
-                    onChange={(checked) =>
-                      generator.update((current) => ({ ...current, digits: checked }))
-                    }
-                  />
-                </View>
-                <View class="w-[45%]">
-                  <SwitchField
-                    label={t('generator.symbols')}
-                    checked={generator().symbols}
-                    onChange={(checked) =>
-                      generator.update((current) => ({ ...current, symbols: checked }))
-                    }
-                  />
-                </View>
-              </View>
-              <SwitchField
-                label={t('generator.excludeAmbiguous')}
-                checked={generator().excludeAmbiguous}
-                onChange={(checked) =>
-                  generator.update((current) => ({
-                    ...current,
-                    excludeAmbiguous: checked,
-                  }))
-                }
-              />
-              <View class="flex-row items-center gap-2">
-                <View class="flex-1 rounded-md border border-border bg-background px-3 py-2">
-                  <Text class="text-xs font-mono text-foreground">
-                    {generated() || t('generator.placeholder')}
-                  </Text>
-                </View>
-                <ActionButton
-                  label={t('generator.regenerate')}
-                  icon="refresh"
-                  onPress={() => void generate()}
-                />
-                <ActionButton
-                  label={t('generator.fill')}
-                  icon="check"
-                  variant="primary"
-                  onPress={useGenerated}
-                />
-              </View>
-              <If when={generatorError()}>
-                <Text class="text-xs text-destructive">{generatorError()}</Text>
-              </If>
-            </View>
-          </If>
 
           <View class="flex-row gap-3">
             <View class="flex-1">
@@ -395,14 +265,9 @@ export function EntryEditor(props: { state: EntryEditorState }) {
                 />
               </Field>
             </View>
-            <If when={presetItems('email').length > 0}>
-              <View class="w-24 self-end">
-                <SelectField
-                  items={presetItems('email')}
-                  value={null}
-                  onChange={(value) => applyPreset('email', value, form)}
-                  placeholder={t('preset.choose')}
-                />
+            <If when={presets().some((preset) => preset.fieldType === 'email')}>
+              <View class="w-40 self-end">
+                <PresetPicker type="email" onPick={(id) => applyPreset('email', id, form)} />
               </View>
             </If>
           </View>
@@ -418,14 +283,9 @@ export function EntryEditor(props: { state: EntryEditorState }) {
                 />
               </Field>
             </View>
-            <If when={presetItems('phone').length > 0}>
-              <View class="w-24 self-end">
-                <SelectField
-                  items={presetItems('phone')}
-                  value={null}
-                  onChange={(value) => applyPreset('phone', value, form)}
-                  placeholder={t('preset.choose')}
-                />
+            <If when={presets().some((preset) => preset.fieldType === 'phone')}>
+              <View class="w-40 self-end">
+                <PresetPicker type="phone" onPick={(id) => applyPreset('phone', id, form)} />
               </View>
             </If>
           </View>
@@ -530,24 +390,31 @@ export function EntryEditor(props: { state: EntryEditorState }) {
   )
 
   return (
-    <Dialog
-      open={true}
-      closeOnBackdropPress={false}
-      closeOnEscape={false}
-      animation="fade"
-      accessibilityLabel={props.state.id ? t('entry.dialogEdit') : t('entry.dialogCreate')}
-      class={MODAL_CLASS}
-      backdropClass={MODAL_BACKDROP_CLASS}
-      style={{ width: 760, maxWidth: '94%' }}
-    >
-      <ModalFrame
-        class="overflow-hidden rounded-xl border border-border bg-card shadow-xl"
-        maxHeight={Math.max(360, windowSize().height - 72)}
+    <>
+      <Dialog
+        open={true}
+        closeOnBackdropPress={false}
+        closeOnEscape={false}
+        animation="fade"
+        accessibilityLabel={props.state.id ? t('entry.dialogEdit') : t('entry.dialogCreate')}
+        class={MODAL_CLASS}
+        backdropClass={MODAL_BACKDROP_CLASS}
+        style={{ width: 760, maxWidth: '94%' }}
       >
-        <Scroll style={{ maxHeight: Math.max(360, windowSize().height - 72) }} contentClass="p-4">
-          {body}
-        </Scroll>
-      </ModalFrame>
-    </Dialog>
+        <ModalFrame
+          class="overflow-hidden rounded-xl border border-border bg-card shadow-xl"
+          maxHeight={Math.max(360, windowSize().height - 72)}
+        >
+          <Scroll style={{ maxHeight: Math.max(360, windowSize().height - 72) }} contentClass="p-4">
+            {body}
+          </Scroll>
+        </ModalFrame>
+      </Dialog>
+      <GeneratorDialog
+        open={generatorOpen()}
+        onClose={() => generatorOpen.set(false)}
+        onUse={(password) => form.update((current) => ({ ...current, password }))}
+      />
+    </>
   )
 }

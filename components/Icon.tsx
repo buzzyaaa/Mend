@@ -13,6 +13,7 @@ import arrowDown from '../assets/icons/arrow-down.svg'
 import arrowUp from '../assets/icons/arrow-up.svg'
 import check from '../assets/icons/check.svg'
 import chevronDown from '../assets/icons/chevron-down.svg'
+import clipboardList from '../assets/icons/clipboard-list.svg'
 import chevronLeft from '../assets/icons/chevron-left.svg'
 import chevronRight from '../assets/icons/chevron-right.svg'
 import close from '../assets/icons/close.svg'
@@ -60,6 +61,7 @@ export type IconName =
   | 'chevron-down'
   | 'chevron-left'
   | 'chevron-right'
+  | 'clipboard-list'
   | 'close'
   | 'copy'
   | 'database'
@@ -105,6 +107,7 @@ const ICON_ASSETS: Record<IconName, ImageAsset> = {
   'chevron-down': chevronDown,
   'chevron-left': chevronLeft,
   'chevron-right': chevronRight,
+  'clipboard-list': clipboardList,
   close,
   copy,
   database,

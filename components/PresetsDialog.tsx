@@ -1,13 +1,20 @@
-import { Scroll, signal, Text, View, windowSize } from 'nsh'
+import { Scroll, signal, Text, token, View, windowSize } from 'nsh'
 import { Dialog, Tab, Tabs } from 'nsh/base'
 import { t } from 'nsh/i18n'
 
-import { confirm, presets, presetsOpen, removePreset, savePreset } from '../lib/state'
+import {
+  confirm,
+  movePreset,
+  presets,
+  presetsOpen,
+  removePreset,
+  savePreset,
+} from '../lib/state'
 import type { Preset, PresetInput } from '../lib/types'
+import { Icon } from './Icon'
 import {
   ActionButton,
   EmptyState,
-  Field,
   IconButton,
   TextField,
   MODAL_BACKDROP_CLASS,
@@ -22,9 +29,141 @@ function typeLabel(type: string): string {
   return t(`preset.types.${type}`)
 }
 
+/** 值在前面且必填，说明在后面且选填；点击任一字段就地编辑，失焦/回车/保存按钮提交。
+ *  只提交被改的字段，说明可以清空。 */
+function PresetRow(props: {
+  preset: Preset
+  index: number
+  total: number
+  onInvalid: () => void
+}) {
+  const editing = signal<'value' | 'label' | null>(null)
+  const draft = signal('')
+  const busy = signal(false)
+
+  function begin(field: 'value' | 'label') {
+    if (busy()) return
+    draft.set(field === 'value' ? props.preset.value : props.preset.label)
+    editing.set(field)
+  }
+
+  async function commit() {
+    const field = editing()
+    if (!field || busy()) return
+    const next = draft().trim()
+    const current = props.preset
+    const original = field === 'value' ? current.value : current.label
+    editing.set(null)
+    if (field === 'value' && !next) {
+      props.onInvalid()
+      return
+    }
+    if (next === original) return
+
+    const input: PresetInput = {
+      fieldType: current.fieldType,
+      label: field === 'label' ? next : current.label,
+      value: field === 'value' ? next : current.value,
+    }
+    busy.set(true)
+    try {
+      await savePreset(input, current.id)
+    } finally {
+      busy.set(false)
+    }
+  }
+
+  function fieldView(field: 'value' | 'label') {
+    return (
+      <If
+        when={editing() === field}
+        else={
+          <View
+            class="flex h-7 min-w-0 flex-1 items-center rounded px-1.5 hover:bg-accent/60 active:opacity-70"
+            onPress={() => begin(field)}
+          >
+            <Text
+              class={
+                field === 'value'
+                  ? 'text-xs font-medium text-foreground'
+                  : 'text-xs text-muted-foreground'
+              }
+              style={{ numberOfLines: 1 }}
+            >
+              {field === 'value'
+                ? props.preset.value
+                : props.preset.label.trim() || '—'}
+            </Text>
+          </View>
+        }
+      >
+        <TextField
+          value={draft()}
+          onChange={draft.set}
+          onBlur={() => void commit()}
+          onSubmit={() => void commit()}
+          autoFocus
+          maxLength={field === 'value' ? 512 : 40}
+          accessibilityLabel={field === 'value' ? t('preset.value') : t('preset.label')}
+          class="h-7 border-primary bg-background px-1.5"
+        />
+      </If>
+    )
+  }
+
+  return (
+    <View class="flex-row items-center gap-1.5 rounded-lg border border-border bg-background px-1.5 py-1">
+      <View class="flex min-w-0 flex-row items-center" style={{ flex: 3 }}>
+        {fieldView('value')}
+      </View>
+      <View class="flex min-w-0 flex-row items-center" style={{ flex: 2 }}>
+        {fieldView('label')}
+      </View>
+      <IconButton
+        icon="check"
+        label={t('common.save')}
+        size={14}
+        class="h-7 w-7"
+        disabled={!editing() || busy()}
+        onPress={() => void commit()}
+      />
+      <IconButton
+        icon="arrow-up"
+        label={t('entry.moveUp')}
+        size={14}
+        class="h-7 w-7"
+        disabled={props.index === 0 || busy()}
+        onPress={() => void movePreset(props.preset, -1)}
+      />
+      <IconButton
+        icon="arrow-down"
+        label={t('entry.moveDown')}
+        size={14}
+        class="h-7 w-7"
+        disabled={props.index === props.total - 1 || busy()}
+        onPress={() => void movePreset(props.preset, 1)}
+      />
+      <IconButton
+        icon="trash"
+        label={t('common.delete')}
+        size={14}
+        class="h-7 w-7"
+        onPress={() =>
+          confirm.set({
+            title: t('preset.edit'),
+            message: t('preset.deleteConfirm'),
+            confirmLabel: t('common.delete'),
+            destructive: true,
+            onConfirm: () => void removePreset(props.preset.id),
+          })
+        }
+      />
+    </View>
+  )
+}
+
 export function PresetsDialog() {
   const activeType = signal<PresetType>('username')
-  const editingId = signal<string | null>(null)
   const label = signal('')
   const value = signal('')
   const error = signal('')
@@ -33,25 +172,17 @@ export function PresetsDialog() {
   const forType = (type: string) => presets().filter((preset) => preset.fieldType === type)
 
   function resetForm() {
-    editingId.set(null)
     label.set('')
     value.set('')
     error.set('')
   }
 
-  function startEdit(preset: Preset) {
-    editingId.set(preset.id)
-    label.set(preset.label)
-    value.set(preset.value)
-    error.set('')
-  }
-
   async function submit() {
     if (busy()) return
-    const trimmedLabel = label().trim()
     const trimmedValue = value().trim()
-    if (!trimmedLabel || !trimmedValue) {
-      error.set(t('preset.hint'))
+    const trimmedLabel = label().trim()
+    if (!trimmedValue) {
+      error.set(t('preset.invalid'))
       return
     }
     busy.set(true)
@@ -61,7 +192,7 @@ export function PresetsDialog() {
         label: trimmedLabel,
         value: trimmedValue,
       }
-      const result = await savePreset(input, editingId())
+      const result = await savePreset(input, null)
       if (result) resetForm()
     } finally {
       busy.set(false)
@@ -98,6 +229,44 @@ export function PresetsDialog() {
           />
         </View>
 
+        {/* 新增表单置顶：一行 [值（必填）][说明（选填）][新增]，新增到当前选中的类型 */}
+        <View class="gap-1.5 rounded-lg border border-border bg-muted/40 p-2.5">
+          <View class="flex-row items-center gap-2">
+            <View class="flex min-w-0 flex-1 flex-row items-center">
+              <TextField
+                value={value()}
+                onChange={value.set}
+                placeholder={t('preset.valuePlaceholder')}
+                maxLength={512}
+                accessibilityLabel={t('preset.value')}
+                onSubmit={() => void submit()}
+                class="h-8"
+              />
+            </View>
+            <View class="flex min-w-0 flex-1 flex-row items-center">
+              <TextField
+                value={label()}
+                onChange={label.set}
+                placeholder={t('preset.labelPlaceholder')}
+                maxLength={40}
+                accessibilityLabel={t('preset.label')}
+                onSubmit={() => void submit()}
+                class="h-8"
+              />
+            </View>
+            <ActionButton
+              label={t('preset.addFor', { type: typeLabel(activeType()) })}
+              variant="primary"
+              icon="plus"
+              disabled={busy()}
+              onPress={() => void submit()}
+            />
+          </View>
+          <If when={error()}>
+            <Text class="text-xs text-destructive">{error()}</Text>
+          </If>
+        </View>
+
         <Tabs class="flex-row gap-1 rounded-lg bg-muted p-1">
           <Each of={TYPES} key={(type) => type}>
             {(type) => (
@@ -117,95 +286,21 @@ export function PresetsDialog() {
           </Each>
         </Tabs>
 
-        <Scroll class="min-h-[160px] max-h-[260px]" contentClass="gap-1">
+        <Scroll class="min-h-[160px] max-h-[260px]" contentClass="gap-1.5">
           <If when={forType(activeType()).length === 0}>
-            <EmptyState icon="key" title={t('preset.empty')} />
+            <EmptyState icon="clipboard-list" title={t('preset.empty')} />
           </If>
           <Each of={forType(activeType())} key={(preset) => preset.id}>
-            {(preset) => {
-              const item = preset()
-              return (
-                <View class="flex-row items-center gap-3 rounded-md border border-border bg-background px-3 py-2">
-                  <View class="flex-1 gap-0.5">
-                    <Text class="text-xs font-medium text-foreground">{item.label}</Text>
-                    <Text class="text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>
-                      {item.value}
-                    </Text>
-                  </View>
-                  <IconButton
-                    icon="edit"
-                    label={t('preset.edit')}
-                    onPress={() => startEdit(item)}
-                  />
-                  <IconButton
-                    icon="trash"
-                    label={t('common.delete')}
-                    onPress={() =>
-                      confirm.set({
-                        title: t('preset.edit'),
-                        message: t('preset.deleteConfirm'),
-                        confirmLabel: t('common.delete'),
-                        destructive: true,
-                        onConfirm: () => void removePreset(item.id),
-                      })
-                    }
-                  />
-                </View>
-              )
-            }}
+            {(preset, index) => (
+              <PresetRow
+                preset={preset()}
+                index={index()}
+                total={forType(activeType()).length}
+                onInvalid={() => error.set(t('preset.invalid'))}
+              />
+            )}
           </Each>
         </Scroll>
-
-        <View class="gap-3 rounded-lg border border-border bg-muted/30 p-3">
-          <View class="flex-row items-center justify-between">
-            <Text class="text-xs font-medium text-foreground">
-              {editingId() ? t('preset.edit') : t('preset.add')}
-            </Text>
-            <View class="rounded-full bg-muted px-2 py-0.5">
-              <Text class="text-[11px] text-muted-foreground">{typeLabel(activeType())}</Text>
-            </View>
-          </View>
-          <View class="flex-row flex-wrap items-end gap-2">
-            <View class="w-40">
-              <Field label={t('preset.label')}>
-                <TextField
-                  value={label()}
-                  onChange={label.set}
-                  placeholder={t('preset.labelPlaceholder')}
-                  maxLength={40}
-                  accessibilityLabel={t('preset.label')}
-                />
-              </Field>
-            </View>
-            <View class="flex-1">
-              <Field label={t('preset.value')}>
-                <TextField
-                  value={value()}
-                  onChange={value.set}
-                  placeholder={t('preset.value')}
-                  accessibilityLabel={t('preset.value')}
-                />
-              </Field>
-            </View>
-            <View class="justify-end">
-              <ActionButton
-                label={editingId() ? t('common.save') : t('preset.add')}
-                variant="primary"
-                icon={editingId() ? 'check' : 'plus'}
-                disabled={busy()}
-                onPress={() => void submit()}
-              />
-            </View>
-          </View>
-          <If when={editingId()}>
-            <View class="flex-row justify-end">
-              <ActionButton label={t('common.cancel')} variant="ghost" onPress={resetForm} />
-            </View>
-          </If>
-          <If when={error()}>
-            <Text class="text-xs text-destructive">{error()}</Text>
-          </If>
-        </View>
 
         <View class="flex-row justify-end">
           <ActionButton

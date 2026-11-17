@@ -184,6 +184,11 @@ impl Vault {
         service::delete_preset(id)
     }
 
+    /// Persist a manual order for presets of one field type.
+    pub fn reorder_presets(field_type: String, ids: Vec<String>) -> Result<(), String> {
+        service::reorder_presets(field_type, ids)
+    }
+
     /// Generate a password from the local CSPRNG. Nothing is persisted.
     pub fn generate_password(options: GeneratorOptions) -> Result<String, String> {
         service::generate_password(options)

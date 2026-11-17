@@ -107,7 +107,11 @@ export function AppHeader(props: { compact: () => boolean; onOpenCategories?: ()
                 })
               }
             />
-            <IconButton icon="key" label={t('nav.presets')} onPress={() => presetsOpen.set(true)} />
+            <IconButton
+              icon="clipboard-list"
+              label={t('nav.presets')}
+              onPress={() => presetsOpen.set(true)}
+            />
             <IconButton
               icon="settings"
               label={t('nav.settings')}
@@ -121,7 +125,11 @@ export function AppHeader(props: { compact: () => boolean; onOpenCategories?: ()
       <If when={props.compact()}>
         <View class="flex-row items-center gap-1.5 px-2.5 pb-2">
           {search}
-          <IconButton icon="key" label={t('nav.presets')} onPress={() => presetsOpen.set(true)} />
+          <IconButton
+            icon="clipboard-list"
+            label={t('nav.presets')}
+            onPress={() => presetsOpen.set(true)}
+          />
           <IconButton icon="lock" label={t('header.lock')} onPress={() => void lockVault()} />
         </View>
       </If>

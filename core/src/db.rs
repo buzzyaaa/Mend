@@ -787,6 +787,30 @@ pub fn next_preset_sort(conn: &Connection) -> MendResult<i64> {
     Ok(max.unwrap_or(0) + 1)
 }
 
+/// 按 UI 提交的顺序重排某一类型的预设：只写 `sort_order`，密文与其他列原样不动
+/// （AAD 绑定 `id:value`，任何重加密都会改变密文）。`ids` 是该类型的完整有序列表，
+/// 逐条赋 `0..n-1`；不属于该类型或不存在的 id 被 UPDATE 静默跳过，空列表是合法空操作。
+/// 显式 `BEGIN IMMEDIATE` 先拿写锁，避免事务内读→写升级触发 SQLITE_BUSY。
+pub fn reorder_presets(conn: &Connection, field_type: &str, ids: &[String]) -> MendResult<()> {
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate).map_err(db_err)?;
+    let mut order = 0i64;
+    for id in ids {
+        // 只有真正命中的行才占用排序号：混入的其他类型 id 既跳过更新、也不占号，
+        // 保证目标类型始终是紧凑的 0..n-1。
+        let changed = tx
+            .execute(
+                "UPDATE presets SET sort_order = ?2 WHERE id = ?1 AND field_type = ?3",
+                params![id, order, field_type],
+            )
+            .map_err(db_err)?;
+        if changed > 0 {
+            order += 1;
+        }
+    }
+    tx.commit().map_err(db_err)?;
+    Ok(())
+}
+
 fn map_entry_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EntryRowEnc> {
     Ok(EntryRowEnc {
         id: row.get(0)?,
@@ -1061,6 +1085,60 @@ mod tests {
             .map(|id| get_entry(&conn, id).unwrap().unwrap().sort_order)
             .collect();
         assert_eq!(orders, vec![2, 1, 0]);
+    }
+
+    /// 预设重排只改 sort_order：按传入顺序紧凑赋值，且严格限制在指定 field_type 内，
+    /// 另一类型的排序号与密文列不受影响。
+    #[test]
+    fn reorder_presets_scopes_sort_order_per_type_and_keeps_ciphertext() {
+        let conn = mem_db();
+        let preset_row = |id: &str, field_type: &str, sort_order: i64| PresetRowEnc {
+            id: id.into(),
+            field_type: field_type.into(),
+            label: format!("label-{id}"),
+            value_enc: format!("enc-{id}"),
+            sort_order,
+            created_at: 1,
+        };
+        // username: a=1, b=2, c=3；email: x=1（另一类型，不该被碰到）
+        insert_preset(&conn, &preset_row("a", "username", 1)).unwrap();
+        insert_preset(&conn, &preset_row("b", "username", 2)).unwrap();
+        insert_preset(&conn, &preset_row("c", "username", 3)).unwrap();
+        insert_preset(&conn, &preset_row("x", "email", 1)).unwrap();
+
+        // 把 username 重排为 c → a → b；混入 email 的 x 应被 WHERE 过滤掉。
+        reorder_presets(
+            &conn,
+            "username",
+            &[
+                "c".to_string(),
+                "a".to_string(),
+                "x".to_string(),
+                "b".to_string(),
+            ],
+        )
+        .unwrap();
+
+        let list = list_presets(&conn).unwrap();
+        let get = |id: &str| list.iter().find(|row| row.id == id).unwrap();
+        assert_eq!(get("c").sort_order, 0);
+        assert_eq!(get("a").sort_order, 1);
+        assert_eq!(get("b").sort_order, 2);
+        // 另一类型原样不动（sort_order 与密文均未变）。
+        assert_eq!(get("x").sort_order, 1);
+        assert_eq!(get("x").value_enc, "enc-x");
+        assert_eq!(get("a").value_enc, "enc-a");
+        // 空列表合法空操作。
+        reorder_presets(&conn, "username", &[]).unwrap();
+        assert_eq!(
+            list_presets(&conn)
+                .unwrap()
+                .iter()
+                .find(|row| row.id == "c")
+                .unwrap()
+                .sort_order,
+            0
+        );
     }
 
     #[test]

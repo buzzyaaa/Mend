@@ -152,6 +152,7 @@
     "dbFile": "数据库"
   },
   "generator": {
+    "title": "生成密码",
     "length": "长度",
     "uppercase": "大写",
     "lowercase": "小写",
@@ -162,6 +163,7 @@
     "fill": "填入",
     "hint": "长度 6–64，至少选择一类字符；本地生成，不联网",
     "open": "生成",
+    "result": "生成的密码",
     "placeholder": "生成的密码会显示在这里",
     "invalidOptions": "至少选择一类字符，且长度要足够。"
   },
@@ -170,11 +172,13 @@
     "hint": "账号 / 邮箱 / 手机号 / 常用密码的候选值，落盘加密，仅解锁后可见",
     "empty": "还没有预设值",
     "add": "新增预设",
+    "addFor": "新增%{type}预设",
     "edit": "编辑预设",
     "type": "类型",
-    "label": "名称",
-    "labelPlaceholder": "例如：论坛通用",
+    "label": "说明",
+    "labelPlaceholder": "说明（选填）",
     "value": "值",
+    "valuePlaceholder": "值（必填）",
     "choose": "选择预设",
     "deleteConfirm": "确定删除该预设？",
     "types": {
@@ -183,7 +187,7 @@
       "phone": "手机号",
       "password": "常用密码"
     },
-    "invalid": "预设名称和值不能为空。"
+    "invalid": "预设值不能为空。"
   },
   "trash": {
     "empty": "回收站是空的",

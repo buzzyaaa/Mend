@@ -38,10 +38,8 @@ fn validate(input: &PresetInput) -> MendResult<(String, String, String)> {
             input.field_type
         )));
     }
+    // label 可为空：trim + 长度上限，空串照常存储；AAD 只绑 id:value，空 label 安全。
     let label = input.label.trim();
-    if label.is_empty() {
-        return Err(MendError::Vault("预设名称不能为空".into()));
-    }
     if label.chars().count() > LABEL_MAX {
         return Err(MendError::Vault(format!(
             "预设名称过长（上限 {LABEL_MAX} 字）"
@@ -138,11 +136,18 @@ mod tests {
         );
 
         let mut bad = input();
-        bad.label = "  ".into();
-        assert!(encrypt_input(&DEK, "p3", &bad, 1, 1).is_err());
-
-        let mut bad = input();
         bad.value = String::new();
         assert!(encrypt_input(&DEK, "p4", &bad, 1, 1).is_err());
+    }
+
+    #[test]
+    fn preset_accepts_empty_label() {
+        let mut empty = input();
+        empty.label = "".into();
+        let row = encrypt_input(&DEK, "p6", &empty, 1, 1).expect("空 label 允许");
+        assert_eq!(row.label, "");
+        let view = decrypt_row(&DEK, &row).expect("解密");
+        assert_eq!(view.label, "");
+        assert_eq!(view.value, "alice@example.com");
     }
 }
