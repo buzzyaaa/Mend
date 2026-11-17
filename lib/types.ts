@@ -18,6 +18,12 @@ export type {
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 
+/** 列表列标识，供列显示/隐藏配置使用。 */
+export type ColumnKey = 'username' | 'password' | 'email' | 'phone' | 'notes'
+
+/** 可由用户拖动调整宽度的两列。 */
+export type ResizableColumnKey = 'check' | 'actions'
+
 export interface Preferences {
   language: string | null
   theme: ThemeMode
@@ -26,6 +32,10 @@ export interface Preferences {
   lastUpdateCheckTs: number
   /** Desktop three-column widths (sidebar, list); the detail column takes the rest. */
   columnSizes: number[]
+  /** 列表各列是否显示。 */
+  visibleColumns: Record<ColumnKey, boolean>
+  /** 用户拖动调整后的「选择 / 操作」列宽（points）。 */
+  columnWidths: Record<ResizableColumnKey, number>
 }
 
 export type SortMode = 'updated' | 'title' | 'favorite' | 'manual'

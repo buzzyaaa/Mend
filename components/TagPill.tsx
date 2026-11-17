@@ -52,25 +52,33 @@ const PALETTE: ReadonlyArray<{ light: TagColor; dark: TagColor }> = [
   },
 ]
 
-/** djb2 稳定 hash → 色板下标。同样文字永远落到同一槽位，不依赖 render 次数。 */
+/** 标签显示/配色统一用的纯文字：剥掉开头单个 `#`，让 `work` 与 `#work` 等价。 */
+function plainLabel(label: string): string {
+  return label.replace(/^#/, '')
+}
+
+/** djb2 稳定 hash → 色板下标。同样文字永远落到同一槽位，不依赖 render 次数。
+ *  先去 `#` 再 hash，保证 `tagColorIndex('work') === tagColorIndex('#work')`。 */
 export function tagColorIndex(tag: string): number {
+  const text = plainLabel(tag)
   let hash = 5381
-  for (let i = 0; i < tag.length; i++) {
-    hash = ((hash << 5) + hash + tag.charCodeAt(i)) >>> 0
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) + hash + text.charCodeAt(i)) >>> 0
   }
   return hash % PALETTE.length
 }
 
-/** 按当前主题返回标签配色。内部读取响应式 `colorScheme()`，需在 JSX
- *  （style 表达式）里调用才能随主题切换更新，不要在组件函数体里快照。 */
+/** 按当前主题返回标签配色。`tagColorIndex` 已先去 `#`，故 `tagColor('work') === tagColor('#work')`。
+ *  内部读取响应式 `colorScheme()`，需在 JSX（style 表达式）里调用才能随主题切换更新，
+ *  不要在组件函数体里快照。 */
 export function tagColor(tag: string): TagColor {
   const slot = PALETTE[tagColorIndex(tag)]
   return colorScheme() === 'dark' ? slot.dark : slot.light
 }
 
-/** 单个「小胶囊」标签：圆角底色 + 彩色文字。颜色按 label 确定性生成。 */
+/** 单个「小胶囊」标签：圆角底色 + 彩色文字。颜色按去 `#` 后的纯文字确定性生成。 */
 export function TagPill(props: {
-  /** 完整显示文字，含 `#` 前缀，如 `#work`。 */
+  /** 标签文字，可带 `#` 前缀（如 `#work`）也可不带；显示时一律去掉开头 `#`。 */
   label: string
   onPress?: () => void
   class?: string
@@ -87,7 +95,7 @@ export function TagPill(props: {
         class="text-[11px] font-medium"
         style={{ color: color().foreground, numberOfLines: 1, lineHeight: 15 }}
       >
-        {props.label}
+        {plainLabel(props.label)}
       </Text>
     </View>
   )

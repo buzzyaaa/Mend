@@ -2,9 +2,22 @@ import { setColorScheme, signal } from 'nsh'
 import { setLocale } from 'nsh/i18n'
 
 import * as native from './native'
-import type { Preferences, ThemeMode } from './types'
+import type {
+  ColumnKey,
+  Preferences,
+  ResizableColumnKey,
+  ThemeMode,
+} from './types'
 
 const DEFAULT_COLUMN_SIZES = [240, 360]
+const COLUMN_KEYS: readonly ColumnKey[] = ['username', 'password', 'email', 'phone', 'notes']
+const RESIZABLE_COLUMN_KEYS: readonly ResizableColumnKey[] = ['check', 'actions']
+/** 默认宽度需与 EntryList 的 COL.check / COL.actions 类保持一致（w-5=20, w-[72px]=72）。 */
+const DEFAULT_COLUMN_WIDTHS: Record<ResizableColumnKey, number> = { check: 20, actions: 72 }
+const COLUMN_WIDTH_RANGE: Record<ResizableColumnKey, { min: number; max: number }> = {
+  check: { min: 16, max: 64 },
+  actions: { min: 44, max: 200 },
+}
 const COLUMN_MIN = 160
 const COLUMN_MAX = 640
 
@@ -15,6 +28,8 @@ const DEFAULTS: Preferences = {
   updateCheckIntervalDays: 7,
   lastUpdateCheckTs: 0,
   columnSizes: [...DEFAULT_COLUMN_SIZES],
+  visibleColumns: { username: true, password: true, email: true, phone: true, notes: true },
+  columnWidths: { ...DEFAULT_COLUMN_WIDTHS },
 }
 
 export const preferences = signal<Preferences>({ ...DEFAULTS })
@@ -41,6 +56,33 @@ function sanitizeColumns(value: unknown): number[] {
   return sizes.map((size) => Math.max(COLUMN_MIN, Math.min(COLUMN_MAX, size)))
 }
 
+/** 逐键白名单重建：缺省或类型错误一律回落默认全 true。 */
+function sanitizeVisibleColumns(value: unknown): Record<ColumnKey, boolean> {
+  const raw = (value && typeof value === 'object' ? value : {}) as Partial<Record<ColumnKey, unknown>>
+  const result = {} as Record<ColumnKey, boolean>
+  for (const key of COLUMN_KEYS) {
+    result[key] = typeof raw[key] === 'boolean' ? (raw[key] as boolean) : true
+  }
+  return result
+}
+
+/** 逐键白名单重建：缺省或非法一律回落默认，并按列范围 clamp。 */
+function sanitizeColumnWidths(value: unknown): Record<ResizableColumnKey, number> {
+  const raw = (value && typeof value === 'object' ? value : {}) as Partial<
+    Record<ResizableColumnKey, unknown>
+  >
+  const result = {} as Record<ResizableColumnKey, number>
+  for (const key of RESIZABLE_COLUMN_KEYS) {
+    const size = Number(raw[key])
+    const { min, max } = COLUMN_WIDTH_RANGE[key]
+    result[key] =
+      Number.isFinite(size) && size > 0
+        ? Math.max(min, Math.min(max, Math.round(size)))
+        : DEFAULT_COLUMN_WIDTHS[key]
+  }
+  return result
+}
+
 function sanitize(raw: unknown): Preferences {
   if (!raw || typeof raw !== 'object') return { ...DEFAULTS }
   const value = raw as Partial<Preferences>
@@ -59,6 +101,8 @@ function sanitize(raw: unknown): Preferences {
       : DEFAULTS.updateCheckIntervalDays,
     lastUpdateCheckTs: Number.isFinite(lastCheck) && lastCheck >= 0 ? lastCheck : 0,
     columnSizes: sanitizeColumns(value.columnSizes),
+    visibleColumns: sanitizeVisibleColumns(value.visibleColumns),
+    columnWidths: sanitizeColumnWidths(value.columnWidths),
   }
 }
 
@@ -124,6 +168,14 @@ export function setAutoLockMinutes(minutes: number): void {
 
 export function setColumnSizes(sizes: number[]): void {
   updatePreferences({ columnSizes: sizes })
+}
+
+export function setColumnVisible(column: ColumnKey, visible: boolean): void {
+  updatePreferences({ visibleColumns: { ...preferences().visibleColumns, [column]: visible } })
+}
+
+export function setColumnWidths(widths: Record<ResizableColumnKey, number>): void {
+  updatePreferences({ columnWidths: sanitizeColumnWidths(widths) })
 }
 
 export function setUpdateCheckIntervalDays(days: number): void {

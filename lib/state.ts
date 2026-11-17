@@ -48,7 +48,8 @@ export const presets = signal<Preset[]>([])
 
 export const bucket = signal<string>('all')
 export const keyword = signal('')
-export const tagFilter = signal<string | null>(null)
+/** 标签筛选：空数组 = 不限；多个标签按 OR 语义（命中任一即显示）。 */
+export const tagFilters = signal<string[]>([])
 export const sortBy = signal<SortMode>('updated')
 
 export const selectedId = signal<string | null>(null)
@@ -62,6 +63,10 @@ export const activePage = signal<'entries' | 'settings'>('entries')
  *  避免上万条一次性解密把引擎线程卡住。 */
 export type FieldValues = { username: string; password: string; email: string; phone: string }
 export const entryFields = signal<Record<string, FieldValues>>({})
+/** 与 entryFields 并行填充的备注明文（列表行备注简写用），锁定即清空。 */
+export const entryNotes = signal<Record<string, string>>({})
+/** 备注编辑弹窗：null = 关闭，字符串 = 要编辑备注的 entry id。 */
+export const notesEditor = signal<string | null>(null)
 
 /** 滚动加载：一次加载/解密的条目数。 */
 export const PAGE_SIZE = 50
@@ -108,6 +113,7 @@ export const modalOpen = computed<boolean>(
     entryEditor() !== null ||
     categoryEditor() !== null ||
     categoriesSheetOpen() ||
+    notesEditor() !== null ||
     updatePromptOpen(),
 )
 
@@ -302,11 +308,14 @@ async function applyVaultFile(path: string | null): Promise<void> {
     // 切换后原库的列表还在内存里，先清掉：新库没解锁时界面不该闪出旧数据。
     entries.set([])
     entryFields.set({})
+    entryNotes.set({})
+    notesEditor.set(null)
     loadedCount.set(0)
     fieldsLoading.set(false)
     selectedIds.set(new Set())
     hiddenPasswords.set(new Set())
     typeFilter.set(null)
+    tagFilters.set([])
     categories.set([])
     presets.set([])
     closeDetail()
@@ -392,6 +401,8 @@ export async function unlockVault(masterPassword: string): Promise<void> {
 function clearSensitiveState(): void {
   entries.set([])
   entryFields.set({})
+  entryNotes.set({})
+  notesEditor.set(null)
   loadedCount.set(0)
   fieldsLoading.set(false)
   selectedIds.set(new Set())
@@ -411,7 +422,7 @@ function clearSensitiveState(): void {
   categoriesSheetOpen.set(false)
   confirm.set(null)
   keyword.set('')
-  tagFilter.set(null)
+  tagFilters.set([])
 }
 
 async function handleLocked(): Promise<void> {
@@ -468,6 +479,7 @@ async function refreshPresets(): Promise<void> {
  *  逐条 try：单条损坏不应让整批/整个列表消失。同步原生调用，跑在引擎线程。 */
 function decryptRange(list: EntrySummary[], from: number, to: number): void {
   const patch: Record<string, FieldValues> = {}
+  const notesPatch: Record<string, string> = {}
   for (const entry of list.slice(from, to)) {
     try {
       const view = native.getEntry(entry.id)
@@ -477,12 +489,17 @@ function decryptRange(list: EntrySummary[], from: number, to: number): void {
         email: view.email,
         phone: view.phone,
       }
+      // 同一次 getEntry 顺带取备注明文，不增加原生调用次数。
+      notesPatch[entry.id] = view.notes
     } catch {
-      // 单条读取失败：该行四个字段显示为空，仍可展开详情重试。
+      // 单条读取失败：该行字段显示为空，仍可展开详情重试。
     }
   }
   if (Object.keys(patch).length > 0) {
     entryFields.update((prev) => ({ ...prev, ...patch }))
+  }
+  if (Object.keys(notesPatch).length > 0) {
+    entryNotes.update((prev) => ({ ...prev, ...notesPatch }))
   }
 }
 
@@ -492,6 +509,7 @@ function reloadVisibleWindow(): void {
   if (!status().unlocked) return
   const all = visibleEntries()
   entryFields.set({})
+  entryNotes.set({})
   selectedIds.set(new Set())
   if (all.length === 0) {
     loadedCount.set(0)
@@ -509,7 +527,8 @@ export function refreshEntries(): void {
     bucket: isBuiltinBucket(current) ? current : 'category',
     categoryId: isBuiltinBucket(current) ? null : current,
     keyword: keyword().trim() || null,
-    tag: tagFilter(),
+    // 标签筛选改到 visibleEntries() 做客户端 OR 过滤，不给原生层传单个 tag。
+    tag: null,
   }
   try {
     entries.set(native.listEntries(filter))
@@ -565,7 +584,11 @@ export const bucketTitle = computed<string>(() => {
 export function visibleEntries(): EntrySummary[] {
   const all = sortEntries(entries(), sortBy(), categories(), bucket())
   const type = typeFilter()
-  return type ? all.filter((entry) => entry.categoryId === type) : all
+  const byType = type ? all.filter((entry) => entry.categoryId === type) : all
+  const tags = tagFilters()
+  if (tags.length === 0) return byType
+  // 多选标签：命中其中任一即显示（OR）。
+  return byType.filter((entry) => entry.tags.some((t) => tags.includes(t)))
 }
 
 /** 当前真正交给列表渲染的子集：随滚动逐步扩大，避免一次性挂载全部行。 */
@@ -588,7 +611,7 @@ export const canManualReorder = computed(
 
 export function selectBucket(next: string): void {
   bucket.set(next)
-  tagFilter.set(null)
+  tagFilters.set([])
   closeDetail()
   sortBy.set(
     isBuiltinBucket(next) && (next === 'archive' || next === 'trash') ? 'updated' : sortBy(),
@@ -609,10 +632,21 @@ export function setKeyword(value: string): void {
   }, 120)
 }
 
+/** 传字符串 = toggle 该标签（已在则移除，不在则加入）；传 null = 清空全部。 */
 export function setTagFilter(tag: string | null): void {
-  tagFilter.set(tag === tagFilter() ? null : tag)
+  if (tag === null) {
+    tagFilters.set([])
+  } else {
+    tagFilters.update((list) =>
+      list.includes(tag) ? list.filter((item) => item !== tag) : [...list, tag],
+    )
+  }
   touchActivity()
   void refreshEntries()
+}
+
+export function clearTagFilters(): void {
+  setTagFilter(null)
 }
 
 export function setSortMode(mode: SortMode): void {
@@ -791,6 +825,32 @@ export async function saveEntry(input: EntryInput, id: string | null): Promise<E
   await refreshEntries()
   toast(t('toast.saved'))
   return view
+}
+
+/** 同步保存单条备注：getEntry/updateEntry 均为同步 API。读回完整 EntryView，
+ *  组装完整 EntryInput 只替换 notes，其余字段原样写回。 */
+export function saveEntryNotes(id: string, notes: string): void {
+  try {
+    const view = native.getEntry(id)
+    const input: EntryInput = {
+      categoryId: view.categoryId,
+      title: view.title,
+      url: view.url,
+      username: view.username,
+      password: view.password,
+      email: view.email,
+      phone: view.phone,
+      notes,
+      favorite: view.favorite,
+      tags: view.tags,
+    }
+    native.updateEntry(id, input)
+    entryNotes.update((prev) => ({ ...prev, [id]: notes }))
+    toast(t('entry.notesSaved'))
+    touchActivity()
+  } catch (error) {
+    showError(error)
+  }
 }
 
 export async function deleteEntry(id: string, archive = false): Promise<void> {

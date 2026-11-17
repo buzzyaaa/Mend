@@ -1,4 +1,4 @@
-import { signal } from 'nsh'
+import { appInfo, signal } from 'nsh'
 import { t } from 'nsh/i18n'
 import {
   checkForPackage,
@@ -13,6 +13,7 @@ import {
 } from 'nsh/updater'
 
 import { formatBytes } from './format'
+import { markUpdateChecked, preferences } from './preferences'
 import { settingsOpen, toast, updatePromptOpen, updateTarget, type UpdateTarget } from './state'
 
 export interface UpdateState {
@@ -100,6 +101,39 @@ export async function checkForUpdates(): Promise<void> {
   } finally {
     updateBusy.set(false)
   }
+}
+
+/** 启动时静默检查更新：按偏好里的频率节流，发现新版本才弹更新确认弹窗。
+ *  与设置页的「立即检查」不同——这里不弹「已是最新版本」，不打扰日常启动。 */
+export async function checkForUpdatesOnStartup(): Promise<void> {
+  // 开发/测试运行不检查：updater 在这类环境直接返回 null，且测试替身可能
+  // 制造假更新弹窗干扰用例；生产包才真正请求。
+  if (appInfo().development) return
+
+  const { updateCheckIntervalDays: days, lastUpdateCheckTs: last } = preferences()
+  // last === 0 表示从未检查过，必定检查一次；days === 0 表示每次启动都查。
+  if (last > 0 && days > 0 && Date.now() - last < days * 86_400_000) return
+
+  let target: UpdateTarget | null = null
+  try {
+    const pkg = await checkForPackage()
+    if (pkg) {
+      updatePackage.set(pkg)
+      target = 'package'
+    } else {
+      const app = await checkForUpdate()
+      if (app) {
+        updateApp.set(app)
+        target = 'app'
+      }
+    }
+    // 只有真正完成了检查才记时间：网络失败时下次启动还可重试。
+    markUpdateChecked()
+  } catch {
+    // 启动检查失败静默：不弹 toast、不阻断启动。
+    return
+  }
+  if (target) openUpdatePrompt(target)
 }
 
 function progressOf(received: number, total?: number | null): number {

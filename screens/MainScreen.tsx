@@ -1,4 +1,4 @@
-import { computed, platform, Text, View, windowSize } from 'nsh'
+import { computed, effect, platform, Text, View, windowSize } from 'nsh'
 import { Dialog, ResizablePanel, ResizablePanelGroup } from 'nsh/base'
 import { t } from 'nsh/i18n'
 
@@ -9,6 +9,7 @@ import { EntryDetail } from '../components/EntryDetail'
 import { EntryEditor } from '../components/EntryEditor'
 import { EntryList } from '../components/EntryList'
 import { NavRail } from '../components/NavRail'
+import { NotesDialog } from '../components/NotesDialog'
 import { PresetsDialog } from '../components/PresetsDialog'
 import { SettingsPage } from '../components/SettingsDialog'
 import { Sidebar } from '../components/Sidebar'
@@ -16,6 +17,7 @@ import { UpdateDialog } from '../components/UpdateDialog'
 import { UpdateProgressHost } from '../components/UpdateProgressHost'
 import { IconButton, MODAL_BACKDROP_CLASS, MODAL_CLASS, ModalFrame } from '../components/ui'
 import { preferences, setColumnSizes } from '../lib/preferences'
+import { checkForUpdatesOnStartup } from '../lib/update'
 import {
   activePage,
   categoriesSheetOpen,
@@ -27,8 +29,18 @@ import {
   startAutoLock,
 } from '../lib/state'
 
+let startupUpdateCheckRequested = false
+
 export function MainScreen() {
   startAutoLock()
+
+  // 进入主界面后检查一次新版本：静默检查，有更新才弹窗。
+  // 模块级 flag 防止锁屏/解锁重挂载导致的重复检查。
+  effect(() => {
+    if (startupUpdateCheckRequested) return
+    startupUpdateCheckRequested = true
+    void checkForUpdatesOnStartup()
+  })
 
   const compact = computed(
     () => platform.idiom === 'phone' || platform.idiom === 'pad' || windowSize().width < 900,
@@ -106,6 +118,7 @@ export function MainScreen() {
 
       <UpdateDialog />
       <PresetsDialog />
+      <NotesDialog />
       <ConfirmDialog />
       <UpdateProgressHost />
 

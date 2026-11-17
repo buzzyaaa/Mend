@@ -1,4 +1,4 @@
-import { List, Text, token, View } from 'nsh'
+import { List, PanResponder, signal, Text, token, View } from 'nsh'
 import { Checkbox, Input, Menu, MenuItem, MenuSeparator, Switch } from 'nsh/base'
 import { t } from 'nsh/i18n'
 
@@ -7,6 +7,7 @@ import {
   categories,
   categoriesSheetOpen,
   clearSelection,
+  clearTagFilters,
   confirm,
   copyEntryFull,
   copyField,
@@ -16,6 +17,7 @@ import {
   displayedEntries,
   entryEditor,
   entryFields,
+  entryNotes,
   fieldsLoading,
   hiddenPasswords,
   isArchiveView,
@@ -23,6 +25,8 @@ import {
   keyword,
   loadMoreEntries,
   moveEntry,
+  notesEditor,
+  openExternal,
   passwordVisible,
   presetsOpen,
   purgeAllTrash,
@@ -34,29 +38,32 @@ import {
   setKeyword,
   setShowPasswords,
   setSortMode,
-  setTagFilter,
-  setTypeFilter,
   setViewMode,
   showPasswords,
   sortBy,
-  tagFilter,
+  tagFilters,
   toggleFavorite,
   togglePasswordFor,
   toggleSelectAll,
   toggleSelected,
-  typeFilter,
   unarchiveEntry,
   viewMode,
   visibleEntries,
 } from '../lib/state'
-import type { EntrySummary, SortMode } from '../lib/types'
+import { normalizeUrl, notesPreview } from '../lib/format'
+import { preferences, setColumnWidths } from '../lib/preferences'
+import type { ColumnKey, EntrySummary, ResizableColumnKey, SortMode } from '../lib/types'
+import { ColumnConfigMenu } from './ColumnConfigMenu'
 import { EntryIcon } from './EntryIcon'
 import { Icon, type IconName } from './Icon'
+import { TagFilterMenu } from './TagFilterMenu'
 import { TagPill } from './TagPill'
 import { ActionButton, Chip, EmptyState, IconButton, SelectField } from './ui'
 
 /** 列表单元格一行最多放几个标签胶囊，多余的折叠为 `+N`（单行高度固定）。 */
 const LIST_TAG_LIMIT = 2
+/** 备注在列表里显示的简写字数（Markdown 会被压成纯文本一行）。 */
+const NOTES_PREVIEW_CHARS = 28
 
 const SORT_OPTIONS: { value: SortMode; titleKey: string }[] = [
   { value: 'updated', titleKey: 'entry.sortUpdated' },
@@ -68,13 +75,90 @@ const SORT_OPTIONS: { value: SortMode; titleKey: string }[] = [
 /** 表头与数据行共用的列宽类，保证逐列对齐。 */
 const COL = {
   check: 'w-5 shrink-0',
-  name: 'w-32 shrink-0',
-  category: 'w-[76px] shrink-0',
+  // 列多（标签 + 备注），整体收窄一点，让常见窗口下所有列都能露出来。
+  name: 'w-24 shrink-0',
+  tags: 'w-[104px] shrink-0',
+  category: 'w-16 shrink-0',
   // 给最小宽度：窄窗口下也不能让字段列塌成 0 宽而把值藏掉（列表可横向溢出）。
-  field: 'flex-1 min-w-[80px]',
-  tags: 'w-[140px] shrink-0',
-  phone: 'w-[88px] shrink-0',
-  actions: 'w-[84px] shrink-0',
+  field: 'flex-1 min-w-[56px]',
+  phone: 'w-[76px] shrink-0',
+  notes: 'w-[88px] shrink-0',
+  actions: 'w-[72px] shrink-0',
+}
+
+/** 拖动过程中的临时宽度；null = 尚未拖动，读持久化偏好值。 */
+const dragWidths = signal<Partial<Record<ResizableColumnKey, number>> | null>(null)
+
+function widthOf(column: ResizableColumnKey): number {
+  const live = dragWidths()
+  const saved = preferences().columnWidths?.[column]
+  const base =
+    typeof saved === 'number' && Number.isFinite(saved) && saved > 0
+      ? saved
+      : column === 'check'
+        ? 20
+        : 72
+  return live?.[column] ?? base
+}
+
+function currentWidths(): Record<ResizableColumnKey, number> {
+  return { check: widthOf('check'), actions: widthOf('actions') }
+}
+
+/** 表头上的列宽拖动把手。PanResponder 的 responder 系统在指针移出窄把手后
+ *  仍持续送 move，手小范围也能稳定拖。表头与每行共用 widthOf()，逐列对齐。
+ *  edge=end（首列右边缘，右拖变宽）；edge=start（末列左边缘，左拖变宽）。 */
+function ColumnResizeHandle(props: {
+  column: ResizableColumnKey
+  edge: 'start' | 'end'
+}) {
+  const startWidth = { value: 0 }
+  const startX = { value: 0 }
+  const direction = props.edge === 'end' ? 1 : -1
+  const responder = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (_event, state) => {
+      startWidth.value = widthOf(props.column)
+      startX.value = state.x0
+    },
+    onPanResponderMove: (_event, state) => {
+      const next = clampWidth(
+        props.column,
+        startWidth.value + direction * (state.moveX - startX.value),
+      )
+      dragWidths.set({ ...currentWidths(), [props.column]: next })
+    },
+    onPanResponderRelease: () => {
+      setColumnWidths(currentWidths())
+      dragWidths.set(null)
+    },
+    onPanResponderTerminate: () => dragWidths.set(null),
+  })
+  return (
+    <View
+      {...responder.panHandlers}
+      class={`absolute top-0 z-10 h-full w-2.5 items-center justify-center ${
+        props.edge === 'end' ? '-right-1' : '-left-1'
+      }`}
+      style={{ cursor: 'col-resize' }}
+      testID={`resize-${props.column}`}
+      accessibilityLabel={t('entry.columnResizeHandle')}
+    >
+      <View class="h-4 w-[3px] rounded-full bg-muted-foreground/60" />
+    </View>
+  )
+}
+
+function clampWidth(column: ResizableColumnKey, value: number): number {
+  const min = column === 'check' ? 16 : 44
+  const max = column === 'check' ? 64 : 200
+  return Math.max(min, Math.min(max, Math.round(value)))
+}
+
+/** 五列可由用户在工具栏的「显示列」菜单里开关，默认全开。 */
+function columnVisible(column: ColumnKey): boolean {
+  return preferences().visibleColumns[column]
 }
 
 function categoryOf(entry: EntrySummary) {
@@ -163,6 +247,9 @@ function EntryRow(props: { entry: () => EntrySummary }) {
   const showCategory = () => !currentCategoryId()
   const compact = () => viewMode() === 'compact'
   const revealed = () => passwordVisible(e().id)
+  // 标题只有填了有效网址才可点击，点击打开系统默认浏览器（不是详情弹窗）。
+  const link = () => (e().url?.trim() ? normalizeUrl(e().url ?? '') : null)
+  const notes = () => notesPreview(entryNotes()[e().id] ?? '', NOTES_PREVIEW_CHARS)
 
   function requestDelete() {
     confirm.set({
@@ -261,7 +348,7 @@ function EntryRow(props: { entry: () => EntrySummary }) {
       }
       accessibilityLabel={e().title}
     >
-      <View class={COL.check}>
+      <View class={COL.check} style={{ width: widthOf('check') }}>
         <Checkbox
           checked={selectedIds().has(e().id)}
           onChange={() => toggleSelected(e().id)}
@@ -273,61 +360,31 @@ function EntryRow(props: { entry: () => EntrySummary }) {
 
       <View
         class={`${COL.name} flex-row items-center gap-2`}
-        onPress={() => void selectEntry(e().id)}
-        role="button"
+        role={link() ? 'button' : undefined}
+        style={{ cursor: link() ? 'pointer' : undefined }}
+        onPress={link() ? () => void openExternal(e().url ?? '') : undefined}
+        accessibilityLabel={link() ? t('entry.openInBrowser') : undefined}
       >
         <EntryIcon entry={e()} category={category()} />
         <View class="min-w-0 flex-1">
-          <Text class="text-xs font-medium text-foreground" style={{ numberOfLines: 1 }}>
+          <Text
+            class={
+              'text-xs font-medium ' +
+              (link() ? 'text-primary hover:underline' : 'text-foreground')
+            }
+            style={{ numberOfLines: 1 }}
+          >
             {e().title}
           </Text>
         </View>
       </View>
 
-      <If when={showCategory()}>
-        <View class={COL.category}>
-          <Text class="text-[11px] text-muted-foreground" style={{ numberOfLines: 1 }}>
-            {category()?.name ?? t('entry.uncategorized')}
-          </Text>
-        </View>
-      </If>
-
-      <FieldCell value={fields()?.username ?? ''} label={t('entry.copyUsername')} mono />
-      <FieldCell
-        value={fields()?.password ?? ''}
-        label={t('entry.copyPassword')}
-        mono
-        secret
-        revealed={revealed()}
-        onToggleReveal={() => togglePasswordFor(e().id)}
-      />
-      <FieldCell value={fields()?.email ?? ''} label={t('entry.copyEmail')} />
-      <View class={`${COL.phone} flex-row items-center gap-1`}>
-        <Text
-          class={
-            'min-w-0 shrink text-[11px] ' +
-            (fields()?.phone ? 'text-foreground' : 'text-muted-foreground')
-          }
-          style={{ numberOfLines: 1 }}
-        >
-          {fields()?.phone || t('entry.notSet')}
-        </Text>
-        <If when={Boolean(fields()?.phone)}>
-          <IconButton
-            icon="copy"
-            label={t('entry.copyPhone')}
-            size={12}
-            class="h-6 w-6 shrink-0"
-            onPress={() => void copyField(fields()?.phone ?? '', t('entry.copyPhone'))}
-          />
-        </If>
-      </View>
-
+      {/* 标签紧跟标题；TagPill 内部去掉 # 并按文字确定性配色。 */}
       <View class={`${COL.tags} flex-row items-center gap-1 overflow-hidden`}>
         {e().tags.length > 0 ? (
           <>
             {e().tags.slice(0, LIST_TAG_LIMIT).map((tag) => (
-              <TagPill label={`#${tag}`} />
+              <TagPill label={tag} />
             ))}
             <If when={e().tags.length > LIST_TAG_LIMIT}>
               <View class="shrink-0 rounded-full bg-muted px-1.5 py-0.5">
@@ -344,7 +401,75 @@ function EntryRow(props: { entry: () => EntrySummary }) {
         )}
       </View>
 
-      <View class={`${COL.actions} flex-row items-center justify-end gap-0.5`}>
+      <If when={showCategory()}>
+        <View class={COL.category}>
+          <Text class="text-[11px] text-muted-foreground" style={{ numberOfLines: 1 }}>
+            {category()?.name ?? t('entry.uncategorized')}
+          </Text>
+        </View>
+      </If>
+
+      <If when={columnVisible('username')}>
+        <FieldCell value={fields()?.username ?? ''} label={t('entry.copyUsername')} mono />
+      </If>
+      <If when={columnVisible('password')}>
+        <FieldCell
+          value={fields()?.password ?? ''}
+          label={t('entry.copyPassword')}
+          mono
+          secret
+          revealed={revealed()}
+          onToggleReveal={() => togglePasswordFor(e().id)}
+        />
+      </If>
+      <If when={columnVisible('email')}>
+        <FieldCell value={fields()?.email ?? ''} label={t('entry.copyEmail')} />
+      </If>
+      <If when={columnVisible('phone')}>
+        <View class={`${COL.phone} flex-row items-center gap-1`}>
+          <Text
+            class={
+              'min-w-0 shrink text-[11px] ' +
+              (fields()?.phone ? 'text-foreground' : 'text-muted-foreground')
+            }
+            style={{ numberOfLines: 1 }}
+          >
+            {fields()?.phone || t('entry.notSet')}
+          </Text>
+          <If when={Boolean(fields()?.phone)}>
+            <IconButton
+              icon="copy"
+              label={t('entry.copyPhone')}
+              size={12}
+              class="h-6 w-6 shrink-0"
+              onPress={() => void copyField(fields()?.phone ?? '', t('entry.copyPhone'))}
+            />
+          </If>
+        </View>
+      </If>
+
+      {/* 备注列：Markdown 压成一行简写，点击打开独立备注编辑弹窗。 */}
+      <If when={columnVisible('notes')}>
+        <View
+          class={`${COL.notes} flex-row items-center`}
+          role="button"
+          testID="edit-notes"
+          accessibilityLabel={t('entry.editNotes')}
+          onPress={() => notesEditor.set(e().id)}
+        >
+          <Text
+            class={'min-w-0 shrink text-[11px] ' + (notes() ? 'text-foreground' : 'text-muted-foreground')}
+            style={{ numberOfLines: 1 }}
+          >
+            {notes() || t('entry.notSet')}
+          </Text>
+        </View>
+      </If>
+
+      <View
+        class={`${COL.actions} flex-row items-center justify-end gap-0.5`}
+        style={{ width: widthOf('actions') }}
+      >
         <If when={!isTrashView()}>
           <IconButton
             icon={e().favorite ? 'star-filled' : 'star'}
@@ -372,10 +497,6 @@ function ColumnHeader() {
   const shown = () => displayedEntries()
   const allSelected = () => shown().length > 0 && shown().every((e) => selectedIds().has(e.id))
   const someSelected = () => shown().some((e) => selectedIds().has(e.id))
-  const typeItems = () => [
-    { value: '', title: t('entry.allTypes') },
-    ...categories().map((category) => ({ value: category.id, title: category.name })),
-  ]
   return (
     <>
       {/* 第一行：搜索 + 视图切换 + 新建 */}
@@ -429,14 +550,9 @@ function ColumnHeader() {
         />
       </View>
 
-      {/* 第二行：类型 / 排序 / 显示密码 / 预设 / 刷新 */}
+      {/* 第二行：标签筛选（多选）/ 排序 / 显示列 / 显示密码 / 预设 / 刷新 */}
       <View class="flex-row items-center gap-2 px-4 py-2.5">
-        <SelectField
-          items={typeItems()}
-          value={typeFilter() ?? ''}
-          onChange={(value) => setTypeFilter(value || null)}
-          class="w-32"
-        />
+        <TagFilterMenu />
         <If when={!isTrashView() && !isArchiveView()}>
           <SelectField
             items={SORT_OPTIONS.map((option) => ({ value: option.value, title: t(option.titleKey) }))}
@@ -448,6 +564,7 @@ function ColumnHeader() {
           />
         </If>
         <View class="flex-1" />
+        <ColumnConfigMenu />
         <Text class="text-[11px] text-muted-foreground">{t('entry.showPasswords')}</Text>
         <Switch
           checked={showPasswords()}
@@ -465,9 +582,9 @@ function ColumnHeader() {
         <IconButton icon="refresh" label={t('common.retry')} class="h-7 w-7" onPress={() => refreshEntries()} />
       </View>
 
-      {/* 表头 */}
+      {/* 表头：顺序与数据行严格一致 */}
       <View class="mx-4 mb-1 flex-row items-center gap-2 rounded-lg bg-secondary px-3 py-1.5">
-        <View class={COL.check}>
+        <View class={`${COL.check} relative`} style={{ width: widthOf('check') }}>
           <Checkbox
             checked={allSelected()}
             indeterminate={!allSelected() && someSelected()}
@@ -476,17 +593,33 @@ function ColumnHeader() {
             indicatorClass="h-4 w-4 items-center justify-center rounded border border-input bg-background checked:border-primary checked:bg-primary indeterminate:border-primary indeterminate:bg-primary"
             indicator={<Icon name="check" size={11} color={token('primary-foreground')} />}
           />
+          <ColumnResizeHandle column="check" edge="end" />
         </View>
         <Text class={`${COL.name} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.title')}</Text>
+        <Text class={`${COL.tags} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.tags')}</Text>
         <If when={!currentCategoryId()}>
           <Text class={`${COL.category} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.category')}</Text>
         </If>
-        <Text class={`${COL.field} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.username')}</Text>
-        <Text class={`${COL.field} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.password')}</Text>
-        <Text class={`${COL.field} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.email')}</Text>
-        <Text class={`${COL.phone} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.phone')}</Text>
-        <Text class={`${COL.tags} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.tags')}</Text>
-        <View class={`${COL.actions} flex-row justify-end`}>
+        <If when={columnVisible('username')}>
+          <Text class={`${COL.field} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.username')}</Text>
+        </If>
+        <If when={columnVisible('password')}>
+          <Text class={`${COL.field} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.password')}</Text>
+        </If>
+        <If when={columnVisible('email')}>
+          <Text class={`${COL.field} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.email')}</Text>
+        </If>
+        <If when={columnVisible('phone')}>
+          <Text class={`${COL.phone} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.phone')}</Text>
+        </If>
+        <If when={columnVisible('notes')}>
+          <Text class={`${COL.notes} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.notes')}</Text>
+        </If>
+        <View
+          class={`${COL.actions} relative flex-row justify-end`}
+          style={{ width: widthOf('actions') }}
+        >
+          <ColumnResizeHandle column="actions" edge="start" />
           <Text class="text-[11px] font-medium text-muted-foreground" style={{ numberOfLines: 1 }}>{t('common.actions')}</Text>
         </View>
       </View>
@@ -497,6 +630,7 @@ function ColumnHeader() {
 export function EntryList() {
   const count = () => visibleEntries().length
   const selectedCount = () => selectedIds().size
+  const filtering = () => keyword().trim().length > 0 || tagFilters().length > 0
 
   const empty = (
     <EmptyState
@@ -505,7 +639,7 @@ export function EntryList() {
           ? 'trash'
           : isArchiveView()
             ? 'archive'
-            : keyword().trim() || tagFilter() || typeFilter()
+            : filtering()
               ? 'search'
               : 'key'
       }
@@ -514,20 +648,19 @@ export function EntryList() {
           ? t('trash.empty')
           : isArchiveView()
             ? t('entry.emptyInBucket')
-            : keyword().trim() || tagFilter() || typeFilter()
+            : filtering()
               ? t('entry.empty')
               : t('entry.emptyInBucket')
       }
-      hint={keyword().trim() || tagFilter() || typeFilter() ? t('entry.emptyHint') : undefined}
+      hint={filtering() ? t('entry.emptyHint') : undefined}
       action={
-        keyword().trim() || tagFilter() || typeFilter() ? (
+        filtering() ? (
           <ActionButton
             label={t('entry.clearFilters')}
             variant="secondary"
             onPress={() => {
               setKeyword('')
-              setTagFilter(null)
-              setTypeFilter(typeFilter())
+              clearTagFilters()
             }}
           />
         ) : !isTrashView() && !isArchiveView() ? (
@@ -546,10 +679,10 @@ export function EntryList() {
     <View class="flex-1 min-h-0">
       <ColumnHeader />
 
-      <If when={tagFilter()}>
+      <If when={tagFilters().length > 0}>
         <View class="mx-4 mb-1 flex-row items-center gap-2">
           <Text class="text-xs text-muted-foreground">{t('entry.tagFilterHint')}</Text>
-          <Chip label={t('entry.clearFilters')} onPress={() => setTagFilter(null)} />
+          <Chip label={t('entry.clearFilters')} onPress={() => clearTagFilters()} />
         </View>
       </If>
 
