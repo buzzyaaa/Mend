@@ -1,7 +1,7 @@
 {
   "name": "Mend",
   "id": "com.mend.app",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "build": 17,
   "icon": "assets/icon.png",
   "rust": "native",
@@ -12,12 +12,13 @@
     "clipboard": true,
     "picker": true,
     "statusBar": true,
+    "windows": true,
     "openUrl": {
       "schemes": ["https", "http", "mailto", "tel"]
     }
   },
   "window": {
-    "title": "Mend",
+    "title": "Mend v0.4.7",
     "defaultSize": {
       "width": 1100,
       "height": 720

@@ -214,10 +214,7 @@ export function EntryEditor(props: { state: EntryEditorState }) {
             </View>
             <If when={presets().some((preset) => preset.fieldType === 'username')}>
               <View class="w-40 self-end">
-                <PresetPicker
-                  type="username"
-                  onPick={(id) => applyPreset('username', id, form)}
-                />
+                <PresetPicker type="username" onPick={(id) => applyPreset('username', id, form)} />
               </View>
             </If>
           </View>
@@ -246,10 +243,7 @@ export function EntryEditor(props: { state: EntryEditorState }) {
             </View>
             <If when={presets().some((preset) => preset.fieldType === 'password')}>
               <View class="w-40 self-end">
-                <PresetPicker
-                  type="password"
-                  onPick={(id) => applyPreset('password', id, form)}
-                />
+                <PresetPicker type="password" onPick={(id) => applyPreset('password', id, form)} />
               </View>
             </If>
           </View>
@@ -335,14 +329,25 @@ export function EntryEditor(props: { state: EntryEditorState }) {
               </Tabs>
             </View>
             <If when={tab() === 'edit'}>
-              <TextField
-                value={form().notes}
-                onChange={(value) => form.update((current) => ({ ...current, notes: value }))}
-                multiline
-                placeholder={t('entry.notesPlaceholder')}
-                accessibilityLabel={t('entry.notes')}
-                style={{ height: 180 }}
-              />
+              {/* 固定高度 + 裁剪的容器：把滚动尺寸测量挡在这一层，避免多行 Input
+                  在聚焦/切换 Tab 后把自身内容高度报给外层 Scroll 而撑大弹窗；
+                  文本滚动仍由 nsh 多行 Input 自己负责（单一滚动所有者）。 */}
+              <View class="overflow-hidden" style={{ height: 180 }}>
+                <TextField
+                  value={form().notes}
+                  onChange={(value) => form.update((current) => ({ ...current, notes: value }))}
+                  multiline
+                  placeholder={t('entry.notesPlaceholder')}
+                  accessibilityLabel={t('entry.notes')}
+                  class="h-full"
+                  style={{
+                    paddingTop: 10,
+                    paddingBottom: 10,
+                    paddingLeft: 12,
+                    paddingRight: 12,
+                  }}
+                />
+              </View>
             </If>
             <If when={tab() === 'preview'}>
               <View

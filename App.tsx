@@ -1,4 +1,5 @@
-import { effect, mount, Text, token, View } from 'nsh'
+import { appInfo, effect, mount, Text, token, View } from 'nsh'
+import { currentWindow, isAvailable } from 'nsh/desktop'
 import { t } from 'nsh/i18n'
 
 import { Icon } from './components/Icon'
@@ -60,6 +61,16 @@ function Fatal() {
 let bootRequested = false
 
 function App() {
+  // nsh 使用系统标题栏，原生层会画出应用图标与默认的系统窗口按钮；
+  // 这里只把标题文字从静态 nsh.json 值更新为带实际版本号的「Mend vX.Y.Z」。
+  // currentWindow() 必须在渲染期间取得，桌面 API 不可用时保持静态标题。
+  const mainWindow = isAvailable ? currentWindow() : null
+  effect(() => {
+    mainWindow?.set({
+      title: `${appInfo().name ?? 'Mend'} v${appInfo().version ?? '0.4.6'}`,
+    })
+  })
+
   effect(() => {
     if (bootRequested) return
     bootRequested = true

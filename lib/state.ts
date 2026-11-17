@@ -53,6 +53,32 @@ export const sortBy = signal<SortMode>('updated')
 
 export const selectedId = signal<string | null>(null)
 export const selected = signal<EntryView | null>(null)
+/** 条目详情弹窗：列表上的「查看详情」按钮打开，关闭时清空选中项。 */
+export const detailOpen = signal(false)
+/** 解锁后的主页面：左侧图标栏在密码列表与设置页之间切换。 */
+export const activePage = signal<'entries' | 'settings'>('entries')
+/** 列表直接展示的敏感字段。只在解锁期间驻留内存，锁定即清空。
+ *  只解密「已加载窗口」内的条目：滚动到底部时再增量解密下一批，
+ *  避免上万条一次性解密把引擎线程卡住。 */
+export type FieldValues = { username: string; password: string; email: string; phone: string }
+export const entryFields = signal<Record<string, FieldValues>>({})
+
+/** 滚动加载：一次加载/解密的条目数。 */
+export const PAGE_SIZE = 50
+/** 当前已解密并交给列表渲染的条目数（visibleEntries 的前 N 条）。 */
+export const loadedCount = signal(0)
+/** 正在增量解密下一批（列表底部转圈）。 */
+export const fieldsLoading = signal(false)
+/** 视图：常规表格 / 紧凑。 */
+export const viewMode = signal<'list' | 'compact'>('list')
+/** 全局“显示密码”开关（工具栏），锁定后重置。 */
+export const showPasswords = signal(true)
+/** 逐条密码临时隐藏（每行眼睛图标），锁定后清空。 */
+export const hiddenPasswords = signal<Set<string>>(new Set())
+/** 多选：当前勾选的条目 id。 */
+export const selectedIds = signal<Set<string>>(new Set())
+/** 第二行“全部类型”筛选：按分类 id 过滤，null 为不限。 */
+export const typeFilter = signal<string | null>(null)
 
 export const toasts = signal<ToastItem[]>([])
 export const confirm = signal<ConfirmState | null>(null)
@@ -76,7 +102,7 @@ export const deviceUnlockOn = signal(false)
  *  否则同一句提示会出现两次（一份被遮罩压暗、一份清晰）。 */
 export const modalOpen = computed<boolean>(
   () =>
-    settingsOpen() ||
+    detailOpen() ||
     presetsOpen() ||
     confirm() !== null ||
     entryEditor() !== null ||
@@ -275,10 +301,16 @@ async function applyVaultFile(path: string | null): Promise<void> {
     const next = native.switchVault(path)
     // 切换后原库的列表还在内存里，先清掉：新库没解锁时界面不该闪出旧数据。
     entries.set([])
+    entryFields.set({})
+    loadedCount.set(0)
+    fieldsLoading.set(false)
+    selectedIds.set(new Set())
+    hiddenPasswords.set(new Set())
+    typeFilter.set(null)
     categories.set([])
     presets.set([])
-    selectedId.set(null)
-    selected.set(null)
+    closeDetail()
+    activePage.set('entries')
     // 弹窗是独立原生窗口层，不会随主界面重建而消失，这里显式关掉。
     settingsOpen.set(false)
     presetsOpen.set(false)
@@ -359,9 +391,19 @@ export async function unlockVault(masterPassword: string): Promise<void> {
 
 function clearSensitiveState(): void {
   entries.set([])
+  entryFields.set({})
+  loadedCount.set(0)
+  fieldsLoading.set(false)
+  selectedIds.set(new Set())
+  hiddenPasswords.set(new Set())
+  showPasswords.set(true)
+  typeFilter.set(null)
+  viewMode.set('list')
   presets.set([])
   selectedId.set(null)
   selected.set(null)
+  detailOpen.set(false)
+  activePage.set('entries')
   entryEditor.set(null)
   settingsOpen.set(false)
   presetsOpen.set(false)
@@ -422,6 +464,44 @@ async function refreshPresets(): Promise<void> {
   }
 }
 
+/** 解密一段条目（按可见顺序 [from, to)）的四个敏感字段，并入 entryFields。
+ *  逐条 try：单条损坏不应让整批/整个列表消失。同步原生调用，跑在引擎线程。 */
+function decryptRange(list: EntrySummary[], from: number, to: number): void {
+  const patch: Record<string, FieldValues> = {}
+  for (const entry of list.slice(from, to)) {
+    try {
+      const view = native.getEntry(entry.id)
+      patch[entry.id] = {
+        username: view.username,
+        password: view.password,
+        email: view.email,
+        phone: view.phone,
+      }
+    } catch {
+      // 单条读取失败：该行四个字段显示为空，仍可展开详情重试。
+    }
+  }
+  if (Object.keys(patch).length > 0) {
+    entryFields.update((prev) => ({ ...prev, ...patch }))
+  }
+}
+
+/** 重置窗口并解密第一批。所有会改变列表内容/顺序的操作都走这里，
+ *  避免上万条数据每次刷新都把全库解密一遍（那是滚动卡顿的根因）。 */
+function reloadVisibleWindow(): void {
+  if (!status().unlocked) return
+  const all = visibleEntries()
+  entryFields.set({})
+  selectedIds.set(new Set())
+  if (all.length === 0) {
+    loadedCount.set(0)
+    return
+  }
+  const first = Math.min(PAGE_SIZE, all.length)
+  loadedCount.set(first)
+  decryptRange(all, 0, first)
+}
+
 export function refreshEntries(): void {
   if (!status().unlocked) return
   const current = bucket()
@@ -433,8 +513,26 @@ export function refreshEntries(): void {
   }
   try {
     entries.set(native.listEntries(filter))
+    reloadVisibleWindow()
   } catch (error) {
     showError(error)
+  }
+}
+
+/** 列表触底时调用：增量解密下一批字段并扩大可见窗口。
+ *  同步完成（getEntry 是同步原生调用）；fieldsLoading 只作重入保护。 */
+export function loadMoreEntries(): void {
+  if (fieldsLoading() || !status().unlocked) return
+  const all = visibleEntries()
+  const from = loadedCount()
+  if (from >= all.length) return
+  const to = Math.min(from + PAGE_SIZE, all.length)
+  fieldsLoading.set(true)
+  try {
+    decryptRange(all, from, to)
+    loadedCount.set(to)
+  } finally {
+    fieldsLoading.set(false)
   }
 }
 
@@ -465,8 +563,17 @@ export const bucketTitle = computed<string>(() => {
 })
 
 export function visibleEntries(): EntrySummary[] {
-  return sortEntries(entries(), sortBy(), categories(), bucket())
+  const all = sortEntries(entries(), sortBy(), categories(), bucket())
+  const type = typeFilter()
+  return type ? all.filter((entry) => entry.categoryId === type) : all
 }
+
+/** 当前真正交给列表渲染的子集：随滚动逐步扩大，避免一次性挂载全部行。 */
+export const displayedEntries = computed<EntrySummary[]>(() =>
+  visibleEntries().slice(0, loadedCount()),
+)
+
+export const hasMoreEntries = computed<boolean>(() => loadedCount() < visibleEntries().length)
 
 export const isTrashView = computed(() => bucket() === 'trash')
 export const isArchiveView = computed(() => bucket() === 'archive')
@@ -482,8 +589,7 @@ export const canManualReorder = computed(
 export function selectBucket(next: string): void {
   bucket.set(next)
   tagFilter.set(null)
-  selectedId.set(null)
-  selected.set(null)
+  closeDetail()
   sortBy.set(
     isBuiltinBucket(next) && (next === 'archive' || next === 'trash') ? 'updated' : sortBy(),
   )
@@ -512,11 +618,135 @@ export function setTagFilter(tag: string | null): void {
 export function setSortMode(mode: SortMode): void {
   sortBy.set(mode)
   touchActivity()
+  // 顺序变了，已解密窗口对应的不再是当前前 N 条：重置并解密新的第一批。
+  reloadVisibleWindow()
+}
+
+export function setTypeFilter(categoryId: string | null): void {
+  typeFilter.set(typeFilter() === categoryId ? null : categoryId)
+  touchActivity()
+  reloadVisibleWindow()
+}
+
+export function setViewMode(mode: 'list' | 'compact'): void {
+  viewMode.set(mode)
+}
+
+export function setShowPasswords(value: boolean): void {
+  showPasswords.set(value)
+  hiddenPasswords.set(new Set())
+}
+
+/** 单行眼睛图标：仅覆盖这一行的密码可见性，与全局开关互不影响。 */
+export function togglePasswordFor(id: string): void {
+  hiddenPasswords.update((set) => {
+    const next = new Set(set)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+}
+
+export function passwordVisible(id: string): boolean {
+  return showPasswords() && !hiddenPasswords().has(id)
+}
+
+export function toggleSelected(id: string): void {
+  selectedIds.update((set) => {
+    const next = new Set(set)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+}
+
+/** 全选/全不选当前已加载窗口内的条目（不操作尚未加载的行）。 */
+export function toggleSelectAll(): void {
+  const shown = displayedEntries()
+  const allSelected = shown.length > 0 && shown.every((entry) => selectedIds().has(entry.id))
+  selectedIds.set(allSelected ? new Set() : new Set(shown.map((entry) => entry.id)))
+}
+
+export function clearSelection(): void {
+  selectedIds.set(new Set())
+}
+
+/** 复制单个字段，toast 里带上字段名（如“邮箱已复制”）。fieldLabel 为已翻译文案。 */
+export async function copyField(raw: string, fieldLabel: string): Promise<void> {
+  if (!raw) return
+  touchActivity()
+  try {
+    await Clipboard.writeText(raw)
+    toast(t('toast.fieldCopied', { field: fieldLabel }))
+  } catch {
+    toast(t('toast.copyFailed'), 'error')
+  }
+}
+
+/** 复制单条记录：标题 + 账号 / 密码 / 邮箱 / 手机号 / 备注，空字段省略。 */
+export async function copyEntryFull(id: string): Promise<void> {
+  touchActivity()
+  try {
+    const view = native.getEntry(id)
+    const lines: string[] = [`${t('entry.title')}：${view.title}`]
+    const push = (label: string, value: string) => {
+      if (value) lines.push(`${label}：${value}`)
+    }
+    push(t('entry.username'), view.username)
+    push(t('entry.password'), view.password)
+    push(t('entry.email'), view.email)
+    push(t('entry.phone'), view.phone)
+    push(t('entry.notes'), view.notes)
+    await Clipboard.writeText(lines.join('\n'))
+    toast(t('toast.entryCopied'))
+  } catch (error) {
+    showError(error)
+  }
+}
+
+/** 复制勾选的多条记录，每条之间空一行。 */
+export async function copySelectedEntries(): Promise<void> {
+  const ids = [...selectedIds()]
+  if (ids.length === 0) return
+  touchActivity()
+  try {
+    const blocks: string[] = []
+    for (const id of ids) {
+      try {
+        const view = native.getEntry(id)
+        const lines: string[] = [`${t('entry.title')}：${view.title}`]
+        const push = (label: string, value: string) => {
+          if (value) lines.push(`${label}：${value}`)
+        }
+        push(t('entry.username'), view.username)
+        push(t('entry.password'), view.password)
+        push(t('entry.email'), view.email)
+        push(t('entry.phone'), view.phone)
+        push(t('entry.notes'), view.notes)
+        blocks.push(lines.join('\n'))
+      } catch {
+        // 单条失败跳过，不打断整批复制。
+      }
+    }
+    if (blocks.length === 0) return
+    await Clipboard.writeText(blocks.join('\n\n'))
+    toast(t('toast.entryCopied'))
+    clearSelection()
+  } catch (error) {
+    showError(error)
+  }
+}
+
+export function closeDetail(): void {
+  selectedId.set(null)
+  selected.set(null)
+  detailOpen.set(false)
 }
 
 export async function selectEntry(id: string | null): Promise<void> {
   touchActivity()
   selectedId.set(id)
+  detailOpen.set(id !== null)
   if (!id) {
     selected.set(null)
     return
@@ -570,8 +800,7 @@ export async function deleteEntry(id: string, archive = false): Promise<void> {
   )
   if (result === null) return
   if (selectedId() === id) {
-    selectedId.set(null)
-    selected.set(null)
+    closeDetail()
   }
   await refreshCategories()
   await refreshEntries()
@@ -585,8 +814,7 @@ export async function unarchiveEntry(id: string): Promise<void> {
   const ok = await runAction(() => native.unarchiveEntry(id), t('entry.unarchived'))
   if (ok === null) return
   if (selectedId() === id) {
-    selectedId.set(null)
-    selected.set(null)
+    closeDetail()
   }
   await refreshCategories()
   await refreshEntries()
@@ -596,8 +824,7 @@ export async function restoreEntry(id: string): Promise<void> {
   const ok = await runAction(() => native.restoreEntry(id), t('trash.restored'))
   if (ok === null) return
   if (selectedId() === id) {
-    selectedId.set(null)
-    selected.set(null)
+    closeDetail()
   }
   await refreshCategories()
   await refreshEntries()
@@ -667,8 +894,7 @@ export async function removeCategory(id: string): Promise<void> {
   if (bucket() === id) {
     bucket.set('all')
   }
-  selectedId.set(null)
-  selected.set(null)
+  closeDetail()
   await refreshCategories()
   await refreshEntries()
 }

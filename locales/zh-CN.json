@@ -33,10 +33,15 @@
     "addCategory": "新增分类",
     "presets": "预设值",
     "settings": "设置",
-    "back": "返回"
+    "back": "返回",
+    "categoryManage": "分类管理",
+    "myGroups": "我的分组",
+    "newGroup": "新建分组",
+    "extensions": "扩展"
   },
   "entry": {
     "title": "标题",
+    "details": "查看详情",
     "username": "账号",
     "password": "密码",
     "email": "邮箱",
@@ -49,7 +54,7 @@
     "empty": "暂无条目，点击「新增条目」创建第一条密码",
     "emptyInBucket": "这里还没有条目",
     "listTitle": "密码列表",
-    "searchPlaceholder": "搜索标题、账号、邮箱、手机号、备注",
+    "searchPlaceholder": "搜索账号、密码、邮箱、手机号、备注...",
     "add": "新增条目",
     "dialogCreate": "新增条目",
     "dialogEdit": "编辑条目",
@@ -106,7 +111,22 @@
     "titlePlaceholder": "例如：工作邮箱",
     "updated": "更新于",
     "titleTooLong": "标题过长（上限 120 字）。",
-    "tagsInvalid": "标签过多或单个标签过长。"
+    "tagsInvalid": "标签过多或单个标签过长。",
+    "showPasswords": "显示密码",
+    "allTypes": "全部类型",
+    "listView": "列表视图",
+    "compactView": "紧凑视图",
+    "copyUsername": "复制账号",
+    "copyPassword": "复制密码",
+    "copyEmail": "复制邮箱",
+    "copyPhone": "复制手机号",
+    "copyAll": "复制整条记录",
+    "loadingMore": "加载中...",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
+    "selectedCount": "已选 %{count} 项",
+    "records": "共 %{count} 条记录",
+    "notSet": "—"
   },
   "sidebar": {
     "placeholder": "还没有分类，点击下方新增",
@@ -285,6 +305,8 @@
   },
   "toast": {
     "copied": "已复制到剪贴板",
+    "fieldCopied": "%{field}已复制",
+    "entryCopied": "整条记录已复制",
     "copyFailed": "复制失败，请手动选择文本",
     "saved": "已保存",
     "deleted": "已删除",

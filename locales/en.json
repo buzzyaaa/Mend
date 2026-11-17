@@ -33,10 +33,15 @@
     "addCategory": "Add category",
     "presets": "Presets",
     "settings": "Settings",
-    "back": "Back"
+    "back": "Back",
+    "categoryManage": "Categories",
+    "myGroups": "My Groups",
+    "newGroup": "New group",
+    "extensions": "Extensions"
   },
   "entry": {
     "title": "Title",
+    "details": "View details",
     "username": "Username",
     "password": "Password",
     "email": "Email",
@@ -49,7 +54,7 @@
     "empty": "No entries yet. Use “Add entry” to create your first password.",
     "emptyInBucket": "Nothing here yet",
     "listTitle": "Passwords",
-    "searchPlaceholder": "Search title, username, email, phone, notes",
+    "searchPlaceholder": "Search username, password, email, phone, notes...",
     "add": "Add entry",
     "dialogCreate": "New entry",
     "dialogEdit": "Edit entry",
@@ -106,7 +111,22 @@
     "titlePlaceholder": "e.g. Work email",
     "updated": "Updated",
     "titleTooLong": "Title is too long (max 120 characters).",
-    "tagsInvalid": "Too many tags or a tag is too long."
+    "tagsInvalid": "Too many tags or a tag is too long.",
+    "showPasswords": "Show passwords",
+    "allTypes": "All types",
+    "listView": "List view",
+    "compactView": "Compact view",
+    "copyUsername": "Copy username",
+    "copyPassword": "Copy password",
+    "copyEmail": "Copy email",
+    "copyPhone": "Copy phone",
+    "copyAll": "Copy full entry",
+    "loadingMore": "Loading...",
+    "selectAll": "Select all",
+    "deselectAll": "Deselect all",
+    "selectedCount": "%{count} selected",
+    "records": "%{count} records",
+    "notSet": "—"
   },
   "sidebar": {
     "placeholder": "No categories yet, add one below",
@@ -285,6 +305,8 @@
   },
   "toast": {
     "copied": "Copied to clipboard",
+    "fieldCopied": "%{field} copied",
+    "entryCopied": "Full entry copied",
     "copyFailed": "Copy failed, please select the text manually",
     "saved": "Saved",
     "deleted": "Deleted",

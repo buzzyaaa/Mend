@@ -6,6 +6,13 @@ import { categoryEmoji } from '../lib/category-icons'
 import { siteIconForUrl } from '../lib/site-icons'
 import type { Category, EntrySummary } from '../lib/types'
 
+/** token() may return 6-digit (#rrggbb) or 8-digit (#rrggbbaa) hex.
+ *  Append an alpha suffix to the RGB part only, avoiding invalid 10-digit colors. */
+function withAlpha(color: string, alpha: string): string {
+  const hex = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(color)
+  return hex ? `#${hex[1]}${alpha}` : color
+}
+
 /** Very dark brand marks (Apple, Microsoft…) disappear on dark surfaces.
  *  Lift them to a mid grey that stays readable on both themes. */
 function brandTint(hex: string): string {
@@ -23,7 +30,7 @@ export function EntryIcon(props: { entry: EntrySummary; category: Category | nul
   return (
     <View
       class="h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-      style={{ backgroundColor: `${categoryColor()}22` }}
+      style={{ backgroundColor: withAlpha(categoryColor(), '22') }}
     >
       <If when={site()}>
         {(icon) => (

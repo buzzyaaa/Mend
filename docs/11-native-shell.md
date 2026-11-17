@@ -149,6 +149,10 @@ nsh 安装：Windows 用 `irm https://nsh.dev/install.ps1 | iex`，macOS/Linux �
 
 本仓库已在 Windows 上验证裸跑 `nsh dev .`、`nsh check .` 与 `nsh package . --target windows` 通过（`nsh test .` / `nsh build .` 是提交前与发版前的必跑项）。实测：`nsh check .` 约 66s；`nsh package . --target windows` 约 5min（release runner 构建约 4m56s，打包 3.4s），产物 `.nsh/out/Mend/Mend.exe`、`.nsh/out/Mend.zip`、`.nsh/out/Mend-0.4.0-windows-x86_64.zip`、`.nsh/out/Mend.iss`；未安装 Inno Setup 6 时不生成 `setup.exe`，也不需要签名密钥。
 
+### 8.1 应用图标：唯一源与派生产物
+
+应用图标只有一份源：`assets/icon.png`（1024×1024 PNG），由 `nsh.json` 的 `"icon"` 引用。窗口左上角标题栏、任务栏、系统托盘、安装包、exe 内嵌、macOS dock 等所有系统级图标都从它派生，禁止为单个位置另维护一套图。换图标只替换这张源文件，再跑 `nsh build` / `nsh package` 让 `.nsh/windows/icon.ico` 等派生产物自动重生，不要手工改 `.nsh/` 下的产物。`assets/icons/*.svg`（按钮/菜单线性图标）与 `assets/site-icons/*.svg`（网站品牌图标）属于另一套 UI 图标体系，与应用图标无关，不要混淆。换完图标逐处核对：左上角、任务栏、托盘、安装包/exe，确保全部一致。
+
 ## 9. 已知风险
 
 - **手机 SQLite 数据目录**：依赖宿主 `process.dataDir`；Android/iOS 打包前需在真机验证。

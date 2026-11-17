@@ -6,6 +6,7 @@ import { categoryEmoji } from '../lib/category-icons'
 import {
   archiveEntry,
   categories,
+  closeDetail,
   confirm,
   copyText,
   deleteEntry,
@@ -13,7 +14,6 @@ import {
   entryEditor,
   openExternal,
   selected,
-  selectedId,
   setTagFilter,
   toggleFavorite,
   unarchiveEntry,
@@ -21,7 +21,8 @@ import {
 import { formatDate } from '../lib/format'
 import type { EntryView } from '../lib/types'
 import { Icon } from './Icon'
-import { ActionButton, Chip, EmptyState, IconButton, Spinner } from './ui'
+import { TagPill } from './TagPill'
+import { ActionButton, EmptyState, IconButton, Spinner } from './ui'
 
 function DetailRow(props: {
   label: string
@@ -88,11 +89,7 @@ function EntryBody(props: { entry: () => EntryView; compact?: boolean }) {
       <View class="border-b border-border bg-card px-3 py-2">
         <View class="flex-row items-start gap-3">
           <If when={props.compact}>
-            <IconButton
-              icon="chevron-left"
-              label={t('nav.back')}
-              onPress={() => selectedId.set(null)}
-            />
+            <IconButton icon="chevron-left" label={t('nav.back')} onPress={closeDetail} />
           </If>
           <View
             class="h-8 w-9 items-center justify-center rounded-xl"
@@ -181,11 +178,11 @@ function EntryBody(props: { entry: () => EntryView; compact?: boolean }) {
           <View class="mt-2 flex-row flex-wrap items-center gap-1.5">
             <Each of={entry().tags} key={(tag) => tag}>
               {(tag) => (
-                <Chip
+                <TagPill
                   label={`#${tag()}`}
                   onPress={() => {
                     setTagFilter(tag())
-                    if (props.compact) selectedId.set(null)
+                    if (props.compact) closeDetail()
                   }}
                 />
               )}
