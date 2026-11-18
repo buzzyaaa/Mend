@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Platform: Windows / macOS / Linux](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
-[![Version](https://img.shields.io/badge/Version-0.4.9-green.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-0.4.10-green.svg)](./CHANGELOG.md)
 
 English | [简体中文](./README.zh-CN.md)
 
@@ -20,6 +20,11 @@ Mend is a local-first, offline, encrypted personal password manager. It is built
 - **Backup** — encrypted `.mendbak` export and restore.
 - **Updates** — in-app updates with signed OTA packages (releases are published on GitHub Releases).
 - **Adaptive layout** — desktop master-detail (sidebar + list + detail) and single-column mobile from the same code.
+
+## Download
+
+- [GitHub Releases](https://github.com/buzzyaaa/Mend/releases/latest) — primary source; in-app updates and OTA also use GitHub.
+- [CNB mirror](https://cnb.cool/smybxg/Mend/-/releases) — 国内下载镜像，产物与 GitHub Release 一致，推荐中国大陆用户使用。
 
 ## Code signing
 

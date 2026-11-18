@@ -5,6 +5,17 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.4.10] - 2026-11-18
+
+发布流水线新增 CNB 国内镜像，README 增加下载入口。应用功能与 0.4.9 相同。
+
+#### Added
+- **CNB Release 镜像**：打 tag 发版后产物自动同步到 [cnb.cool/smybxg/Mend](https://cnb.cool/smybxg/Mend/-/releases)（`scripts/sync-cnb-release.mjs` + `release.yml` 的 `cnb-sync` job），供国内下载；代码双推 GitHub 与 CNB。
+- **README 下载入口**：中英文 README 新增 GitHub Releases 与 CNB 镜像下载链接。
+
+#### Changed
+- `docs/10` 新增 §9 CNB 下载镜像约定：GitHub 仍是唯一构建源与更新源（nsh updater 单源），CNB 只做镜像。
+
 ## [0.4.9] - 2026-11-18
 
 设置页全面改版：页面化卡片布局、全断点响应式、更新卡重组与统一控宽；列表列宽逐列可调、窗口位置记忆。

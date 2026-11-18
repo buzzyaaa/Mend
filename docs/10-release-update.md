@@ -89,3 +89,12 @@ nsh update-manifest dist\windows\*.zip \
 - OTA 包受 `minRuntime` 限制：较旧运行时会拒绝需要新运行时的包。默认 `minRuntime` 为发布所用 nsh 版本；当前使用 0.5.0。
 - 证书默认 365 天，到期前需重新 `nsh certify` 并更新 `NSH_RELEASE_CERT`。
 - 若发布密钥泄露，用 `nsh revoke` 签发吊销列表并重新发布。
+
+## 9. CNB 下载镜像
+
+GitHub 是唯一构建源与更新源；CNB（`cnb.cool/smybxg/Mend`）只做代码与 Release 产物镜像，供国内下载。nsh updater 是单源配置（`github` 或 `url`），没有双源竞速，不做「哪个快用哪个」。
+
+- **代码同步**：本地 `origin` 配双 pushurl（GitHub SSH + CNB HTTPS），`git push origin` 一次推两边。部分网络下 CNB SSH 22 端口不可达，统一走 HTTPS + 访问令牌。
+- **产物同步**：`release.yml` 的 `cnb-sync` job 在 GitHub Release 发布后运行 `scripts/sync-cnb-release.mjs`，用 `CNB_TOKEN` secret 调 CNB Open API（`api.cnb.cool`）：按 tag 复用或创建 Release → 逐文件取上传地址 → PUT → 确认（`ttl=0` 永久、同名覆盖）。
+- **附件直链**：`https://cnb.cool/smybxg/Mend/-/releases/download/<tag>/<filename>`。将来若要把 OTA/更新源切到国内，可改 `updater` 为 `"url"` 模式指向 CNB 上的 `latest.json`，并用 `nsh update-manifest --base-url` 生成指向 CNB 直链的清单（当前未启用）。
+- **不在 CNB 重复构建**：CNB 官方构建节点只有 Linux Docker；Windows/macOS 需根组织自托管 Runner。三平台构建与签名全部留在 GitHub Actions。

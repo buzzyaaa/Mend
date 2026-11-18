@@ -17,6 +17,11 @@ Mend 是一款本地离线、存盘加密的个人密码管理器，基于 **Nat
 - **更新**：应用内更新与签名 OTA 包（正式发布走 GitHub Releases）。
 - **自适应布局**：同一份代码同时支持桌面 master-detail（侧栏 + 列表 + 详情）与手机单栏。
 
+## 📥 下载
+
+- [GitHub Releases](https://github.com/buzzyaaa/Mend/releases/latest)：主发布源；应用内更新与 OTA 也走 GitHub。
+- [CNB 镜像](https://cnb.cool/smybxg/Mend/-/releases)：国内下载镜像，产物与 GitHub Release 完全一致，推荐中国大陆用户使用。
+
 ## 🔏 代码签名
 
 Windows 发布包使用项目密钥签名。项目成熟后计划改用公共信任的代码签名证书；在此之前，Windows SmartScreen 可能在首次下载时显示发布者警告。
