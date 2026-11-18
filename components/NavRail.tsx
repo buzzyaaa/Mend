@@ -1,12 +1,22 @@
-import { View } from 'nsh'
+import { token, View } from 'nsh'
 import { t } from 'nsh/i18n'
 
 import { activePage, closeDetail, lockVault, toast } from '../lib/state'
 import { IconButton } from './ui'
 
 /** 解锁后的左侧功能导航栏：列表 / 设置 / 锁定，底部保留扩展入口。
- *  紧凑布局下复用同一组动作（不含扩展位），横向放在内容区下方。 */
+ *  紧凑布局下复用同一组动作（含扩展位），横向放在内容区下方。
+ *  选中项用品牌色底 + 品牌色图标，与设置子导航的选中态一致。 */
 export function NavRail(props: { compact?: boolean }) {
+  const extension = (
+    <IconButton
+      icon="plus"
+      label={t('nav.extensions')}
+      size={18}
+      class="h-10 w-10 rounded-xl border border-dashed border-border"
+      onPress={() => toast(t('nav.extensions'), 'info')}
+    />
+  )
   const actions = (
     <>
       <IconButton
@@ -14,8 +24,9 @@ export function NavRail(props: { compact?: boolean }) {
         label={t('entry.listTitle')}
         testID="nav-entries"
         active={activePage() === 'entries'}
+        iconColor={activePage() === 'entries' ? token('primary') : undefined}
         size={18}
-        class="h-10 w-10 rounded-xl"
+        class={'h-10 w-10 rounded-xl ' + (activePage() === 'entries' ? 'bg-primary/10' : '')}
         onPress={() => {
           closeDetail()
           activePage.set('entries')
@@ -26,8 +37,9 @@ export function NavRail(props: { compact?: boolean }) {
         label={t('nav.settings')}
         testID="nav-settings"
         active={activePage() === 'settings'}
+        iconColor={activePage() === 'settings' ? token('primary') : undefined}
         size={18}
-        class="h-10 w-10 rounded-xl"
+        class={'h-10 w-10 rounded-xl ' + (activePage() === 'settings' ? 'bg-primary/10' : '')}
         onPress={() => {
           closeDetail()
           activePage.set('settings')
@@ -48,6 +60,7 @@ export function NavRail(props: { compact?: boolean }) {
     return (
       <View class="flex-row items-center justify-around border-t border-border bg-card px-2 py-1">
         {actions}
+        {extension}
       </View>
     )
   }
@@ -57,13 +70,7 @@ export function NavRail(props: { compact?: boolean }) {
       {actions}
       {/* 扩展预留位：后续模块（安全中心/生成器/导入导出）从这里进入，不重做布局。 */}
       <View class="flex-1" />
-      <IconButton
-        icon="plus"
-        label={t('nav.extensions')}
-        size={18}
-        class="h-10 w-10 rounded-xl border border-dashed border-border"
-        onPress={() => toast(t('nav.extensions'), 'info')}
-      />
+      {extension}
     </View>
   )
 }

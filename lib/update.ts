@@ -13,7 +13,7 @@ import {
 
 import { formatBytes } from './format'
 import { markUpdateChecked, preferences } from './preferences'
-import { settingsOpen, toast, updatePromptOpen, updateTarget, type UpdateTarget } from './state'
+import { activePage, toast, updatePromptOpen, updateTarget, type UpdateTarget } from './state'
 
 export interface UpdateState {
   busy: boolean
@@ -28,6 +28,8 @@ export const updateProgress = signal(0)
 export const updatePackage = signal<PackageUpdate | null>(null)
 export const updateApp = signal<AppUpdate | null>(null)
 export const updateError = signal('')
+/** 手动检查完成且没有更新：设置页据此显示「已是最新版本」，而不只靠 toast。 */
+export const updateUpToDate = signal(false)
 /** 下载/安装阶段：确认弹窗关闭后，底部悬浮进度条用它显示状态。 */
 export const updateRunning = signal(false)
 export const updateStage = signal<'download' | 'install'>('download')
@@ -49,14 +51,17 @@ export function resetUpdateState(): void {
   updatePackage.set(null)
   updateApp.set(null)
   updateError.set('')
+  updateUpToDate.set(false)
   updateRunning.set(false)
   updateStage.set('download')
 }
 
-/** 设置页关掉时清空上次检查结果，但正在后台下载/安装时不能打断。 */
-export function resetUpdateCheckState(): void {
+/** 离开设置页时清掉上次手动检查的结果，避免「已是最新版本」残留到下次进入；
+ *  正在后台下载/安装时不能打断，也不动更新确认弹窗依赖的 package/app。 */
+export function clearUpdateCheckResult(): void {
   if (updateRunning()) return
-  resetUpdateState()
+  updateUpToDate.set(false)
+  updateError.set('')
 }
 
 export function openUpdatePrompt(target: UpdateTarget): void {
@@ -80,6 +85,7 @@ export async function checkForUpdates(): Promise<void> {
   updateProgress.set(0)
   updatePackage.set(null)
   updateApp.set(null)
+  updateUpToDate.set(false)
   try {
     const packageUpdate = await checkForPackage()
     if (packageUpdate) {
@@ -88,6 +94,7 @@ export async function checkForUpdates(): Promise<void> {
       const app = await checkForUpdate()
       updateApp.set(app)
       if (!app) {
+        updateUpToDate.set(true)
         toast(t('update.upToDate'), 'info')
       }
     }
@@ -150,7 +157,7 @@ export async function startUpdate(): Promise<void> {
   updateError.set('')
   updateProgress.set(0)
   closeUpdatePrompt()
-  settingsOpen.set(false)
+  activePage.set('entries')
 
   const onProgress = (event: { received: number; total?: number | null }) => {
     updateProgress.set(progressOf(event.received, event.total))

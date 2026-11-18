@@ -35,6 +35,7 @@ import logOut from '../assets/icons/log-out.svg'
 import mail from '../assets/icons/mail.svg'
 import menu from '../assets/icons/menu.svg'
 import moreHorizontal from '../assets/icons/more-horizontal.svg'
+import palette from '../assets/icons/palette.svg'
 import phone from '../assets/icons/phone.svg'
 import plus from '../assets/icons/plus.svg'
 import refresh from '../assets/icons/refresh.svg'
@@ -46,6 +47,7 @@ import sort from '../assets/icons/sort.svg'
 import sparkles from '../assets/icons/sparkles.svg'
 import star from '../assets/icons/star.svg'
 import starFilled from '../assets/icons/star-filled.svg'
+import sun from '../assets/icons/sun.svg'
 import trash from '../assets/icons/trash.svg'
 import unlock from '../assets/icons/unlock.svg'
 import upload from '../assets/icons/upload.svg'
@@ -81,6 +83,7 @@ export type IconName =
   | 'mail'
   | 'menu'
   | 'more-horizontal'
+  | 'palette'
   | 'phone'
   | 'plus'
   | 'refresh'
@@ -92,6 +95,7 @@ export type IconName =
   | 'sparkles'
   | 'star'
   | 'star-filled'
+  | 'sun'
   | 'trash'
   | 'unlock'
   | 'upload'
@@ -127,6 +131,7 @@ const ICON_ASSETS: Record<IconName, ImageAsset> = {
   mail,
   menu,
   'more-horizontal': moreHorizontal,
+  palette,
   phone,
   plus,
   refresh,
@@ -138,6 +143,7 @@ const ICON_ASSETS: Record<IconName, ImageAsset> = {
   sparkles,
   star,
   'star-filled': starFilled,
+  sun,
   trash,
   unlock,
   upload,

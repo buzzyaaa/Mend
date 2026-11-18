@@ -142,12 +142,16 @@ export function IconButton(props: {
 export function Field(props: {
   label: string
   hint?: string
+  icon?: IconName
   children: JSX.Element
   class?: string
 }) {
   return (
     <View class={`gap-1 ${props.class ?? ''}`}>
-      <Text class="text-xs font-medium text-muted-foreground">{props.label}</Text>
+      <View class="flex-row items-center gap-1.5">
+        {props.icon ? <Icon name={props.icon} size={13} color={token('primary')} /> : null}
+        <Text class="text-xs font-medium text-muted-foreground">{props.label}</Text>
+      </View>
       {props.children}
       {props.hint ? <Text class="text-[11px] text-muted-foreground">{props.hint}</Text> : null}
     </View>
@@ -337,34 +341,47 @@ export function SwitchField(props: {
   label: string
   hint?: string
   disabled?: boolean
+  /** 开关紧贴文案左侧（默认开关在行尾右侧）。 */
+  leading?: boolean
 }) {
-  return (
-    <View
-      class="flex-row items-center justify-between gap-2 py-1.5"
-      onPress={
-        props.disabled
-          ? undefined
-          : () => {
-              touchActivity()
-              props.onChange(!props.checked)
-            }
+  const control = (
+    <Switch
+      checked={props.checked}
+      onChange={(event) => {
+        touchActivity()
+        props.onChange(event.checked)
+      }}
+      disabled={props.disabled}
+      accessibilityLabel={props.label}
+      trackClass="h-5 w-9 flex-row items-center justify-start rounded-full bg-muted p-0.5 checked:bg-primary"
+      thumbClass="h-4 w-4 rounded-full bg-background checked:translate-x-4"
+    />
+  )
+  const press = props.disabled
+    ? undefined
+    : () => {
+        touchActivity()
+        props.onChange(!props.checked)
       }
-    >
+  if (props.leading) {
+    // 开关 + 标题一行；说明另起一行，左缘与开关对齐。
+    return (
+      <View class="gap-1.5 py-1.5" onPress={press}>
+        <View class="flex-row items-center gap-2.5">
+          {control}
+          <Text class="text-xs text-foreground">{props.label}</Text>
+        </View>
+        {props.hint ? <Text class="text-[11px] text-muted-foreground">{props.hint}</Text> : null}
+      </View>
+    )
+  }
+  return (
+    <View class="flex-row items-center justify-between gap-2 py-1.5" onPress={press}>
       <View class="flex-1 gap-0.5">
         <Text class="text-xs text-foreground">{props.label}</Text>
         {props.hint ? <Text class="text-[11px] text-muted-foreground">{props.hint}</Text> : null}
       </View>
-      <Switch
-        checked={props.checked}
-        onChange={(event) => {
-          touchActivity()
-          props.onChange(event.checked)
-        }}
-        disabled={props.disabled}
-        accessibilityLabel={props.label}
-        trackClass="h-5 w-9 flex-row items-center justify-start rounded-full bg-muted p-0.5 checked:bg-primary"
-        thumbClass="h-4 w-4 rounded-full bg-background checked:translate-x-4"
-      />
+      {control}
     </View>
   )
 }
@@ -443,11 +460,36 @@ export function Badge(props: {
   )
 }
 
-export function SectionTitle(props: { title: string; hint?: string }) {
+/** 设置页卡片：白色 surface + 细边框 + 12px 圆角，内容间距统一。 */
+export function SettingsCard(props: { children: JSX.Element; class?: string }) {
   return (
-    <View class="gap-0.5">
-      <Text class="text-sm font-semibold text-foreground">{props.title}</Text>
-      {props.hint ? <Text class="text-[11px] text-muted-foreground">{props.hint}</Text> : null}
+    <View class={`gap-3 rounded-xl border border-border bg-card p-5 ${props.class ?? ''}`}>
+      {props.children}
+    </View>
+  )
+}
+
+/** 卡片头：左侧品牌色图标块 + 标题/说明。 */
+export function CardHeader(props: { icon: IconName; title: string; hint?: string }) {
+  return (
+    <View class="flex-row items-start gap-2.5">
+      <View class="h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+        <Icon name={props.icon} size={16} color={token('primary')} />
+      </View>
+      <View class="flex-1 gap-0.5 pt-0.5">
+        <Text class="text-sm font-semibold text-foreground">{props.title}</Text>
+        {props.hint ? <Text class="text-[11px] text-muted-foreground">{props.hint}</Text> : null}
+      </View>
+    </View>
+  )
+}
+
+/** 警示条：降低安全性的选项必须配完整、醒目的风险说明。 */
+export function WarningBanner(props: { text: string }) {
+  return (
+    <View class="flex-row items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5">
+      <Icon name="alert-triangle" size={14} color={token('warning')} class="mt-0.5 shrink-0" />
+      <Text class="flex-1 text-[11px] text-warning">{props.text}</Text>
     </View>
   )
 }
