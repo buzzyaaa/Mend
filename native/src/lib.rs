@@ -9,6 +9,7 @@ mod api;
 mod dto;
 mod error;
 mod service;
+mod system_proxy;
 
 use nsh_core::prelude::*;
 

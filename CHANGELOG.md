@@ -5,6 +5,13 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.4.12] - 2026-11-18
+
+检查更新支持 Windows「系统代理」模式的代理软件。
+
+#### Fixed
+- **更新不再直连超时**：nsh 更新器（ureq）只认 `HTTP_PROXY`/`HTTPS_PROXY` 环境变量、不读 WinINET 系统代理，导致只开「系统代理」模式的代理软件下检查更新报 `timeout: connect`。现在原生层启动时读一次系统代理注册表（`ProxyEnable`/`ProxyServer`/`ProxyOverride`）补写进程环境变量，更新流量随系统代理走；已显式设置的环境变量优先不被覆盖。PAC 与纯 SOCKS 代理仍需用 TUN 模式或显式环境变量（docs/10 §10）。
+
 ## [0.4.11] - 2026-11-18
 
 新增/编辑条目的标签填写体验优化。

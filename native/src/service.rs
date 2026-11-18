@@ -1525,6 +1525,8 @@ fn save_settings_sync(settings: Settings) -> Result<Settings, String> {
 // ---------------------------------------------------------------------------
 
 pub async fn init(data_dir: Option<String>) -> Result<VaultStatus, String> {
+    // 系统代理 → 环境变量：必须在任何 fetch（检查更新）之前，见 system_proxy 模块注释。
+    crate::system_proxy::apply();
     let resolved = resolve_data_dir(data_dir)?;
     init_sync(Some(resolved.display().to_string()))
 }

@@ -98,3 +98,20 @@ GitHub 是唯一构建源与更新源；CNB（`cnb.cool/smybxg/Mend`）只做代
 - **产物同步**：`release.yml` 的 `cnb-sync` job 在 GitHub Release 发布后运行 `scripts/sync-cnb-release.mjs`，用 `CNB_TOKEN` secret 调 CNB Open API（`api.cnb.cool`）：按 tag 复用或创建 Release → 逐文件取上传地址 → PUT → 确认（`ttl=0` 永久、同名覆盖）。
 - **附件直链**：`https://cnb.cool/smybxg/Mend/-/releases/download/<tag>/<filename>`。将来若要把 OTA/更新源切到国内，可改 `updater` 为 `"url"` 模式指向 CNB 上的 `latest.json`，并用 `nsh update-manifest --base-url` 生成指向 CNB 直链的清单（当前未启用）。
 - **不在 CNB 重复构建**：CNB 官方构建节点只有 Linux Docker；Windows/macOS 需根组织自托管 Runner。三平台构建与签名全部留在 GitHub Actions。
+
+## 10. 更新网络与代理
+
+更新检查与下载走 nsh 引擎的 `fetch`（ureq）。ureq 的代理只认环境变量
+`HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`（`Proxy::try_from_env`），不读 Windows
+「系统代理」（WinINET 注册表）——nsh 未启用 ureq 的 `win-system-proxy` feature。
+因此只开「系统代理」模式的代理软件对更新器不可见，会直连 GitHub 超时
+（`timeout: connect`）。
+
+- **系统代理注入**（Windows）：`native/src/system_proxy.rs` 在 `Vault.init` 首行、
+  任何 fetch 之前读一次 `HKCU\...\Internet Settings` 的
+  `ProxyEnable` / `ProxyServer` / `ProxyOverride`，翻译成上述环境变量补写进进程。
+  单一 `host:port` 形式同时给 HTTP/HTTPS；分协议形式只取 `http=` / `https=`；
+  `ProxyOverride` 的分号换逗号作 `NO_PROXY`。**已存在的环境变量优先，不覆盖。**
+- **不支持**：PAC（`AutoConfigURL`）与纯 SOCKS 代理（ureq 未开 socks feature）；
+  这两类场景用代理软件的 TUN 模式，或显式设 `HTTPS_PROXY` 环境变量。
+- **国内兜底**：不走代理也可从 CNB 镜像手动下载整包（§9），库数据不受影响。
