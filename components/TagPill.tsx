@@ -82,6 +82,7 @@ export function TagPill(props: {
   label: string
   onPress?: () => void
   class?: string
+  accessibilityLabel?: string
 }) {
   const color = () => tagColor(props.label)
   return (
@@ -90,6 +91,7 @@ export function TagPill(props: {
       style={{ backgroundColor: color().background }}
       onPress={props.onPress}
       role={props.onPress ? 'button' : undefined}
+      accessibilityLabel={props.accessibilityLabel}
     >
       <Text
         class="text-[11px] font-medium"

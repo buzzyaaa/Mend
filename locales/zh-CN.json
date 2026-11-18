@@ -95,6 +95,7 @@
     "notesPlaceholder": "支持 Markdown：标题、列表、加粗、代码、链接…",
     "tags": "标签",
     "tagsPlaceholder": "多个标签用逗号分隔，如：工作, 金融",
+    "tagsQuickAdd": "已有标签：点击添加，再点移除",
     "tagFilterHint": "点击标签筛选，可多选，再点取消",
     "tagFilter": "标签筛选",
     "allTags": "全部标签",

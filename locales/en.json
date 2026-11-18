@@ -95,6 +95,7 @@
     "notesPlaceholder": "Markdown supported: headings, lists, bold, code, links…",
     "tags": "Tags",
     "tagsPlaceholder": "Comma separated, e.g. work, finance",
+    "tagsQuickAdd": "Existing tags: tap to add, tap again to remove",
     "tagFilterHint": "Filter by tags, multiple allowed; tap again to clear",
     "tagFilter": "Filter by tags",
     "allTags": "All tags",

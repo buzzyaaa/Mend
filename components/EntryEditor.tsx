@@ -1,16 +1,17 @@
-import { effect, Scroll, signal, Text, View, windowSize } from 'nsh'
+import { computed, effect, Scroll, signal, Text, View, windowSize } from 'nsh'
 import { Dialog, Tab, Tabs, TextView } from 'nsh/base'
 import { t } from 'nsh/i18n'
 
 import { errorText } from '../lib/errors'
 import { categoryEmoji } from '../lib/category-icons'
-import { categories, confirm, entryEditor, presets, saveEntry } from '../lib/state'
+import { categories, confirm, entries, entryEditor, presets, saveEntry, touchActivity } from '../lib/state'
 import type { EntryEditorState, EntryInput } from '../lib/types'
 import { splitTags } from '../lib/format'
 import * as native from '../lib/native'
 import { Icon } from './Icon'
 import { GeneratorDialog } from './GeneratorDialog'
 import { PresetPicker } from './PresetPicker'
+import { TagPill } from './TagPill'
 import {
   ActionButton,
   Field,
@@ -107,6 +108,22 @@ export function EntryEditor(props: { state: EntryEditorState }) {
   })
 
   const dirty = () => formKey(form(), tagsText()) !== original()
+
+  // 全库已有标签（去重排序），与 TagFilterMenu 同源：输入框下方点选快速填写。
+  const allTags = computed(() =>
+    Array.from(new Set(entries().flatMap((entry) => entry.tags))).sort((a, b) =>
+      a.localeCompare(b),
+    ),
+  )
+
+  function toggleTag(tag: string) {
+    touchActivity()
+    const current = splitTags(tagsText())
+    const next = current.includes(tag)
+      ? current.filter((item) => item !== tag)
+      : [...current, tag]
+    tagsText.set(next.join(', '))
+  }
 
   function requestClose() {
     if (busy()) return
@@ -299,13 +316,35 @@ export function EntryEditor(props: { state: EntryEditorState }) {
             />
           </Field>
 
-          <Field label={t('entry.tags')} hint={t('entry.tagsPlaceholder')}>
-            <TextField
-              value={tagsText()}
-              onChange={tagsText.set}
-              placeholder={t('entry.tagsPlaceholder')}
-              accessibilityLabel={t('entry.tags')}
-            />
+          <Field label={t('entry.tags')}>
+            <View class="gap-1.5">
+              <TextField
+                value={tagsText()}
+                onChange={tagsText.set}
+                placeholder={t('entry.tagsPlaceholder')}
+                accessibilityLabel={t('entry.tags')}
+              />
+              <Text class="text-[11px] text-muted-foreground">{t('entry.tagsPlaceholder')}</Text>
+              <If when={allTags().length > 0}>
+                <View class="gap-1 pt-0.5">
+                  <Text class="text-[11px] text-muted-foreground">{t('entry.tagsQuickAdd')}</Text>
+                  <View class="flex-row flex-wrap items-center gap-1.5">
+                    {allTags().map((tag) => (
+                      <TagPill
+                        label={tag}
+                        accessibilityLabel={tag}
+                        class={
+                          splitTags(tagsText()).includes(tag)
+                            ? 'ring-2 ring-primary'
+                            : 'opacity-70 hover:opacity-100 active:opacity-60'
+                        }
+                        onPress={() => toggleTag(tag)}
+                      />
+                    ))}
+                  </View>
+                </View>
+              </If>
+            </View>
           </Field>
 
           <View class="gap-2">

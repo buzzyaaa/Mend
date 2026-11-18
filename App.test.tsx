@@ -155,6 +155,51 @@ test('sets up a vault, creates an entry, and locks', async () => {
   await app.waitFor('label:Master password')
 })
 
+// 标签快速填写：编辑弹窗在输入框下方列出全库已有标签，点击加入输入框、
+// 再点移除；逗号分隔的自由输入不受影响。
+test('entry editor lists existing tags for one-tap fill', async () => {
+  const app = await open('./App.tsx', { platform: 'windows' })
+  await app.setViewport(1100, 780)
+  await app.waitFor('label:Master password')
+  await app.type('label:Master password', 'test-password-1234')
+  if (app.shows('label:Confirm master password')) {
+    await app.type('label:Confirm master password', 'test-password-1234')
+    await app.press('Create and enter')
+  } else {
+    await app.press('text:Unlock')
+  }
+  await app.waitFor('text:Passwords')
+
+  // 先建一条带标签的条目，让库里存在「已有标签」。
+  await app.press('id:add-entry')
+  await app.waitFor('text:New entry')
+  await app.type('label:Title', 'Tagged')
+  await app.type('label:Tags', 'work, finance')
+  await app.press('text:Save')
+  await app.waitFor('text:Tagged')
+
+  // 再开新增弹窗：标签区列出已有标签胶囊，点击即写入输入框。
+  await app.press('id:add-entry')
+  await app.waitFor('text:New entry')
+  await app.waitFor('label:work')
+  expect(app.shows('label:finance')).toBe(true)
+  expect(app.texts()).toContain('Existing tags: tap to add, tap again to remove')
+  await app.press('label:work')
+  expect(app.value('label:Tags')).toBe('work')
+  await app.press('label:finance')
+  expect(app.value('label:Tags')).toBe('work, finance')
+  // 再点一次移除；全部移除后表单不脏，取消可直接关闭。
+  await app.press('label:work')
+  expect(app.value('label:Tags')).toBe('finance')
+  await app.press('label:finance')
+  expect(app.value('label:Tags')).toBe('')
+  await app.press('text:Cancel')
+  expect(app.shows('text:New entry')).toBe(false)
+
+  await app.press('label:Lock')
+  await app.waitFor('label:Master password')
+})
+
 // 手机设置页：单页滚动，无快速导航（子导航/hub 都不存在），四个分区同屏可达；
 // 更新卡融合版本与客户端身份，检查按钮在频率下方。
 test('phone settings is a single scroll page without quick nav', async () => {
