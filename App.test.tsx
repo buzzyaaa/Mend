@@ -96,11 +96,20 @@ test('retries transient db lock, then recovers from the fatal page', async () =>
 
 test('sets up a vault, creates an entry, and locks', async () => {
   const app = await open('./App.tsx')
+  // 桌面窗口尺寸。headless 默认视口只有 390 宽，列表区会被压到每列 36 的
+  // 下限宽度，标题列窄到放不下图标之外的字，`texts()` 里就查不到条目标题。
+  await app.setViewport(1100, 780)
   await app.waitFor('label:Master password')
   await app.type('label:Master password', 'test-password-1234')
   await app.type('label:Confirm master password', 'test-password-1234')
   await app.press('Create and enter')
   await app.waitFor('text:Passwords')
+
+  // 列宽拖动把手只挂在「相邻两列之间」：选择列右侧没有把手，最后一列（备注）
+  // 右侧也没有——那段是操作列，不能拖窄，也不参与分宽度。
+  expect(app.shows('id:resize-check')).toBe(false)
+  expect(app.shows('id:resize-notes')).toBe(false)
+  expect(app.shows('id:resize-tags')).toBe(true)
 
   await app.press('id:add-entry')
   await app.waitFor('text:New entry')
@@ -112,8 +121,11 @@ test('sets up a vault, creates an entry, and locks', async () => {
 
   await app.press('label:Settings')
   await app.waitFor('text:Appearance & behavior')
-  await app.press('id:settings-close')
-  await app.press('label:Presets')
+  // 设置页已页面化：靠左侧导航的「列表」返回，不再有弹窗时代的关闭按钮。
+  await app.press('id:nav-entries')
+  // 「预设值」在顶栏和列表工具栏各有一个入口（宽窗口下两个都在），取第一个即可，
+  // 它们打开的是同一个弹窗。
+  await app.press('label:Presets >> nth=0')
   await app.waitFor('text:Presets')
   await app.press('id:presets-close')
 

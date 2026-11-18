@@ -19,6 +19,7 @@
   },
   "window": {
     "title": "Mend v0.4.8",
+    "restoreBounds": true,
     "defaultSize": {
       "width": 1100,
       "height": 720

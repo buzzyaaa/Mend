@@ -51,7 +51,7 @@ import {
   visibleEntries,
 } from '../lib/state'
 import { normalizeUrl, notesPreview } from '../lib/format'
-import { preferences, setColumnWidths } from '../lib/preferences'
+import { columnWidthRange, preferences, setColumnWidths } from '../lib/preferences'
 import type { ColumnKey, EntrySummary, ResizableColumnKey, SortMode } from '../lib/types'
 import { ColumnConfigMenu } from './ColumnConfigMenu'
 import { EntryIcon } from './EntryIcon'
@@ -72,62 +72,118 @@ const SORT_OPTIONS: { value: SortMode; titleKey: string }[] = [
   { value: 'manual', titleKey: 'entry.sortManual' },
 ]
 
-/** 表头与数据行共用的列宽类，保证逐列对齐。 */
-const COL = {
-  check: 'w-5 shrink-0',
-  // 列多（标签 + 备注），整体收窄一点，让常见窗口下所有列都能露出来。
-  name: 'w-24 shrink-0',
-  tags: 'w-[104px] shrink-0',
-  category: 'w-16 shrink-0',
-  // 给最小宽度：窄窗口下也不能让字段列塌成 0 宽而把值藏掉（列表可横向溢出）。
-  field: 'flex-1 min-w-[56px]',
-  phone: 'w-[76px] shrink-0',
-  notes: 'w-[88px] shrink-0',
-  actions: 'w-[72px] shrink-0',
+/** 列宽样式：widthOf 提供像素基准（用户拖动值），表头与数据行共用，逐列对齐。
+ *  内容列的 flexGrow 取基准宽度本身 —— 窗口变宽时多余空间按各列宽度比例分掉，
+ *  整行始终铺满、不留大片空白；窗口变窄时同比例收窄并截断文本（minWidth 兜底），
+ *  不会把「操作」列挤出视野。选择/操作列宽度固定不伸缩（这两列没有拖动把手）。
+ *  拖动只让相邻两列一增一减，整行总宽不变，所以伸缩比例也不会变 —— 别的列不动。 */
+function colStyle(column: ResizableColumnKey) {
+  const base = widthOf(column)
+  if (column === 'check' || column === 'actions') {
+    return { flexBasis: base, flexGrow: 0, flexShrink: 0, minWidth: base }
+  }
+  return {
+    flexBasis: base,
+    flexGrow: base,
+    flexShrink: 1,
+    // 与拖动范围共用同一下限：布局层不能比用户能拖到的宽度更宽，
+    // 否则拖动已经到 36 了、渲染却还卡在更宽的位置，看起来像拖不动。
+    minWidth: columnWidthRange(column).min,
+  }
 }
 
 /** 拖动过程中的临时宽度；null = 尚未拖动，读持久化偏好值。 */
 const dragWidths = signal<Partial<Record<ResizableColumnKey, number>> | null>(null)
 
+/** 表头行的实际宽度（onLayout 量出来的）。窗口变宽/变窄时内容列会被等比拉伸
+ *  或压缩，拖动时用它把鼠标位移换算回列宽基准值的位移，否则把手跟不上鼠标。 */
+const headerRowWidth = signal(0)
+
+/** 内容列当前的实际宽度 ÷ 基准宽度。拖动中整行总宽不变，所以它是个常量。 */
+function columnScale(): number {
+  const contentKeys = visibleContentColumns()
+  const contentSum = contentKeys.reduce((sum, key) => sum + widthOf(key), 0)
+  const measured = headerRowWidth()
+  if (measured <= 0 || contentSum <= 0) return 1
+  // 行内边距 px-3 = 24，列间 gap-2 = 8；选择与操作列宽度固定、不参与伸缩。
+  const fixed = 24 + 8 * (contentKeys.length + 1) + widthOf('check') + widthOf('actions')
+  const available = measured - fixed
+  return available > 0 ? available / contentSum : 1
+}
+
 function widthOf(column: ResizableColumnKey): number {
   const live = dragWidths()
   const saved = preferences().columnWidths?.[column]
-  const base =
-    typeof saved === 'number' && Number.isFinite(saved) && saved > 0
-      ? saved
-      : column === 'check'
-        ? 20
-        : 72
+  const base = typeof saved === 'number' && Number.isFinite(saved) && saved > 0 ? saved : 72
   return live?.[column] ?? base
 }
 
 function currentWidths(): Record<ResizableColumnKey, number> {
-  return { check: widthOf('check'), actions: widthOf('actions') }
+  return {
+    check: widthOf('check'),
+    name: widthOf('name'),
+    tags: widthOf('tags'),
+    category: widthOf('category'),
+    username: widthOf('username'),
+    password: widthOf('password'),
+    email: widthOf('email'),
+    phone: widthOf('phone'),
+    notes: widthOf('notes'),
+    actions: widthOf('actions'),
+  }
+}
+
+/** 可见的内容列（不含选择/操作），按显示顺序 —— 拖动把手就落在相邻两列之间。 */
+function visibleContentColumns(): ResizableColumnKey[] {
+  const keys: ResizableColumnKey[] = ['name', 'tags']
+  if (!currentCategoryId()) keys.push('category')
+  for (const key of ['username', 'password', 'email', 'phone', 'notes'] as const) {
+    if (columnVisible(key)) keys.push(key)
+  }
+  return keys
+}
+
+/** 把手右侧紧邻的列。最后一列右侧没有把手：操作列不能被拖窄，也不参与分宽度。 */
+function nextContentColumn(column: ResizableColumnKey): ResizableColumnKey | null {
+  const list = visibleContentColumns()
+  const index = list.indexOf(column)
+  return index >= 0 && index < list.length - 1 ? list[index + 1] : null
 }
 
 /** 表头上的列宽拖动把手。PanResponder 的 responder 系统在指针移出窄把手后
- *  仍持续送 move，手小范围也能稳定拖。表头与每行共用 widthOf()，逐列对齐。
- *  edge=end（首列右边缘，右拖变宽）；edge=start（末列左边缘，左拖变宽）。 */
-function ColumnResizeHandle(props: {
-  column: ResizableColumnKey
-  edge: 'start' | 'end'
-}) {
-  const startWidth = { value: 0 }
+ *  仍持续送 move，手小范围也能稳定拖。
+ *
+ *  宽度只在**相邻两列**之间转移：左列加多少，右列就减多少，整行总宽不变，
+ *  因此左边所有列、右边所有列（含「操作」）的宽度都不受影响。 */
+function ColumnResizeHandle(props: { column: ResizableColumnKey; next: ResizableColumnKey }) {
+  const startLeft = { value: 0 }
+  const startRight = { value: 0 }
   const startX = { value: 0 }
-  const direction = props.edge === 'end' ? 1 : -1
   const responder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
     onPanResponderGrant: (_event, state) => {
-      startWidth.value = widthOf(props.column)
+      startLeft.value = widthOf(props.column)
+      startRight.value = widthOf(props.next)
       startX.value = state.x0
     },
     onPanResponderMove: (_event, state) => {
-      const next = clampWidth(
-        props.column,
-        startWidth.value + direction * (state.moveX - startX.value),
-      )
-      dragWidths.set({ ...currentWidths(), [props.column]: next })
+      const left = columnWidthRange(props.column)
+      const right = columnWidthRange(props.next)
+      // 鼠标位移换算成列宽基准值的位移（两边等比缩放时差一个比例）。
+      const delta = (state.moveX - startX.value) / (columnScale() || 1)
+      // 左列 +moved、右列 -moved，两侧都要落在各自范围内：
+      //   左列 startLeft+moved ∈ [left.min, left.max]
+      //   右列 startRight-moved ∈ [right.min, right.max]
+      const low = Math.max(left.min - startLeft.value, startRight.value - right.max)
+      const high = Math.min(left.max - startLeft.value, startRight.value - right.min)
+      if (high < low) return
+      const moved = Math.max(low, Math.min(high, delta))
+      dragWidths.set({
+        ...currentWidths(),
+        [props.column]: startLeft.value + moved,
+        [props.next]: startRight.value - moved,
+      })
     },
     onPanResponderRelease: () => {
       setColumnWidths(currentWidths())
@@ -138,25 +194,17 @@ function ColumnResizeHandle(props: {
   return (
     <View
       {...responder.panHandlers}
-      class={`absolute top-0 z-10 h-full w-2.5 items-center justify-center ${
-        props.edge === 'end' ? '-right-1' : '-left-1'
-      }`}
+      class="absolute -right-1 top-0 z-10 h-full w-2.5 items-center justify-center"
       style={{ cursor: 'col-resize' }}
       testID={`resize-${props.column}`}
       accessibilityLabel={t('entry.columnResizeHandle')}
     >
-      <View class="h-4 w-[3px] rounded-full bg-muted-foreground/60" />
+      <View class="h-3 w-[2px] rounded-full bg-muted-foreground/25" />
     </View>
   )
 }
 
-function clampWidth(column: ResizableColumnKey, value: number): number {
-  const min = column === 'check' ? 16 : 44
-  const max = column === 'check' ? 64 : 200
-  return Math.max(min, Math.min(max, Math.round(value)))
-}
-
-/** 五列可由用户在工具栏的「显示列」菜单里开关，默认全开。 */
+/** 列是否显示：选择/标题/标签/操作恒显示，分类在非分组视图显示，其余跟随配置。 */
 function columnVisible(column: ColumnKey): boolean {
   return preferences().visibleColumns[column]
 }
@@ -191,6 +239,7 @@ function MenuAction(props: {
 
 /** 单元格：字段值 + 复制按钮（密码另带眼睛图标）。复制按钮与行点击互不干扰。 */
 function FieldCell(props: {
+  column: 'username' | 'password' | 'email'
   value: string
   label: string
   mono?: boolean
@@ -204,7 +253,7 @@ function FieldCell(props: {
     return props.value
   }
   return (
-    <View class={`${COL.field} flex-row items-center gap-1`}>
+    <View style={colStyle(props.column)} class="flex-row items-center gap-1">
       <Text
         class={
           'min-w-0 shrink text-[11px] ' +
@@ -348,7 +397,7 @@ function EntryRow(props: { entry: () => EntrySummary }) {
       }
       accessibilityLabel={e().title}
     >
-      <View class={COL.check} style={{ width: widthOf('check') }}>
+      <View style={colStyle('check')}>
         <Checkbox
           checked={selectedIds().has(e().id)}
           onChange={() => toggleSelected(e().id)}
@@ -359,9 +408,9 @@ function EntryRow(props: { entry: () => EntrySummary }) {
       </View>
 
       <View
-        class={`${COL.name} flex-row items-center gap-2`}
+        style={{ ...colStyle('name'), cursor: link() ? 'pointer' : undefined }}
+        class="flex-row items-center gap-2"
         role={link() ? 'button' : undefined}
-        style={{ cursor: link() ? 'pointer' : undefined }}
         onPress={link() ? () => void openExternal(e().url ?? '') : undefined}
         accessibilityLabel={link() ? t('entry.openInBrowser') : undefined}
       >
@@ -380,7 +429,7 @@ function EntryRow(props: { entry: () => EntrySummary }) {
       </View>
 
       {/* 标签紧跟标题；TagPill 内部去掉 # 并按文字确定性配色。 */}
-      <View class={`${COL.tags} flex-row items-center gap-1 overflow-hidden`}>
+      <View style={colStyle('tags')} class="flex-row items-center gap-1 overflow-hidden">
         {e().tags.length > 0 ? (
           <>
             {e().tags.slice(0, LIST_TAG_LIMIT).map((tag) => (
@@ -402,7 +451,7 @@ function EntryRow(props: { entry: () => EntrySummary }) {
       </View>
 
       <If when={showCategory()}>
-        <View class={COL.category}>
+        <View style={colStyle('category')}>
           <Text class="text-[11px] text-muted-foreground" style={{ numberOfLines: 1 }}>
             {category()?.name ?? t('entry.uncategorized')}
           </Text>
@@ -410,10 +459,11 @@ function EntryRow(props: { entry: () => EntrySummary }) {
       </If>
 
       <If when={columnVisible('username')}>
-        <FieldCell value={fields()?.username ?? ''} label={t('entry.copyUsername')} mono />
+        <FieldCell column="username" value={fields()?.username ?? ''} label={t('entry.copyUsername')} mono />
       </If>
       <If when={columnVisible('password')}>
         <FieldCell
+          column="password"
           value={fields()?.password ?? ''}
           label={t('entry.copyPassword')}
           mono
@@ -423,10 +473,10 @@ function EntryRow(props: { entry: () => EntrySummary }) {
         />
       </If>
       <If when={columnVisible('email')}>
-        <FieldCell value={fields()?.email ?? ''} label={t('entry.copyEmail')} />
+        <FieldCell column="email" value={fields()?.email ?? ''} label={t('entry.copyEmail')} />
       </If>
       <If when={columnVisible('phone')}>
-        <View class={`${COL.phone} flex-row items-center gap-1`}>
+        <View style={colStyle('phone')} class="flex-row items-center gap-1">
           <Text
             class={
               'min-w-0 shrink text-[11px] ' +
@@ -451,7 +501,8 @@ function EntryRow(props: { entry: () => EntrySummary }) {
       {/* 备注列：Markdown 压成一行简写，点击打开独立备注编辑弹窗。 */}
       <If when={columnVisible('notes')}>
         <View
-          class={`${COL.notes} flex-row items-center`}
+          style={colStyle('notes')}
+          class="flex-row items-center"
           role="button"
           testID="edit-notes"
           accessibilityLabel={t('entry.editNotes')}
@@ -467,8 +518,8 @@ function EntryRow(props: { entry: () => EntrySummary }) {
       </If>
 
       <View
-        class={`${COL.actions} flex-row items-center justify-end gap-0.5`}
-        style={{ width: widthOf('actions') }}
+        style={colStyle('actions')}
+        class="flex-row items-center justify-end gap-0.5"
       >
         <If when={!isTrashView()}>
           <IconButton
@@ -494,9 +545,6 @@ function EntryRow(props: { entry: () => EntrySummary }) {
 }
 
 function ColumnHeader() {
-  const shown = () => displayedEntries()
-  const allSelected = () => shown().length > 0 && shown().every((e) => selectedIds().has(e.id))
-  const someSelected = () => shown().some((e) => selectedIds().has(e.id))
   return (
     <>
       {/* 第一行：搜索 + 视图切换 + 新建 */}
@@ -582,48 +630,53 @@ function ColumnHeader() {
         <IconButton icon="refresh" label={t('common.retry')} class="h-7 w-7" onPress={() => refreshEntries()} />
       </View>
 
-      {/* 表头：顺序与数据行严格一致 */}
-      <View class="mx-4 mb-1 flex-row items-center gap-2 rounded-lg bg-secondary px-3 py-1.5">
-        <View class={`${COL.check} relative`} style={{ width: widthOf('check') }}>
-          <Checkbox
-            checked={allSelected()}
-            indeterminate={!allSelected() && someSelected()}
-            onChange={() => toggleSelectAll()}
-            accessibilityLabel={t('entry.selectAll')}
-            indicatorClass="h-4 w-4 items-center justify-center rounded border border-input bg-background checked:border-primary checked:bg-primary indeterminate:border-primary indeterminate:bg-primary"
-            indicator={<Icon name="check" size={11} color={token('primary-foreground')} />}
-          />
-          <ColumnResizeHandle column="check" edge="end" />
-        </View>
-        <Text class={`${COL.name} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.title')}</Text>
-        <Text class={`${COL.tags} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.tags')}</Text>
-        <If when={!currentCategoryId()}>
-          <Text class={`${COL.category} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.category')}</Text>
-        </If>
-        <If when={columnVisible('username')}>
-          <Text class={`${COL.field} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.username')}</Text>
-        </If>
-        <If when={columnVisible('password')}>
-          <Text class={`${COL.field} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.password')}</Text>
-        </If>
-        <If when={columnVisible('email')}>
-          <Text class={`${COL.field} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.email')}</Text>
-        </If>
-        <If when={columnVisible('phone')}>
-          <Text class={`${COL.phone} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.phone')}</Text>
-        </If>
-        <If when={columnVisible('notes')}>
-          <Text class={`${COL.notes} text-[11px] font-medium text-muted-foreground`} style={{ numberOfLines: 1 }}>{t('entry.notes')}</Text>
-        </If>
-        <View
-          class={`${COL.actions} relative flex-row justify-end`}
-          style={{ width: widthOf('actions') }}
-        >
-          <ColumnResizeHandle column="actions" edge="start" />
-          <Text class="text-[11px] font-medium text-muted-foreground" style={{ numberOfLines: 1 }}>{t('common.actions')}</Text>
-        </View>
-      </View>
     </>
+  )
+}
+
+/** 表头行：与数据行逐列对齐（同一 colStyle + 同一左右内边距），
+ *  每个内容列右缘带拖动把手。 */
+function TableHeaderRow() {
+  const shown = () => displayedEntries()
+  const allSelected = () => shown().length > 0 && shown().every((e) => selectedIds().has(e.id))
+  const someSelected = () => shown().some((e) => selectedIds().has(e.id))
+  const cellClass = 'text-[11px] font-medium text-muted-foreground'
+  const cell = (column: ResizableColumnKey, label: string) => {
+    const next = nextContentColumn(column)
+    return (
+      <View style={colStyle(column)} class="relative flex-row items-center">
+        <Text class={cellClass} style={{ numberOfLines: 1 }}>{label}</Text>
+        {next ? <ColumnResizeHandle column={column} next={next} /> : null}
+      </View>
+    )
+  }
+  return (
+    <View
+      class="mx-4 mb-1 flex-row items-center gap-2 rounded-lg bg-secondary px-3 py-1.5"
+      onLayout={(event) => headerRowWidth.set(event.bounds.size.width)}
+    >
+      <View style={colStyle('check')} class="flex-row items-center">
+        <Checkbox
+          checked={allSelected()}
+          indeterminate={!allSelected() && someSelected()}
+          onChange={() => toggleSelectAll()}
+          accessibilityLabel={t('entry.selectAll')}
+          indicatorClass="h-4 w-4 items-center justify-center rounded border border-input bg-background checked:border-primary checked:bg-primary indeterminate:border-primary indeterminate:bg-primary"
+          indicator={<Icon name="check" size={11} color={token('primary-foreground')} />}
+        />
+      </View>
+      {cell('name', t('entry.title'))}
+      {cell('tags', t('entry.tags'))}
+      <If when={!currentCategoryId()}>{cell('category', t('entry.category'))}</If>
+      <If when={columnVisible('username')}>{cell('username', t('entry.username'))}</If>
+      <If when={columnVisible('password')}>{cell('password', t('entry.password'))}</If>
+      <If when={columnVisible('email')}>{cell('email', t('entry.email'))}</If>
+      <If when={columnVisible('phone')}>{cell('phone', t('entry.phone'))}</If>
+      <If when={columnVisible('notes')}>{cell('notes', t('entry.notes'))}</If>
+      <View style={colStyle('actions')} class="flex-row justify-end">
+        <Text class={cellClass} style={{ numberOfLines: 1 }}>{t('common.actions')}</Text>
+      </View>
+    </View>
   )
 }
 
@@ -686,6 +739,9 @@ export function EntryList() {
         </View>
       </If>
 
+      {/* 表头与数据行用同一套列宽与内边距：表头 mx-4+px-3，数据行由 List 的
+          px-4 加行自身 px-3 得到同样的左右缩进，逐列严格对齐。 */}
+      <TableHeaderRow />
       <List
         each={displayedEntries()}
         keyExtractor={(item) => item.id}

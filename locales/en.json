@@ -108,6 +108,7 @@
     "columnPhone": "Phone",
     "columnNotes": "Notes",
     "columnResizeHandle": "Drag to resize column",
+    "resetColumnWidths": "Reset column widths",
     "notesSaved": "Notes saved",
     "clearFilters": "Clear filters",
     "countSuffix": "items",
@@ -280,11 +281,12 @@
     "deviceUnlockEnable": "Turn on anyway",
     "deviceUnlockOn": "Password-less unlock is on",
     "deviceUnlockOff": "Password-less unlock is off — the master password is required at startup",
-    "version": "Version"
+    "version": "Version",
+    "clientKind": "Desktop app"
   },
   "update": {
     "title": "Update",
-    "hint": "Checks for new versions from GitHub Releases by default. The source and protocol can be swapped in code (see src/lib/update.ts).",
+    "hint": "Checks for new versions on launch and notifies you when one is available. You can also check manually anytime.",
     "currentVersion": "Current version",
     "checkNow": "Check for updates",
     "checkInterval": "Update check frequency",
@@ -309,7 +311,7 @@
     "restarting": "Restarting…",
     "failed": "Update failed: %{message}",
     "runningPackage": "Running package",
-    "shellInfo": "Shell %{version} (build %{build}, runtime %{runtime})",
+    "shellInfo": "App version %{version} (build %{build})",
     "promptTitle": "Version %{version} is available",
     "promptPackageTitle": "New code package %{version} is available",
     "notesTitle": "What's new",

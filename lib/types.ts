@@ -21,8 +21,30 @@ export type ThemeMode = 'system' | 'light' | 'dark'
 /** 列表列标识，供列显示/隐藏配置使用。 */
 export type ColumnKey = 'username' | 'password' | 'email' | 'phone' | 'notes'
 
-/** 可由用户拖动调整宽度的两列。 */
-export type ResizableColumnKey = 'check' | 'actions'
+/** 支持拖动调整宽度的列：标题/标签/分类/账号/密码/邮箱/手机号/备注，加首尾固定列。 */
+export type ResizableColumnKey =
+  | 'check'
+  | 'name'
+  | 'tags'
+  | 'category'
+  | 'username'
+  | 'password'
+  | 'email'
+  | 'phone'
+  | 'notes'
+  | 'actions'
+
+/** 表格中实际有数据的列（不含最左选择框与最右操作列）的顺序。 */
+export const DATA_COLUMN_KEYS: readonly ResizableColumnKey[] = [
+  'name',
+  'tags',
+  'category',
+  'username',
+  'password',
+  'email',
+  'phone',
+  'notes',
+] as const
 
 export interface Preferences {
   language: string | null
@@ -34,7 +56,7 @@ export interface Preferences {
   columnSizes: number[]
   /** 列表各列是否显示。 */
   visibleColumns: Record<ColumnKey, boolean>
-  /** 用户拖动调整后的「选择 / 操作」列宽（points）。 */
+  /** 用户拖动调整后的各列宽（points）。 */
   columnWidths: Record<ResizableColumnKey, number>
 }
 

@@ -1,8 +1,8 @@
 import { computed, Text, token } from 'nsh'
-import { Menu, MenuItem } from 'nsh/base'
+import { Menu, MenuItem, MenuSeparator } from 'nsh/base'
 import { t } from 'nsh/i18n'
 
-import { preferences, setColumnVisible } from '../lib/preferences'
+import { preferences, resetColumnWidths, setColumnVisible } from '../lib/preferences'
 import type { ColumnKey } from '../lib/types'
 import { Icon } from './Icon'
 import { ActionButton } from './ui'
@@ -61,6 +61,15 @@ export function ColumnConfigMenu() {
           </MenuItem>
         )
       })}
+      <MenuSeparator class="my-1 h-px bg-border" />
+      {/* 拖动调整过列宽后，一键回到默认宽度（表头拖动条的「撤销」）。 */}
+      <MenuItem
+        class="h-8 min-w-[176px] flex-row items-center rounded px-2 hover:bg-accent"
+        accessibilityLabel={t('entry.resetColumnWidths')}
+        onSelect={() => resetColumnWidths()}
+      >
+        <Text class="text-xs text-popover-foreground">{t('entry.resetColumnWidths')}</Text>
+      </MenuItem>
     </Menu>
   )
 }

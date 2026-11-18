@@ -11,11 +11,49 @@ import type {
 
 const DEFAULT_COLUMN_SIZES = [240, 360]
 const COLUMN_KEYS: readonly ColumnKey[] = ['username', 'password', 'email', 'phone', 'notes']
-const RESIZABLE_COLUMN_KEYS: readonly ResizableColumnKey[] = ['check', 'actions']
-/** 默认宽度需与 EntryList 的 COL.check / COL.actions 类保持一致（w-5=20, w-[72px]=72）。 */
-const DEFAULT_COLUMN_WIDTHS: Record<ResizableColumnKey, number> = { check: 20, actions: 72 }
+const RESIZABLE_COLUMN_KEYS: readonly ResizableColumnKey[] = [
+  'check',
+  'name',
+  'tags',
+  'category',
+  'username',
+  'password',
+  'email',
+  'phone',
+  'notes',
+  'actions',
+]
+/** 默认宽度需与 EntryList 的 COL.* 初始值保持一致，保证老用户无感知。 */
+const DEFAULT_COLUMN_WIDTHS: Record<ResizableColumnKey, number> = {
+  check: 20,
+  name: 96,
+  tags: 104,
+  category: 64,
+  username: 96,
+  password: 96,
+  email: 96,
+  phone: 76,
+  notes: 88,
+  actions: 72,
+}
+/** 内容列能压到的最窄宽度（points）—— 只要表头标题还能完整显示。
+ *  表头字号 11px：两个汉字约 22px、三个汉字（只有「手机号」）约 33px，
+ *  各留几像素余量。这是唯一的真源：拖动时的范围校验与布局层的 minWidth
+ *  都用它，两边不一致会出现「拖到 28 了、渲染还卡在 48」的假手感。 */
+const MIN_TWO_CHAR_COLUMN_WIDTH = 28
+const MIN_THREE_CHAR_COLUMN_WIDTH = 36
+/** 每列的拖动范围。 */
 const COLUMN_WIDTH_RANGE: Record<ResizableColumnKey, { min: number; max: number }> = {
   check: { min: 16, max: 64 },
+  name: { min: MIN_TWO_CHAR_COLUMN_WIDTH, max: 320 },
+  tags: { min: MIN_TWO_CHAR_COLUMN_WIDTH, max: 320 },
+  category: { min: MIN_TWO_CHAR_COLUMN_WIDTH, max: 240 },
+  username: { min: MIN_TWO_CHAR_COLUMN_WIDTH, max: 360 },
+  password: { min: MIN_TWO_CHAR_COLUMN_WIDTH, max: 360 },
+  email: { min: MIN_TWO_CHAR_COLUMN_WIDTH, max: 360 },
+  // 表头是「手机号」三个字，比其他列宽一点才不至于截断。
+  phone: { min: MIN_THREE_CHAR_COLUMN_WIDTH, max: 280 },
+  notes: { min: MIN_TWO_CHAR_COLUMN_WIDTH, max: 360 },
   actions: { min: 44, max: 200 },
 }
 const COLUMN_MIN = 160
@@ -45,8 +83,8 @@ function isTheme(value: unknown): value is ThemeMode {
   return value === 'system' || value === 'light' || value === 'dark'
 }
 
-/** Only the two resizable columns are persisted; clamp to the same range as
- *  the panels so a corrupt/old value can never squeeze the layout. */
+/** Only known columns are persisted; each is clamped to its own range so a
+ *  corrupt/old value can never collapse a column or blow up the layout. */
 function sanitizeColumns(value: unknown): number[] {
   if (!Array.isArray(value) || value.length < 2) return [...DEFAULT_COLUMN_SIZES]
   const sizes = value.slice(0, 3).map(Number)
@@ -174,8 +212,19 @@ export function setColumnVisible(column: ColumnKey, visible: boolean): void {
   updatePreferences({ visibleColumns: { ...preferences().visibleColumns, [column]: visible } })
 }
 
+/** 某列的拖动范围。拖动时用它同时约束相邻两列：左列加多少、右列就减多少，
+ *  两边都到边界就停住，整行总宽始终不变。 */
+export function columnWidthRange(column: ResizableColumnKey): { min: number; max: number } {
+  return COLUMN_WIDTH_RANGE[column]
+}
+
 export function setColumnWidths(widths: Record<ResizableColumnKey, number>): void {
   updatePreferences({ columnWidths: sanitizeColumnWidths(widths) })
+}
+
+/** 把各列宽恢复成默认值：用户拖乱之后有个一键回到整齐状态的出口。 */
+export function resetColumnWidths(): void {
+  updatePreferences({ columnWidths: { ...DEFAULT_COLUMN_WIDTHS } })
 }
 
 export function setUpdateCheckIntervalDays(days: number): void {

@@ -108,6 +108,7 @@
     "columnPhone": "手机号",
     "columnNotes": "备注",
     "columnResizeHandle": "拖动调整列宽",
+    "resetColumnWidths": "重置列宽",
     "notesSaved": "备注已保存",
     "clearFilters": "清除筛选",
     "countSuffix": "项",
@@ -280,11 +281,12 @@
     "deviceUnlockEnable": "仍然开启",
     "deviceUnlockOn": "已开启免主密码解锁",
     "deviceUnlockOff": "已关闭免主密码解锁，下次启动需要输入主密码",
-    "version": "版本"
+    "version": "版本",
+    "clientKind": "桌面客户端"
   },
   "update": {
     "title": "更新",
-    "hint": "默认从 GitHub Releases 检查新版本；数据源与协议可在代码中替换（见 src/lib/update.ts）。",
+    "hint": "启动时会检查是否有新版本，发现更新后会提醒你；也可以在这里随时手动检查。",
     "currentVersion": "当前版本",
     "checkNow": "立即检查更新",
     "checkInterval": "检查更新频率",
@@ -309,7 +311,7 @@
     "restarting": "重启中…",
     "failed": "更新失败：%{message}",
     "runningPackage": "正在运行的代码包",
-    "shellInfo": "外壳 %{version}（构建号 %{build}，运行时 %{runtime}）",
+    "shellInfo": "客户端版本 %{version}（构建 %{build}）",
     "promptTitle": "发现新版本 %{version}",
     "promptPackageTitle": "发现新代码包 %{version}",
     "notesTitle": "更新内容",
