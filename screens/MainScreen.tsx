@@ -17,7 +17,7 @@ import { UpdateDialog } from '../components/UpdateDialog'
 import { UpdateProgressHost } from '../components/UpdateProgressHost'
 import { IconButton, MODAL_BACKDROP_CLASS, MODAL_CLASS, ModalFrame } from '../components/ui'
 import { preferences, setColumnSizes } from '../lib/preferences'
-import { checkForUpdatesOnStartup } from '../lib/update'
+import { checkForUpdatesOnStartup, clearUpdateCheckResult } from '../lib/update'
 import {
   activePage,
   categoriesSheetOpen,
@@ -42,16 +42,25 @@ export function MainScreen() {
     void checkForUpdatesOnStartup()
   })
 
+  // 手动检查更新的结果只属于设置页：离开时清掉，下次进入不残留旧横幅。
+  effect(() => {
+    if (activePage() !== 'settings') clearUpdateCheckResult()
+  })
+
   const compact = computed(
     () => platform.idiom === 'phone' || platform.idiom === 'pad' || windowSize().width < 900,
   )
+  // 应用快速导航：< 600 放底部，其余宽度保持最左侧竖栏（设置页改版要求
+  // 600–899 的窄窗口也保留图标栏）；密码列表的单列断点仍是 900。
+  const bottomRail = computed(() => platform.idiom === 'phone' || windowSize().width < 600)
   const sidebarWidth = () => preferences().columnSizes[0] ?? 240
 
   const content = (
     <View class="flex-1 min-h-0">
       {/* 桌面三列：第三列自带工具栏（搜索/筛选/新建），不再需要独立标题栏。
-          窄屏单列：分类入口收进 AppHeader 的菜单按钮。 */}
-      <If when={compact()}>
+          窄屏单列：分类入口收进 AppHeader 的菜单按钮。设置页自带头部，
+          不再叠加列表页的 AppHeader。 */}
+      <If when={compact() && activePage() !== 'settings'}>
         <AppHeader compact={compact} onOpenCategories={() => categoriesSheetOpen.set(true)} />
       </If>
 
@@ -98,16 +107,16 @@ export function MainScreen() {
         paddingRight: 'env(safe-area-inset-right)',
       }}
     >
-      {/* 桌面端：最左侧纵向图标栏；其余区域是标题栏 + 页面内容。 */}
-      <If when={!compact()}>
+      {/* 宽屏：最左侧纵向图标栏；其余区域是标题栏 + 页面内容。 */}
+      <If when={!bottomRail()}>
         <View class="flex-1 min-h-0 flex-row">
           <NavRail />
           {content}
         </View>
       </If>
 
-      {/* 窄屏：同样的三个动作横放在底部，内容区占满剩余高度。 */}
-      <If when={compact()}>
+      {/* 手机：同样的三个动作横放在底部，内容区占满剩余高度。 */}
+      <If when={bottomRail()}>
         <View class="flex-1 min-h-0">{content}</View>
         <NavRail compact />
       </If>

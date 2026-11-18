@@ -1,7 +1,7 @@
 {
   "name": "Mend",
   "id": "com.mend.app",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "build": 17,
   "icon": "assets/icon.png",
   "rust": "native",
@@ -18,7 +18,7 @@
     }
   },
   "window": {
-    "title": "Mend v0.4.8",
+    "title": "Mend v0.4.9",
     "restoreBounds": true,
     "defaultSize": {
       "width": 1100,

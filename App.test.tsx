@@ -95,7 +95,9 @@ test('retries transient db lock, then recovers from the fatal page', async () =>
 })
 
 test('sets up a vault, creates an entry, and locks', async () => {
-  const app = await open('./App.tsx')
+  // headless 默认是 phone idiom：不指定 desktop platform 的话，1100 宽也走
+  // 单页滚动（无设置内导航），桌面子导航就没有回归覆盖。
+  const app = await open('./App.tsx', { platform: 'windows' })
   // 桌面窗口尺寸。headless 默认视口只有 390 宽，列表区会被压到每列 36 的
   // 下限宽度，标题列窄到放不下图标之外的字，`texts()` 里就查不到条目标题。
   await app.setViewport(1100, 780)
@@ -121,6 +123,19 @@ test('sets up a vault, creates an entry, and locks', async () => {
 
   await app.press('label:Settings')
   await app.waitFor('text:Appearance & behavior')
+  // 快速导航只剩四个分区，「关于」已并入更新卡，导航项不得残留。
+  expect(app.shows('id:settings-nav-appearance')).toBe(true)
+  expect(app.shows('id:settings-nav-security')).toBe(true)
+  expect(app.shows('id:settings-nav-vault')).toBe(true)
+  expect(app.shows('id:settings-nav-update')).toBe(true)
+  expect(app.shows('id:settings-nav-about')).toBe(false)
+  // 回归：点靠尾部的「数据库文件」时滚动被夹到触底，高亮必须收敛到点击意图，
+  // 不能被触底判定抢成最后分区（程序化滚动锁 + 意图收敛）。
+  // 用「未选中色」做基准，浅/深色主题都成立。
+  const inactiveColor = app.spanStyle('id:settings-nav-vault >> text:Database file').color
+  await app.press('id:settings-nav-vault')
+  await app.wait(800)
+  expect(app.spanStyle('id:settings-nav-vault >> text:Database file').color).not.toBe(inactiveColor)
   // 设置页已页面化：靠左侧导航的「列表」返回，不再有弹窗时代的关闭按钮。
   await app.press('id:nav-entries')
   // 「预设值」在顶栏和列表工具栏各有一个入口（宽窗口下两个都在），取第一个即可，
@@ -135,4 +150,33 @@ test('sets up a vault, creates an entry, and locks', async () => {
   await app.press('text:Unlock')
   await app.waitFor('text:Passwords')
   expect(app.texts()).toContain('GitHub')
+  // 原生会话是进程级的：不锁的话下一个用例 boot 直接进主界面，拿不到解锁页。
+  await app.press('label:Lock')
+  await app.waitFor('label:Master password')
+})
+
+// 手机设置页：单页滚动，无快速导航（子导航/hub 都不存在），四个分区同屏可达；
+// 更新卡融合版本与客户端身份，检查按钮在频率下方。
+test('phone settings is a single scroll page without quick nav', async () => {
+  const app = await open('./App.tsx')
+  await app.waitFor('label:Master password')
+  await app.type('label:Master password', 'test-password-1234')
+  // 同一次运行里前一个用例可能已建库（进程级会话 + 共享 MEND_DATA_DIR）：
+  // 单独跑本用例时是首启建库，整文件跑时是解锁既有库。
+  if (app.shows('label:Confirm master password')) {
+    await app.type('label:Confirm master password', 'test-password-1234')
+    await app.press('Create and enter')
+  } else {
+    await app.press('text:Unlock')
+  }
+  await app.waitFor('text:Passwords')
+
+  await app.press('id:nav-settings')
+  await app.waitFor('text:Appearance & behavior')
+  expect(app.shows('id:settings-nav-update')).toBe(false)
+  expect(app.shows('id:settings-hub-update')).toBe(false)
+  expect(app.texts()).toContain('Database file')
+  expect(app.texts()).toContain('Update')
+  expect(app.shows('id:settings-check-update')).toBe(true)
+  expect(app.texts()).toContain('Desktop app')
 })
