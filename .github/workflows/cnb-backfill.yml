@@ -1,0 +1,40 @@
+name: CNB mirror backfill
+
+# 镜像补传：tag 发版的 cnb-sync 失败或缺件时，从 GitHub Release 拉同一份产物
+# 重跑同步脚本（overwrite 幂等）。只走 workflow_dispatch，不参与 tag 发版。
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要补传的 Release tag（如 v0.4.11）'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    name: Backfill CNB release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download GitHub Release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          gh release download "${{ inputs.tag }}" --repo "$GITHUB_REPOSITORY" -D dist
+          ls -l dist
+
+      - name: Sync to CNB release
+        env:
+          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+        run: |
+          if [ -z "$CNB_TOKEN" ]; then
+            echo "::error::CNB_TOKEN secret is missing"
+            exit 1
+          fi
+          node scripts/sync-cnb-release.mjs smybxg/Mend "${{ inputs.tag }}" \
+            dist/*.zip dist/*.tar.gz dist/*.nshpkg dist/latest.json dist/latest.json.sig
