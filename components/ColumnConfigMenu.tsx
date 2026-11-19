@@ -2,17 +2,17 @@ import { computed, Text, token } from 'nsh'
 import { Menu, MenuItem, MenuSeparator } from 'nsh/base'
 import { t } from 'nsh/i18n'
 
-import { preferences, resetColumnWidths, setColumnVisible } from '../lib/preferences'
+import { preferences, setColumnVisible } from '../lib/preferences'
+import { resetTableLayout } from '../lib/state'
 import type { ColumnKey } from '../lib/types'
 import { Icon } from './Icon'
 import { ActionButton } from './ui'
 
-/** 五个可配置列；label 存 key 而不是 t() 结果，保证切换语言时文案跟着变。 */
+/** 三个可配置列（标签已并入标题，账号/密码与邮箱/手机号各合成一格）；
+ *  label 存 key 而不是 t() 结果，保证切换语言时文案跟着变。 */
 const COLUMNS: ReadonlyArray<{ key: ColumnKey; labelKey: string }> = [
-  { key: 'username', labelKey: 'entry.columnUsername' },
-  { key: 'password', labelKey: 'entry.columnPassword' },
-  { key: 'email', labelKey: 'entry.columnEmail' },
-  { key: 'phone', labelKey: 'entry.columnPhone' },
+  { key: 'credentials', labelKey: 'entry.columnCredentials' },
+  { key: 'contact', labelKey: 'entry.columnContact' },
   { key: 'notes', labelKey: 'entry.columnNotes' },
 ]
 
@@ -62,11 +62,11 @@ export function ColumnConfigMenu() {
         )
       })}
       <MenuSeparator class="my-1 h-px bg-border" />
-      {/* 拖动调整过列宽后，一键回到默认宽度（表头拖动条的「撤销」）。 */}
+      {/* 宽度不再持久化：一键按当前窗口宽度重新平均分配。 */}
       <MenuItem
         class="h-8 min-w-[176px] flex-row items-center rounded px-2 hover:bg-accent"
         accessibilityLabel={t('entry.resetColumnWidths')}
-        onSelect={() => resetColumnWidths()}
+        onSelect={() => resetTableLayout()}
       >
         <Text class="text-xs text-popover-foreground">{t('entry.resetColumnWidths')}</Text>
       </MenuItem>

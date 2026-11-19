@@ -6,8 +6,8 @@
 use nsh_core::prelude::*;
 
 use crate::dto::{
-    Category, CategoryInput, EntryInput, EntrySummary, EntryView, GeneratorOptions, ListFilter,
-    Preset, PresetInput, Settings, VaultStatus,
+    Category, CategoryInput, EntryInput, EntrySummary, EntryView, GeneratorOptions,
+    IconFetchReport, ListFilter, Preset, PresetInput, Settings, Tag, TagInput, VaultStatus,
 };
 use crate::service;
 
@@ -164,6 +164,11 @@ impl Vault {
         service::delete_category(id)
     }
 
+    /// Persist the sidebar's manual category order (only sort_order is written).
+    pub fn reorder_categories(ids: Vec<String>) -> Result<(), String> {
+        service::reorder_categories(ids)
+    }
+
     /// List reusable field values (decrypted).
     pub fn list_presets() -> Result<Vec<Preset>, String> {
         service::list_presets()
@@ -189,6 +194,27 @@ impl Vault {
         service::reorder_presets(field_type, ids)
     }
 
+    /// List tag definitions (name + color).
+    pub fn list_tags() -> Result<Vec<Tag>, String> {
+        service::list_tags()
+    }
+
+    /// Create a tag definition.
+    pub fn create_tag(input: TagInput) -> Result<Tag, String> {
+        service::create_tag(input)
+    }
+
+    /// Rename a tag and/or change its color. Entries carrying the old name are
+    /// rewritten to the new one.
+    pub fn update_tag(id: String, input: TagInput) -> Result<Tag, String> {
+        service::update_tag(id, input)
+    }
+
+    /// Delete a tag and strip it from every entry.
+    pub fn delete_tag(id: String) -> Result<(), String> {
+        service::delete_tag(id)
+    }
+
     /// Generate a password from the local CSPRNG. Nothing is persisted.
     pub fn generate_password(options: GeneratorOptions) -> Result<String, String> {
         service::generate_password(options)
@@ -202,6 +228,24 @@ impl Vault {
     /// Write the non-sensitive UI settings.
     pub fn save_settings(settings: Settings) -> Result<Settings, String> {
         service::save_settings(settings)
+    }
+
+    /// The cached site icon of an entry URL as a `data:` URI; `""` when there
+    /// is none (or the vault is locked). Never hits the network.
+    pub fn site_icon(url: String) -> Result<String, String> {
+        service::site_icon(url)
+    }
+
+    /// Fetch and cache icons for up to `limit` sites whose cache is missing or
+    /// stale. Runs on the blocking pool; call it only after the vault is
+    /// unlocked and the list has settled.
+    pub async fn fetch_site_icons(limit: u32) -> Result<IconFetchReport, String> {
+        service::fetch_site_icons(limit).await
+    }
+
+    /// Drop the whole icon cache; returns how many rows were removed.
+    pub fn clear_site_icons() -> Result<u64, String> {
+        service::clear_site_icons()
     }
 
     /// Use another vault file, or the default one in the data directory when

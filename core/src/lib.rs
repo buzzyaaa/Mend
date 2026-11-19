@@ -12,4 +12,5 @@ pub mod generator;
 pub mod presets;
 pub mod session;
 pub mod sync;
+pub mod tags;
 pub mod vault;

@@ -1,6 +1,6 @@
 [package]
 name = "mend-native"
-version = "0.4.4"
+version = "0.5.0"
 edition = "2024"
 publish = false
 
@@ -22,6 +22,12 @@ serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 zeroize = "1"
+# 站点图标：只会向条目自己的站点发 HTTPS 请求（不经过第三方图标服务），
+# TLS 走 rustls（与 nsh 自身一致），代理由 system_proxy 注入的环境变量决定。
+ureq = "3"
+# 只为把 ICO 转成 PNG（很多站点只给 /favicon.ico，Linux 上无法直接渲染 ICO）。
+# 其余格式原样缓存，不做重编码。
+image = { version = "0.25", default-features = false, features = ["ico", "png"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_Registry"] }

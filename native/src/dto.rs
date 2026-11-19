@@ -174,6 +174,28 @@ pub struct PresetInput {
     pub value: String,
 }
 
+/// A tag definition: the name plus the color its pill is drawn with.
+#[derive(Debug, Clone, Default, PartialEq, JsObject)]
+pub struct Tag {
+    /// Tag id.
+    pub id: String,
+    /// Display name, unique (case-insensitive) inside the vault.
+    pub name: String,
+    /// `#RRGGBB` pill color.
+    pub color: String,
+    /// Order inside the tag list.
+    pub sort_order: i64,
+}
+
+/// Tag input from the tag manager.
+#[derive(Debug, Clone, Default, PartialEq, JsObject)]
+pub struct TagInput {
+    /// Display name; the only required field.
+    pub name: String,
+    /// `#RRGGBB`; `null`/empty falls back to the built-in palette.
+    pub color: Option<String>,
+}
+
 /// Password generator options.
 #[derive(Debug, Clone, Default, PartialEq, JsObject)]
 pub struct GeneratorOptions {
@@ -204,4 +226,13 @@ pub struct Settings {
     pub update_check_interval_days: i64,
     /// Last successful update check, milliseconds since the Unix epoch.
     pub last_update_check_ts: i64,
+}
+
+/// Outcome of one site-icon fetch batch.
+#[derive(Debug, Clone, Default, PartialEq, JsObject)]
+pub struct IconFetchReport {
+    /// Icons fetched and cached by this batch.
+    pub fetched: u32,
+    /// Sites still waiting for an icon (0 = the queue is drained).
+    pub remaining: u32,
 }

@@ -9,6 +9,7 @@
 //! unchanged.
 
 use std::{
+    collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
     sync::{Mutex, MutexGuard, OnceLock},
@@ -29,9 +30,10 @@ use nsh_core::{
 use uuid::Uuid;
 use zeroize::{Zeroize, Zeroizing};
 
+use crate::icons;
 use crate::dto::{
-    Category, CategoryInput, EntryInput, EntrySummary, EntryView, GeneratorOptions, ListFilter,
-    Preset, PresetInput, Settings, VaultStatus,
+    Category, CategoryInput, EntryInput, EntrySummary, EntryView, GeneratorOptions,
+    IconFetchReport, ListFilter, Preset, PresetInput, Settings, Tag, TagInput, VaultStatus,
 };
 use crate::error::{coded, domain};
 
@@ -1324,6 +1326,12 @@ fn delete_category_sync(id: String) -> Result<(), String> {
     db::delete_category(require_conn(&backend)?, &id).map_err(domain)
 }
 
+fn reorder_categories_sync(ids: Vec<String>) -> Result<(), String> {
+    let backend = backend()?;
+    require_session(&backend)?;
+    db::reorder_categories(require_conn(&backend)?, &ids).map_err(domain)
+}
+
 // ---------------------------------------------------------------------------
 // Presets
 // ---------------------------------------------------------------------------
@@ -1412,6 +1420,100 @@ fn reorder_presets_sync(field_type: String, ids: Vec<String>) -> Result<(), Stri
     let backend = backend()?;
     require_session(&backend)?;
     db::reorder_presets(require_conn(&backend)?, &field_type, &ids).map_err(domain)
+}
+
+// ---------------------------------------------------------------------------
+// Tags
+// ---------------------------------------------------------------------------
+
+fn tag_of(row: db::TagRow) -> Tag {
+    Tag {
+        id: row.id,
+        name: row.name,
+        color: row.color,
+        sort_order: row.sort_order,
+    }
+}
+
+/// 标签名校验失败统一变成 `tag_invalid`；前端只按 code 取本地化文案。
+fn validate_tag_name(name: &str) -> Result<String, String> {
+    mend_core::tags::validate_name(name).map_err(|err| coded("tag_invalid", err.to_string()))
+}
+
+fn validate_tag_color(color: &Option<String>, fallback_index: usize) -> Result<String, String> {
+    mend_core::tags::validate_color(color.as_deref(), fallback_index)
+        .map_err(|err| coded("tag_color_invalid", err.to_string()))
+}
+
+/// 同库内标签名称唯一（大小写不敏感）；`except_id` 为编辑时的自身 id。
+fn ensure_tag_name_free(
+    rows: &[db::TagRow],
+    name: &str,
+    except_id: Option<&str>,
+) -> Result<(), String> {
+    let lower = name.to_lowercase();
+    if rows
+        .iter()
+        .any(|row| Some(row.id.as_str()) != except_id && row.name.to_lowercase() == lower)
+    {
+        return Err(coded("tag_duplicate", "标签名称已存在"));
+    }
+    Ok(())
+}
+
+fn list_tags_sync() -> Result<Vec<Tag>, String> {
+    let backend = backend()?;
+    require_session(&backend)?;
+    let rows = db::list_tag_defs(require_conn(&backend)?).map_err(domain)?;
+    Ok(rows.into_iter().map(tag_of).collect())
+}
+
+fn create_tag_sync(input: TagInput) -> Result<Tag, String> {
+    let backend = backend()?;
+    require_session(&backend)?;
+    let conn = require_conn(&backend)?;
+    let name = validate_tag_name(&input.name)?;
+    let rows = db::list_tag_defs(conn).map_err(domain)?;
+    ensure_tag_name_free(&rows, &name, None)?;
+    let color = validate_tag_color(&input.color, rows.len())?;
+    let sort_order = db::next_tag_sort(conn).map_err(domain)?;
+    let row = db::TagRow {
+        id: Uuid::new_v4().to_string(),
+        name,
+        color,
+        sort_order,
+        created_at: db::now_ms(),
+    };
+    db::insert_tag_def(conn, &row).map_err(domain)?;
+    Ok(tag_of(row))
+}
+
+fn update_tag_sync(id: String, input: TagInput) -> Result<Tag, String> {
+    let backend = backend()?;
+    require_session(&backend)?;
+    let conn = require_conn(&backend)?;
+    let name = validate_tag_name(&input.name)?;
+    let rows = db::list_tag_defs(conn).map_err(domain)?;
+    let existing = rows
+        .iter()
+        .find(|row| row.id == id)
+        .ok_or_else(|| coded("not_found", format!("标签 {id}")))?;
+    ensure_tag_name_free(&rows, &name, Some(&id))?;
+    let color = validate_tag_color(&input.color, existing.sort_order.max(0) as usize)?;
+    let sort_order = existing.sort_order;
+    db::rename_tag_def(conn, &id, &name, &color).map_err(domain)?;
+    Ok(Tag {
+        id,
+        name,
+        color,
+        sort_order,
+    })
+}
+
+fn delete_tag_sync(id: String) -> Result<(), String> {
+    let backend = backend()?;
+    require_session(&backend)?;
+    db::delete_tag_def(require_conn(&backend)?, &id).map_err(domain)
 }
 
 // ---------------------------------------------------------------------------
@@ -1521,6 +1623,148 @@ fn save_settings_sync(settings: Settings) -> Result<Settings, String> {
 }
 
 // ---------------------------------------------------------------------------
+// Site icons (favicon cache)
+// ---------------------------------------------------------------------------
+//
+// 图标只在**解锁后**、且用户开启「网站图标」时才抓（开关在 TSX 的偏好里，
+// 这里不做判断）：UI 在列表稳定一段时间后调用 `fetch_site_icons`，一批几个
+// 站点，抓到的字节写进库里的 `site_icons` 表。所有请求都直达条目自己的站点，
+// 绝不经过第三方图标服务。
+
+/// 图标有效期：站点换了图标，最多 90 天后会重新抓一次。
+const ICON_TTL_MS: i64 = 90 * 24 * 60 * 60 * 1000;
+/// 抓失败后的第一次重试间隔，之后按 2^n 退避。
+const ICON_RETRY_MS: i64 = 24 * 60 * 60 * 1000;
+/// 退避封顶：连续失败再多，也至少每个月再试一次。
+const ICON_RETRY_MAX_MS: i64 = 30 * 24 * 60 * 60 * 1000;
+/// 一批最多抓几个站点：让每批都在一两秒内完成，抓取始终让位于界面。
+const ICON_BATCH_MAX: u32 = 20;
+
+fn icon_retry_delay(fail_count: i64) -> i64 {
+    let exponent = (fail_count - 1).clamp(0, 10) as u32;
+    ICON_RETRY_MS
+        .saturating_mul(1i64 << exponent)
+        .min(ICON_RETRY_MAX_MS)
+}
+
+/// 下一批该抓的站点：`entries.url` 里出现过、缓存缺失/过期、且不在失败退避
+/// 窗口内的主机。只读 `url` 一列，不含回收站条目。
+fn pending_icon_sites(conn: &Connection, limit: usize) -> Result<Vec<icons::Site>, String> {
+    let now = db::now_ms();
+    let mut states: HashMap<String, db::SiteIconState> = HashMap::new();
+    for state in db::site_icon_states(conn).map_err(domain)? {
+        states.insert(state.host.clone(), state);
+    }
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut pending = Vec::new();
+    for url in db::list_entry_urls(conn).map_err(domain)? {
+        let Some(site) = icons::parse_site(&url) else {
+            continue;
+        };
+        if !seen.insert(site.key.clone()) {
+            continue;
+        }
+        let due = match states.get(&site.key) {
+            None => true,
+            Some(state) if state.has_icon => now.saturating_sub(state.fetched_at) >= ICON_TTL_MS,
+            Some(state) => {
+                now.saturating_sub(state.fetched_at) >= icon_retry_delay(state.fail_count)
+            }
+        };
+        if due {
+            pending.push(site);
+        }
+        if pending.len() >= limit {
+            break;
+        }
+    }
+    Ok(pending)
+}
+
+fn pending_icon_count(conn: &Connection) -> Result<u32, String> {
+    Ok(pending_icon_sites(conn, usize::MAX)?.len() as u32)
+}
+
+/// 一个条目网址对应的缓存图标，编码成 `data:` URI；没有缓存时返回空串。
+/// 返回空串而不是错误：图标缺失是常态，界面自己回退到内置图标。
+fn site_icon_sync(url: String) -> Result<String, String> {
+    let Some(site) = icons::parse_site(&url) else {
+        return Ok(String::new());
+    };
+    let backend = backend()?;
+    // 锁定时不读：图标只服务于列表，没有别的用途。
+    if backend.session.is_none() {
+        return Ok(String::new());
+    }
+    let conn = require_conn(&backend)?;
+    let Some(row) = db::get_site_icon(conn, &site.key).map_err(domain)? else {
+        return Ok(String::new());
+    };
+    Ok(format!("data:{};base64,{}", row.mime, B64.encode(row.bytes)))
+}
+
+/// 抓取并缓存最多 `limit` 个待抓站点。网络与解码都在 nsh 的阻塞线程池里跑，
+/// 期间不占数据库锁；写库回到引擎线程，和别的原生调用同一套串行。
+async fn fetch_site_icons_async(limit: u32) -> Result<IconFetchReport, String> {
+    let batch = {
+        let backend = backend()?;
+        let _session = require_session(&backend)?;
+        let conn = require_conn(&backend)?;
+        let limit = limit.clamp(1, ICON_BATCH_MAX) as usize;
+        pending_icon_sites(conn, limit)?
+    };
+    if batch.is_empty() {
+        return Ok(IconFetchReport {
+            fetched: 0,
+            remaining: 0,
+        });
+    }
+
+    let results = blocking(move || {
+        let mut out = Vec::with_capacity(batch.len());
+        for (index, site) in batch.into_iter().enumerate() {
+            // 限速：站点之间留 250ms，避免一次解锁就把几十个站点打出去。
+            if index > 0 {
+                std::thread::sleep(std::time::Duration::from_millis(250));
+            }
+            let icon = icons::fetch(&site);
+            out.push((site.key, icon));
+        }
+        out
+    })
+    .await
+    .map_err(join_error)?;
+
+    let mut fetched = 0u32;
+    let remaining = {
+        let backend = backend()?;
+        let _session = require_session(&backend)?;
+        let conn = require_conn(&backend)?;
+        let now = db::now_ms();
+        for (host, icon) in results {
+            match icon {
+                Some((mime, bytes)) => {
+                    db::put_site_icon(conn, &host, &mime, &bytes, now).map_err(domain)?;
+                    fetched += 1;
+                }
+                None => {
+                    db::mark_site_icon_failed(conn, &host, now).map_err(domain)?;
+                }
+            }
+        }
+        pending_icon_count(conn)?
+    };
+    Ok(IconFetchReport { fetched, remaining })
+}
+
+fn clear_site_icons_sync() -> Result<u64, String> {
+    let backend = backend()?;
+    let _session = require_session(&backend)?;
+    let conn = require_conn(&backend)?;
+    db::clear_site_icons(conn).map_err(domain)
+}
+
+// ---------------------------------------------------------------------------
 // Exported module functions
 // ---------------------------------------------------------------------------
 
@@ -1615,6 +1859,10 @@ pub fn delete_category(id: String) -> Result<(), String> {
     delete_category_sync(id)
 }
 
+pub fn reorder_categories(ids: Vec<String>) -> Result<(), String> {
+    reorder_categories_sync(ids)
+}
+
 pub fn list_presets() -> Result<Vec<Preset>, String> {
     list_presets_sync()
 }
@@ -1635,6 +1883,22 @@ pub fn reorder_presets(field_type: String, ids: Vec<String>) -> Result<(), Strin
     reorder_presets_sync(field_type, ids)
 }
 
+pub fn list_tags() -> Result<Vec<Tag>, String> {
+    list_tags_sync()
+}
+
+pub fn create_tag(input: TagInput) -> Result<Tag, String> {
+    create_tag_sync(input)
+}
+
+pub fn update_tag(id: String, input: TagInput) -> Result<Tag, String> {
+    update_tag_sync(id, input)
+}
+
+pub fn delete_tag(id: String) -> Result<(), String> {
+    delete_tag_sync(id)
+}
+
 pub fn generate_password(options: GeneratorOptions) -> Result<String, String> {
     generate_password_sync(options)
 }
@@ -1645,6 +1909,21 @@ pub fn get_settings() -> Result<Settings, String> {
 
 pub fn save_settings(settings: Settings) -> Result<Settings, String> {
     save_settings_sync(settings)
+}
+
+/// 一个条目网址的缓存图标（`data:` URI，没有缓存时为空串）。
+pub fn site_icon(url: String) -> Result<String, String> {
+    site_icon_sync(url)
+}
+
+/// 抓取并缓存下一批站点图标；返回本批抓成几个、还剩几个待抓。
+pub async fn fetch_site_icons(limit: u32) -> Result<IconFetchReport, String> {
+    fetch_site_icons_async(limit).await
+}
+
+/// 清空图标缓存，返回删掉的行数。
+pub fn clear_site_icons() -> Result<u64, String> {
+    clear_site_icons_sync()
 }
 
 /// Switch to another vault file (`None` = the default one in the data

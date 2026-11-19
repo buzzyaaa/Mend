@@ -15,6 +15,7 @@ import {
   openExternal,
   selected,
   setTagFilter,
+  tagColorOf,
   toggleFavorite,
   unarchiveEntry,
 } from '../lib/state'
@@ -180,6 +181,7 @@ function EntryBody(props: { entry: () => EntryView; compact?: boolean }) {
               {(tag) => (
                 <TagPill
                   label={`#${tag()}`}
+                  color={tagColorOf(tag())}
                   onPress={() => {
                     setTagFilter(tag())
                     if (props.compact) closeDetail()

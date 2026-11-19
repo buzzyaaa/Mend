@@ -23,6 +23,7 @@ import {
   setDeviceUnlock,
   showError,
   status,
+  toast,
   useDefaultVaultFile,
 } from '../lib/state'
 import {
@@ -30,9 +31,11 @@ import {
   preferences,
   setAutoLockMinutes,
   setLanguage,
+  setSiteIcons,
   setTheme,
   setUpdateCheckIntervalDays,
 } from '../lib/preferences'
+import { clearSiteIcons, startSiteIconFetch, stopSiteIconFetch } from '../lib/site-icons-cache'
 import * as native from '../lib/native'
 
 import {
@@ -351,6 +354,36 @@ export function SettingsPage() {
                       value={preferences().language ?? ''}
                       onChange={(value) => setLanguage(value ? value : null)}
                       class="w-full"
+                    />
+                  </Field>
+                  <SwitchField
+                    checked={preferences().siteIcons}
+                    onChange={(checked) => {
+                      setSiteIcons(checked)
+                      if (checked) startSiteIconFetch()
+                      else stopSiteIconFetch()
+                    }}
+                    label={t('settings.siteIcons')}
+                    hint={t('settings.siteIconsHint')}
+                    leading
+                  />
+                  <Field
+                    label={t('settings.iconsCache')}
+                    hint={t('settings.clearIconsHint')}
+                    icon="database"
+                    class={controlClass()}
+                  >
+                    <ActionButton
+                      label={t('settings.clearIcons')}
+                      icon="trash"
+                      onPress={async () => {
+                        try {
+                          const removed = await clearSiteIcons()
+                          toast(t('settings.iconsCleared', { n: removed }))
+                        } catch (error) {
+                          showError(error)
+                        }
+                      }}
                     />
                   </Field>
                 </View>

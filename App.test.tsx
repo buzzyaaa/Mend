@@ -98,8 +98,7 @@ test('sets up a vault, creates an entry, and locks', async () => {
   // headless 默认是 phone idiom：不指定 desktop platform 的话，1100 宽也走
   // 单页滚动（无设置内导航），桌面子导航就没有回归覆盖。
   const app = await open('./App.tsx', { platform: 'windows' })
-  // 桌面窗口尺寸。headless 默认视口只有 390 宽，列表区会被压到每列 36 的
-  // 下限宽度，标题列窄到放不下图标之外的字，`texts()` 里就查不到条目标题。
+  // 桌面窗口尺寸；列表现在由 DataTable 自适应横向滚动，仍按桌面宽度回归。
   await app.setViewport(1100, 780)
   await app.waitFor('label:Master password')
   await app.type('label:Master password', 'test-password-1234')
@@ -107,11 +106,11 @@ test('sets up a vault, creates an entry, and locks', async () => {
   await app.press('Create and enter')
   await app.waitFor('text:Passwords')
 
-  // 列宽拖动把手只挂在「相邻两列之间」：选择列右侧没有把手，最后一列（备注）
-  // 右侧也没有——那段是操作列，不能拖窄，也不参与分宽度。
+  // 列表视图换成 nsh DataTable：表头和列宽把手由组件自己渲染，旧的 resize-* 把手不再存在。
   expect(app.shows('id:resize-check')).toBe(false)
   expect(app.shows('id:resize-notes')).toBe(false)
-  expect(app.shows('id:resize-tags')).toBe(true)
+  expect(app.shows('id:table-header-name')).toBe(true)
+  expect(app.texts()).toContain('Username / Password')
 
   await app.press('id:add-entry')
   await app.waitFor('text:New entry')
@@ -120,6 +119,26 @@ test('sets up a vault, creates an entry, and locks', async () => {
   await app.type('label:Password', 's3cret')
   await app.press('text:Save')
   await app.waitFor('text:octocat')
+  // 操作按钮全部摊在行内：原来「更多」菜单的触发器（Actions）不再存在。
+  expect(app.shows('label:Actions')).toBe(false)
+  expect(app.shows('label:Copy full entry')).toBe(true)
+  // 行内「账号：octocat」的前缀只用于显示：复制必须只写原值，不带标签。
+  await app.press('label:Copy username')
+  await app.wait(100)
+  expect(app.clipboard()).toBe('octocat')
+
+  // 工具栏第二个图标切到卡片视图：同一条数据仍可读，DataTable 表头卸载；切回后表头恢复。
+  await app.press('id:view-card')
+  await app.waitFor('text:octocat')
+  expect(app.shows('id:table-header-name')).toBe(false)
+  await app.press('id:view-list')
+  await app.waitFor('id:table-header-name')
+
+  // 工具栏最右的刷新图标改成「重置」：点它把列宽按当前窗口宽度重新平均分配。
+  expect(app.shows('label:Reset')).toBe(true)
+  await app.press('id:reset-table-layout')
+  await app.waitFor('id:table-header-name')
+  expect(app.texts()).toContain('Username / Password')
 
   await app.press('label:Settings')
   await app.waitFor('text:Appearance & behavior')
@@ -155,9 +174,10 @@ test('sets up a vault, creates an entry, and locks', async () => {
   await app.waitFor('label:Master password')
 })
 
-// 标签快速填写：编辑弹窗在输入框下方列出全库已有标签，点击加入输入框、
-// 再点移除；逗号分隔的自由输入不受影响。
-test('entry editor lists existing tags for one-tap fill', async () => {
+// 标签改为库内独立维护（与预设值同级）：名称 + 颜色在右上角「标签」弹窗里
+// 新建/编辑/删除；条目编辑里只能从列表点选，标签列表为空时是灰色不可选提示，
+// 不再有逗号分隔的自由输入。
+test('tags are maintained in a dialog and only selectable on entries', async () => {
   const app = await open('./App.tsx', { platform: 'windows' })
   await app.setViewport(1100, 780)
   await app.waitFor('label:Master password')
@@ -170,32 +190,128 @@ test('entry editor lists existing tags for one-tap fill', async () => {
   }
   await app.waitFor('text:Passwords')
 
-  // 先建一条带标签的条目，让库里存在「已有标签」。
+  // 还没有任何标签：编辑条目时标签区是灰色提示，没有可点的胶囊、也没有输入框。
   await app.press('id:add-entry')
   await app.waitFor('text:New entry')
+  expect(app.texts()).toContain(
+    'No tags available yet: create one in the “Tags” dialog at the top right first',
+  )
+  expect(app.shows('label:work')).toBe(false)
+  await app.press('text:Cancel')
+
+  // 右上角「标签」入口：新建两个标签（名称 + ColorPicker 默认色），列表里立刻出现。
+  await app.press('label:Tags >> nth=0')
+  await app.waitFor('label:Tag name')
+  await app.waitFor('label:Hex value')
+  await app.type('label:Tag name', 'work')
+  await app.press('label:Add tag')
+  await app.waitFor('label:work')
+  await app.type('label:Tag name', 'finance')
+  await app.press('label:Add tag')
+  await app.waitFor('label:finance')
+  await app.press('id:tags-close')
+
+  // 再次新建条目：标签改成和「标签筛选」一致的下拉多选，点开菜单连续勾选。
+  await app.press('id:add-entry')
+  await app.waitFor('text:New entry')
+  await app.waitFor('id:entry-tags-trigger')
+  await app.press('id:entry-tags-trigger')
+  await app.waitFor('label:work')
+  await app.press('label:work')
+  await app.press('label:finance')
+  await app.press('id:entry-tags-trigger')
   await app.type('label:Title', 'Tagged')
-  await app.type('label:Tags', 'work, finance')
   await app.press('text:Save')
   await app.waitFor('text:Tagged')
+  expect(app.texts()).toContain('work')
+  expect(app.texts()).toContain('finance')
 
-  // 再开新增弹窗：标签区列出已有标签胶囊，点击即写入输入框。
-  await app.press('id:add-entry')
-  await app.waitFor('text:New entry')
-  await app.waitFor('label:work')
-  expect(app.shows('label:finance')).toBe(true)
-  expect(app.texts()).toContain('Existing tags: tap to add, tap again to remove')
-  await app.press('label:work')
-  expect(app.value('label:Tags')).toBe('work')
-  await app.press('label:finance')
-  expect(app.value('label:Tags')).toBe('work, finance')
-  // 再点一次移除；全部移除后表单不脏，取消可直接关闭。
-  await app.press('label:work')
-  expect(app.value('label:Tags')).toBe('finance')
-  await app.press('label:finance')
-  expect(app.value('label:Tags')).toBe('')
+  // 标签维护弹窗里改颜色：点编辑图标展开行内编辑器，ColorPicker 的色值输入框必须能渲染。
+  await app.press('label:Tags >> nth=0')
+  await app.waitFor('label:Tag name')
+  await app.press('label:Edit tag >> nth=0')
+  await app.waitFor('label:Hex value')
+  await app.press('label:Cancel')
+  await app.press('id:tags-close')
+
+  // 分类编辑复用同一个 ColorPicker：新增分类弹窗里也能看到 Hex value 输入框。
+  await app.press('label:New group')
+  await app.waitFor('label:Hex value')
   await app.press('text:Cancel')
-  expect(app.shows('text:New entry')).toBe(false)
 
+  await app.press('label:Lock')
+  await app.waitFor('label:Master password')
+})
+
+// 侧栏「我的分组」支持鼠标拖动排序：拖完写 sort_order，锁定/解锁后仍是新顺序。
+test('sidebar categories can be reordered by dragging', async () => {
+  const app = await open('./App.tsx', { platform: 'windows' })
+  await app.setViewport(1100, 780)
+  await app.waitFor('label:Master password')
+  await app.type('label:Master password', 'test-password-1234')
+  if (app.shows('label:Confirm master password')) {
+    await app.type('label:Confirm master password', 'test-password-1234')
+    await app.press('Create and enter')
+  } else {
+    await app.press('text:Unlock')
+  }
+  await app.waitFor('text:Passwords')
+
+  async function addCategory(name: string) {
+    await app.press('label:New group')
+    await app.waitFor('label:Category name')
+    await app.type('label:Category name', name)
+    await app.press('text:Save')
+    await app.waitFor(`label:${name}`)
+  }
+  await addCategory('Alpha')
+  expect(app.shows('id:category-count-slot-Alpha')).toBe(true)
+  expect(app.shows('id:category-count-Alpha')).toBe(true)
+  expect(app.shows('id:category-menu-Alpha')).toBe(false)
+
+  // 指针放到最右数字上：数量原位换成 ···，但菜单不自动弹出。
+  await app.hover('id:category-count-slot-Alpha')
+  expect(app.shows('id:category-count-Alpha')).toBe(false)
+  expect(app.shows('id:category-menu-Alpha')).toBe(true)
+  expect(app.shows('id:category-edit-Alpha')).toBe(false)
+
+  // 点击 ··· 才弹出 nsh Menu；删除项用危险色。
+  await app.press('id:category-menu-Alpha')
+  await app.waitFor('id:category-edit-Alpha')
+  expect(app.texts()).toContain('Delete')
+  expect(app.spanStyle('text:Delete').color).not.toBe(app.spanStyle('text:Edit').color)
+
+  // 鼠标移开只还原 ··· 的悬停态，不会收起已打开的菜单；再次点击才关闭。
+  await app.hover('label:Alpha')
+  await app.wait(150)
+  expect(app.shows('id:category-edit-Alpha')).toBe(true)
+  await app.press('id:category-menu-Alpha')
+  await app.wait(150)
+  expect(app.shows('id:category-edit-Alpha')).toBe(false)
+  expect(app.shows('id:category-count-Alpha')).toBe(true)
+
+  await app.hover('id:category-count-slot-Alpha')
+  await app.press('id:category-menu-Alpha')
+  await app.waitFor('id:category-edit-Alpha')
+  await app.press('id:category-edit-Alpha')
+  await app.waitFor('label:Category name')
+  await app.press('text:Cancel')
+
+  await addCategory('Beta')
+  expect(app.texts().indexOf('Alpha')).toBeLessThan(app.texts().indexOf('Beta'))
+
+  await app.drag('label:Alpha', { x: 0, y: 45 })
+  await app.wait(400)
+  expect(app.texts().indexOf('Beta')).toBeLessThan(app.texts().indexOf('Alpha'))
+
+  // 重新解锁后顺序仍来自库的 sort_order，不是只在界面上挪了一下。
+  await app.press('label:Lock')
+  await app.waitFor('label:Master password')
+  await app.type('label:Master password', 'test-password-1234')
+  await app.press('text:Unlock')
+  await app.waitFor('text:Passwords')
+  expect(app.texts().indexOf('Beta')).toBeLessThan(app.texts().indexOf('Alpha'))
+  // 和其他用例一样退出到解锁页，避免进程级会话把下一个用例直接送进主界面。
   await app.press('label:Lock')
   await app.waitFor('label:Master password')
 })

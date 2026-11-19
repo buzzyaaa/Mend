@@ -64,7 +64,7 @@ base64( nonce[24B] || ciphertext || tag[16B] )
 | name | TEXT | 分类名（自用场景可明文，便于侧栏显示） |
 | color | TEXT | 标签色标识（可选，`#RRGGBB`，大小写不敏感，统一存大写；空 = 无背景） |
 | icon | TEXT | 图标标识（可选，Material 图标名，上限 64 字；空 = 前端回退默认文件夹） |
-| sort_order | INTEGER | 排序 |
+| sort_order | INTEGER | 侧栏显示顺序（新建取 `MAX+1`，鼠标拖动后由 `category_reorder` 整批写回 `0..n-1`） |
 | created_at | INTEGER | 时间戳（ms） |
 | updated_at | INTEGER | |
 
@@ -84,7 +84,7 @@ base64( nonce[24B] || ciphertext || tag[16B] )
 | phone_enc | TEXT | 密文 | 手机号 |
 | notes_enc | TEXT | 密文 | Markdown 备注全文 |
 | favorite | INTEGER | 明文 | 收藏标记 0/1 |
-| tags | TEXT | 明文 | JSON 数组的标签名列表（如 `["工作","金融"]`），语义与分类名同级：自用场景可明文 |
+| tags | TEXT | 明文 | JSON 数组的标签名列表（如 `["工作","金融"]`），只存名称；名称→颜色的定义在 `tag_defs`（§2.6），语义与分类名同级：自用场景可明文 |
 | sort_order | INTEGER | 明文 | 手动排序号（迁移 v3 新增，默认 0）：同桶内升序；0 = 未手动排序，「手动排序」模式下按 `updated_at` 倒序兜底 |
 | created_at | INTEGER | 明文 | |
 | updated_at | INTEGER | 明文 | |
@@ -108,6 +108,31 @@ base64( nonce[24B] || ciphertext || tag[16B] )
 | sort_order | INTEGER | |
 | created_at | INTEGER | |
 
+### 2.5 `site_icons` — 站点图标缓存（迁移 v5）
+
+| 列 | 类型 | 说明 |
+| --- | --- | --- |
+| host | TEXT PK | 站点主机名（小写、去默认端口），如 `mail.163.com` |
+| mime | TEXT NULL | `image/png` / `image/svg+xml` / `image/webp` …；NULL = 只留下失败记录 |
+| bytes | BLOB NULL | 图标字节（≤96KB）；ICO 已转成 PNG |
+| fetched_at | INTEGER | 最后一次抓取（成功或失败），毫秒；成功满 90 天视为过期 |
+| fail_count | INTEGER | 连续失败次数，0 = 有图标。失败后按 `24h × 2^n`（封顶 30 天）退避重试 |
+
+> 图标是从条目自己填写的站点抓回来的公开图片，不属于密钥材料，因此明文存 BLOB；但它必须与库文件同处一地（随库拷走），**不允许**在数据目录另存一组明文图片文件——「这台机器上有哪些站点账号」本身就是敏感信息。抓取只直达条目自己的站点，不走任何第三方图标服务，规则见 `11` §5.1。
+
+### 2.6 `tag_defs` — 标签定义（迁移 v6）
+
+| 列 | 类型 | 说明 |
+| --- | --- | --- |
+| id | TEXT PK (uuid) | |
+| name | TEXT | 标签名（trim 后必填，≤32 字，不含逗号）；唯一索引 `idx_tag_defs_name` 按 `COLLATE NOCASE` 去重，`work` / `Work` 不能并存 |
+| color | TEXT | 胶囊底色标识 `#RRGGBB`（大小写不敏感，统一存大写）；空值在写入时回退默认色板 |
+| sort_order | INTEGER | 列表顺序（新建取 `MAX+1`） |
+| created_at | INTEGER | 时间戳（ms） |
+| updated_at | INTEGER | |
+
+> 标签从「条目上的自由文本」升级为库内独立维护的实体：名称与颜色是明文元信息（语义同分类名），**条目仍只存标签名**，颜色只用于胶囊着色。编辑条目时只能从这张表里选，不能就地新建/改名；改主密码与备份不会影响它。删除定义时会**从所有条目（含归档 / 回收站）上摘掉该标签**，条目本身不删；改名会把所有条目上的旧名一起替换。
+
 ## 3. 关键业务规则
 
 - **首次启动**：生成随机 DEK；用主密码经 Argon2id 派生 KEK，包裹 DEK 落 `meta`；写 schema 版本与默认偏好。
@@ -115,11 +140,12 @@ base64( nonce[24B] || ciphertext || tag[16B] )
 - **新增/编辑条目**：前端提交明文 `EntryInput` → Rust 侧逐字段加密 → 事务写入；返回解密后的展示模型供界面刷新。
 - **删除**：`entry_delete` 只写 `deleted_at`（软删除，进回收站）；`entry_restore` 清空该列；`entry_purge` / `entry_purge_all` 才做物理删除，且仅允许删除回收站里的条目。分类删除仍走"条目归未分类"。
 - **归档**：`entry_archive` 把 `archived` 置 1（软状态，与 `deleted_at` 正交），条目从主列表移入归档桶；归档条目**可以**被软删除进入回收站（`delete_entry` 只守卫 `deleted_at IS NULL`），恢复后仍为归档态；`entry_unarchive` 把 `archived` 置 0 恢复。归档列表按 `updated_at` 倒序，星标置顶逻辑对归档桶不生效。
-- **标签**：条目可挂多个标签，存 `entries.tags`（JSON 数组，明文）；标签由前端在内存中过滤（与备注检索同口径）。写入时 trim、去空、去重，上限 16 个、单个最长 32 字。
+- **标签**：条目可挂多个标签，存 `entries.tags`（JSON 数组，明文，只存名称）；标签名称/颜色由库内 `tag_defs` 统一维护（顶部「标签」弹窗新建/编辑/删除，颜色用 ColorPicker 取色），编辑条目时只能在标签下拉菜单里勾选（与标签筛选同一套多选交互），不再支持自由输入。写入时 trim、去空、去重，上限 16 个、单个最长 32 字；标签筛选在前端按名称做 OR 过滤（与备注检索同口径）。
 - **手动排序**：条目按所属桶维护 `entries.sort_order`（同桶 `0..n-1`）。前端「手动排序」模式拖拽结束后调 `entry_reorder` 整批写回（单事务原子，**按 `category_id` 分组**：只重排传入的可见条目所占的位置，未传入的同桶条目留在原位，随后整桶紧凑赋 `0..n-1`，避免跨分类互相覆盖或出现重复 / 空洞）；新建条目取同桶 `MAX(sort_order)+1` 落在末尾。`EntryView` 返回 `sortOrder`，前端 `refresh()` 时据此重建各桶手动序（`src/lib/manualOrder.ts`），拖拽顺序因此跨刷新 / 重启保留。排序下拉另有最近更新 / 名称 / 星标优先，均不落库。`sort_order` 为明文元信息，不含敏感数据。
+- **分类排序**：侧栏「我的分组」鼠标拖动结束后调 `Vault.reorderCategories`（Rust 侧 `db::reorder_categories`）把完整 id 顺序整批写回 `categories.sort_order`（`0..n-1`，单事务 `BEGIN IMMEDIATE`；只写排序列，名称/颜色/图标与条目密文都不动）。`list_categories` 按 `sort_order, created_at` 升序返回，因此拖动结果跨刷新 / 重启保留。
 - **修改主密码**：校验旧密码（派生旧 KEK 解包 DEK，认证失败即旧密码错误）→ 生成新 salt、派生新 KEK → 用新 KEK 重新包裹**同一个 DEK** → 在一个事务内更新 `meta` 的 `salt`/`kdf_params`/`dek_wrapped`。DEK 不变，历史密文无需重加密；事务保证中途崩溃不会出现"salt 与包裹密钥不一致"的坏库。
 - **分类删除**：其下条目 `category_id` 置空（未分类），不级联删条目。
-- **迁移**：schema 版本号存 `meta`，启动时按版本顺序执行迁移（当前 `SCHEMA_VERSION = 4`）；**整个迁移过程（建表 → 逐版本升级 → 写版本号）在单个事务内执行**（`unchecked_transaction` + 末尾 commit），中途崩溃不会留下"列已加、版本未升"的半迁移坏库。每个迁移可重入：建表语句幂等，v2 加 `tags`、v3 加 `sort_order`、v4 加 `archived` 前都先探测目标列是否已存在，历史遗留的半迁移状态也能安全补齐版本号。
+- **迁移**：schema 版本号存 `meta`，启动时按版本顺序执行迁移（当前 `SCHEMA_VERSION = 6`）；**整个迁移过程（建表 → 逐版本升级 → 写版本号）在单个事务内执行**（`unchecked_transaction` + 末尾 commit），中途崩溃不会留下"列已加、版本未升"的半迁移坏库。每个迁移可重入：建表语句幂等，v2 加 `tags`、v3 加 `sort_order`、v4 加 `archived` 前都先探测目标列是否已存在；v5 只新建 `site_icons` 表（`CREATE TABLE IF NOT EXISTS`）；v6 新建 `tag_defs` 并把旧条目里出现过的标签名回填成定义（按首次出现顺序取默认色板，条目侧去 `#`、大小写归一、去重；`INSERT OR IGNORE` 保证重入幂等），历史遗留的半迁移状态也能安全补齐版本号。
 
 ## 4. 安全边界（明确承认）
 
@@ -133,4 +159,4 @@ base64( nonce[24B] || ciphertext || tag[16B] )
 - Argon2id 的 memory / iterations / parallelism（在解锁流畅度与抗暴力破解间取平衡）。
 - 字段加密是否对 `url` 也加密。
 
-> `entries.tags` 已于迁移 v2 落地；`entries.sort_order` 已于迁移 v3 落地；`entries.archived` 已于迁移 v4 落地（见 §2.3、§3）。
+> `entries.tags` 已于迁移 v2 落地；`entries.sort_order` 已于迁移 v3 落地；`entries.archived` 已于迁移 v4 落地；`site_icons` 已于迁移 v5 落地（见 §2.3、§2.5、§3）；`tag_defs` 已于迁移 v6 落地（§2.6）。

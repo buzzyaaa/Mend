@@ -10,39 +10,32 @@ export type {
   EntrySummary,
   EntryView,
   GeneratorOptions,
+  IconFetchReport,
   ListFilter,
   Preset,
   PresetInput,
+  Tag,
+  TagInput,
   VaultStatus,
 } from 'mend/native'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 
-/** 列表列标识，供列显示/隐藏配置使用。 */
-export type ColumnKey = 'username' | 'password' | 'email' | 'phone' | 'notes'
+/** 列表列标识，供列显示/隐藏配置使用。
+ *  0.5.0 起账号+密码、邮箱+手机号各合并为一格，旧的四列偏好在读取时迁移。 */
+export type ColumnKey = 'credentials' | 'contact' | 'notes'
 
-/** 支持拖动调整宽度的列：标题/标签/分类/账号/密码/邮箱/手机号/备注，加首尾固定列。 */
+/** 支持拖动调整宽度的列：标题/分类/账号密码/邮箱手机号/备注，加首尾固定列。
+ *  标签不再独占一列：它写在标题下面，与标题共用 name 列。 */
 export type ResizableColumnKey =
-  | 'check'
-  | 'name'
-  | 'tags'
-  | 'category'
-  | 'username'
-  | 'password'
-  | 'email'
-  | 'phone'
-  | 'notes'
-  | 'actions'
+  'check' | 'name' | 'category' | 'credentials' | 'contact' | 'notes' | 'actions'
 
 /** 表格中实际有数据的列（不含最左选择框与最右操作列）的顺序。 */
 export const DATA_COLUMN_KEYS: readonly ResizableColumnKey[] = [
   'name',
-  'tags',
   'category',
-  'username',
-  'password',
-  'email',
-  'phone',
+  'credentials',
+  'contact',
   'notes',
 ] as const
 
@@ -52,6 +45,8 @@ export interface Preferences {
   autoLockMinutes: number
   updateCheckIntervalDays: number
   lastUpdateCheckTs: number
+  /** 是否从条目自己的网站抓取真实 favicon（缓存进库；关掉即零请求）。 */
+  siteIcons: boolean
   /** Desktop three-column widths (sidebar, list); the detail column takes the rest. */
   columnSizes: number[]
   /** 列表各列是否显示。 */

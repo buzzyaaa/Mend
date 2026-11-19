@@ -8,6 +8,7 @@
 mod api;
 mod dto;
 mod error;
+mod icons;
 mod service;
 mod system_proxy;
 

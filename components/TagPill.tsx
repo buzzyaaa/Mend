@@ -1,10 +1,16 @@
 import { colorScheme, Text, View } from 'nsh'
 
+import { CATEGORY_COLORS } from '../lib/category-icons'
+
 /** 一对前景/背景色，直接喂给 inline style（nsh 的 class 不能动态拼色）。 */
 export interface TagColor {
   background: string
   foreground: string
 }
+
+/** 标签维护弹窗提供的颜色（与 core `tags::TAG_COLORS` 同一组色值）。
+ *  用户只选一个饱和底色，胶囊的浅底/深字由 `tagColorFromHex` 派生。 */
+export const TAG_COLOR_CHOICES: readonly string[] = CATEGORY_COLORS
 
 /** 预定义柔和色板：每色给出浅色/深色两套。背景浅、文字深（浅色主题），
  *  背景深、文字亮（深色主题），保证两种主题下对比度都够。
@@ -76,15 +82,64 @@ export function tagColor(tag: string): TagColor {
   return colorScheme() === 'dark' ? slot.dark : slot.light
 }
 
-/** 单个「小胶囊」标签：圆角底色 + 彩色文字。颜色按去 `#` 后的纯文字确定性生成。 */
+/** `#RRGGBB` → RGB；非法输入返回 null（调用方回退 hash 色板）。 */
+function parseHex(hex: string): [number, number, number] | null {
+  const body = hex.trim().replace(/^#/, '')
+  if (!/^[0-9a-fA-F]{6}$/.test(body)) return null
+  return [
+    Number.parseInt(body.slice(0, 2), 16),
+    Number.parseInt(body.slice(2, 4), 16),
+    Number.parseInt(body.slice(4, 6), 16),
+  ]
+}
+
+/** 把 `base` 向 `target` 混合 `weight`（0–1）：用于从用户选的饱和色派生
+ *  浅色主题的浅底/深字和深色主题的深底/亮字，保证两种主题下都有对比度。 */
+function mix(
+  base: [number, number, number],
+  target: [number, number, number],
+  weight: number,
+): string {
+  const channels = base.map((value, index) =>
+    Math.round(value * (1 - weight) + target[index] * weight)
+      .toString(16)
+      .padStart(2, '0'),
+  )
+  return `#${channels.join('')}`
+}
+
+/** 用户自选颜色的胶囊配色；颜色非法时返回 null，由 `tagColor` 兜底。 */
+export function tagColorFromHex(hex: string): TagColor | null {
+  const rgb = parseHex(hex)
+  if (!rgb) return null
+  if (colorScheme() === 'dark') {
+    return {
+      background: mix(rgb, [17, 20, 26], 0.82),
+      foreground: mix(rgb, [255, 255, 255], 0.42),
+    }
+  }
+  return {
+    background: mix(rgb, [255, 255, 255], 0.87),
+    foreground: mix(rgb, [0, 0, 0], 0.22),
+  }
+}
+
+/** 单个「小胶囊」标签：圆角底色 + 彩色文字。
+ *  传入 `color`（标签定义里的 `#RRGGBB`）时按用户选色派生配色；
+ *  没有颜色（旧数据 / 未定义标签）时回退到按文字 hash 的柔和色板。 */
 export function TagPill(props: {
   /** 标签文字，可带 `#` 前缀（如 `#work`）也可不带；显示时一律去掉开头 `#`。 */
   label: string
+  /** 标签定义的颜色（`#RRGGBB`）；未提供时按文字 hash 配色。 */
+  color?: string | null
   onPress?: () => void
   class?: string
   accessibilityLabel?: string
 }) {
-  const color = () => tagColor(props.label)
+  const color = () => {
+    const custom = props.color ? tagColorFromHex(props.color) : null
+    return custom ?? tagColor(props.label)
+  }
   return (
     <View
       class={'shrink-0 flex-row items-center rounded-full px-1.5 py-0.5 ' + (props.class ?? '')}

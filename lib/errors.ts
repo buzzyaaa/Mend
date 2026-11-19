@@ -41,6 +41,9 @@ const CODE_KEYS: Record<string, string> = {
   category_name_too_long: 'sidebar.nameTooLong',
   password_too_short: 'unlock.errors.tooShort',
   preset_invalid: 'preset.invalid',
+  tag_invalid: 'tag.nameInvalid',
+  tag_duplicate: 'tag.duplicate',
+  tag_color_invalid: 'tag.colorInvalid',
   generator_invalid: 'generator.invalidOptions',
   device_key: 'unlock.errors.deviceKey',
 }

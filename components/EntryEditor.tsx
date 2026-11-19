@@ -1,12 +1,20 @@
-import { computed, effect, Scroll, signal, Text, View, windowSize } from 'nsh'
-import { Dialog, Tab, Tabs, TextView } from 'nsh/base'
+import { computed, effect, Scroll, signal, Text, token, View, windowSize } from 'nsh'
+import { Dialog, Button, Menu, MenuItem, MenuSeparator, Tab, Tabs, TextView } from 'nsh/base'
 import { t } from 'nsh/i18n'
 
 import { errorText } from '../lib/errors'
 import { categoryEmoji } from '../lib/category-icons'
-import { categories, confirm, entries, entryEditor, presets, saveEntry, touchActivity } from '../lib/state'
+import {
+  categories,
+  confirm,
+  entryEditor,
+  presets,
+  saveEntry,
+  tagColorOf,
+  tags,
+  touchActivity,
+} from '../lib/state'
 import type { EntryEditorState, EntryInput } from '../lib/types'
-import { splitTags } from '../lib/format'
 import * as native from '../lib/native'
 import { Icon } from './Icon'
 import { GeneratorDialog } from './GeneratorDialog'
@@ -41,8 +49,8 @@ function emptyForm(categoryId: string | null): EntryInput {
   }
 }
 
-function formKey(form: EntryInput, tagsText: string): string {
-  return JSON.stringify({ ...form, tags: splitTags(tagsText) })
+function formKey(form: EntryInput): string {
+  return JSON.stringify(form)
 }
 
 function applyPreset(
@@ -64,7 +72,6 @@ function applyPreset(
 
 export function EntryEditor(props: { state: EntryEditorState }) {
   const form = signal<EntryInput>(emptyForm(props.state.categoryId))
-  const tagsText = signal('')
   const original = signal('')
   const loading = signal(props.state.id !== null)
   const busy = signal(false)
@@ -77,8 +84,7 @@ export function EntryEditor(props: { state: EntryEditorState }) {
     if (!id) {
       const initial = emptyForm(props.state.categoryId)
       form.set(initial)
-      tagsText.set('')
-      original.set(formKey(initial, ''))
+      original.set(formKey(initial))
       loading.set(false)
       return
     }
@@ -98,8 +104,7 @@ export function EntryEditor(props: { state: EntryEditorState }) {
         tags: entry.tags,
       }
       form.set(next)
-      tagsText.set(entry.tags.join(', '))
-      original.set(formKey(next, entry.tags.join(', ')))
+      original.set(formKey(next))
     } catch (cause) {
       error.set(errorText(cause))
     } finally {
@@ -107,22 +112,16 @@ export function EntryEditor(props: { state: EntryEditorState }) {
     }
   })
 
-  const dirty = () => formKey(form(), tagsText()) !== original()
-
-  // 全库已有标签（去重排序），与 TagFilterMenu 同源：输入框下方点选快速填写。
-  const allTags = computed(() =>
-    Array.from(new Set(entries().flatMap((entry) => entry.tags))).sort((a, b) =>
-      a.localeCompare(b),
-    ),
-  )
+  const dirty = () => formKey(form()) !== original()
 
   function toggleTag(tag: string) {
     touchActivity()
-    const current = splitTags(tagsText())
-    const next = current.includes(tag)
-      ? current.filter((item) => item !== tag)
-      : [...current, tag]
-    tagsText.set(next.join(', '))
+    form.update((current) => ({
+      ...current,
+      tags: current.tags.includes(tag)
+        ? current.tags.filter((item) => item !== tag)
+        : [...current.tags, tag],
+    }))
   }
 
   function requestClose() {
@@ -154,7 +153,6 @@ export function EntryEditor(props: { state: EntryEditorState }) {
         ...current,
         title: current.title.trim(),
         url: current.url?.trim() ? current.url.trim() : null,
-        tags: splitTags(tagsText()),
       }
       await saveEntry(input, props.state.id)
       entryEditor.set(null)
@@ -172,6 +170,36 @@ export function EntryEditor(props: { state: EntryEditorState }) {
       title: `${categoryEmoji(category.icon)} ${category.name}`,
     })),
   ]
+
+  /** 可选项：标签定义（按维护顺序）+ 条目上残留的未定义旧标签（兜底）。 */
+  const tagChoices = computed(() => {
+    const defined = tags().map((tag) => tag.name)
+    const extra = form().tags.filter((name) => !defined.includes(name))
+    return [...defined, ...extra]
+  })
+
+  /** 小的文字型触发按钮（无边框，靠 hover 底色提示可点），放在「星标」之后。 */
+  const tagButton = (disabled: boolean) => (
+    <Button
+      class={
+        'h-7 flex-row items-center gap-1.5 rounded-md px-2 ' +
+        (disabled
+          ? 'text-muted-foreground opacity-45'
+          : 'text-muted-foreground hover:bg-accent active:opacity-70')
+      }
+      disabled={disabled}
+      accessibilityLabel={t('entry.chooseTags')}
+      testID="entry-tags-trigger"
+    >
+      <Icon name="tag" size={13} color={token('muted-foreground')} />
+      <Text class="text-[11px] font-medium">
+        {form().tags.length > 0
+          ? `${t('entry.chooseTags')} (${form().tags.length})`
+          : t('entry.chooseTags')}
+      </Text>
+      <Icon name="chevron-down" size={11} color={token('muted-foreground')} />
+    </Button>
+  )
 
   const body = (
     <View class="gap-3">
@@ -316,37 +344,6 @@ export function EntryEditor(props: { state: EntryEditorState }) {
             />
           </Field>
 
-          <Field label={t('entry.tags')}>
-            <View class="gap-1.5">
-              <TextField
-                value={tagsText()}
-                onChange={tagsText.set}
-                placeholder={t('entry.tagsPlaceholder')}
-                accessibilityLabel={t('entry.tags')}
-              />
-              <Text class="text-[11px] text-muted-foreground">{t('entry.tagsPlaceholder')}</Text>
-              <If when={allTags().length > 0}>
-                <View class="gap-1 pt-0.5">
-                  <Text class="text-[11px] text-muted-foreground">{t('entry.tagsQuickAdd')}</Text>
-                  <View class="flex-row flex-wrap items-center gap-1.5">
-                    {allTags().map((tag) => (
-                      <TagPill
-                        label={tag}
-                        accessibilityLabel={tag}
-                        class={
-                          splitTags(tagsText()).includes(tag)
-                            ? 'ring-2 ring-primary'
-                            : 'opacity-70 hover:opacity-100 active:opacity-60'
-                        }
-                        onPress={() => toggleTag(tag)}
-                      />
-                    ))}
-                  </View>
-                </View>
-              </If>
-            </View>
-          </Field>
-
           <View class="gap-2">
             <View class="flex-row items-center justify-between">
               <Text class="text-xs font-medium text-muted-foreground">{t('entry.notes')}</Text>
@@ -411,6 +408,90 @@ export function EntryEditor(props: { state: EntryEditorState }) {
             checked={form().favorite}
             onChange={(checked) => form.update((current) => ({ ...current, favorite: checked }))}
           />
+
+          {/* 标签整块放在星标之后：标题 + 已选胶囊 + 说明，选择入口在下面左对齐。
+              标签只能从标签维护弹窗里定义的集合中选，这里不提供新建/自由输入。 */}
+          <Field
+            label={t('entry.tags')}
+            hint={tags().length > 0 ? t('entry.tagsSelectHint') : undefined}
+          >
+            <View class="gap-1.5">
+              <If when={form().tags.length > 0}>
+                <View class="flex-row flex-wrap items-center gap-1.5">
+                  {form().tags.map((name) => (
+                    <TagPill
+                      label={name}
+                      color={tagColorOf(name)}
+                      accessibilityLabel={name}
+                      class="ring-1 ring-border"
+                      onPress={() => toggleTag(name)}
+                    />
+                  ))}
+                </View>
+              </If>
+              <If when={form().tags.length === 0 && tags().length > 0}>
+                <Text class="text-[11px] text-muted-foreground">{t('entry.noTagsSelected')}</Text>
+              </If>
+              <If when={tags().length === 0}>
+                <View class="rounded-md border border-dashed border-border bg-muted/50 px-2.5 py-2">
+                  <Text class="text-[11px] text-muted-foreground">{t('tag.noneHint')}</Text>
+                </View>
+              </If>
+            </View>
+          </Field>
+
+          {/* 标签多选入口：星标之后、左对齐的小按钮，和「标签筛选」同一套菜单；
+              菜单向上弹，避免贴到底部被裁掉。没有标签定义时按钮置灰。 */}
+          <View class="flex-row justify-start">
+            <If when={tags().length > 0} else={tagButton(true)}>
+              <Menu
+                placement="top"
+                align="end"
+                offset={6}
+                popupClass="min-w-[220px] rounded-lg border border-border bg-popover p-1.5 shadow-lg"
+                trigger={tagButton(false)}
+              >
+                <MenuItem
+                  closeOnSelect={false}
+                  disabled={form().tags.length === 0}
+                  class="h-8 flex-row items-center gap-2 rounded px-2 hover:bg-accent"
+                  accessibilityLabel={t('entry.clearTags')}
+                  onSelect={() => {
+                    touchActivity()
+                    form.update((current) => ({ ...current, tags: [] }))
+                  }}
+                >
+                  <View class="w-4 items-center justify-center">
+                    <Icon name="close" size={13} color={token('muted-foreground')} />
+                  </View>
+                  <Text class="text-xs text-popover-foreground">{t('entry.clearTags')}</Text>
+                </MenuItem>
+
+                <MenuSeparator class="my-1 h-px bg-border" />
+
+                {tagChoices().map((name) => (
+                  <MenuItem
+                    checked={form().tags.includes(name)}
+                    closeOnSelect={false}
+                    class={
+                      'h-8 flex-row items-center gap-2 rounded px-2 ' +
+                      (form().tags.includes(name) ? 'bg-accent' : 'hover:bg-accent')
+                    }
+                    indicatorClass="w-4 items-center justify-center opacity-0 checked:opacity-100"
+                    indicator={<Icon name="check" size={12} color={token('primary')} />}
+                    accessibilityLabel={name}
+                    onSelect={() => toggleTag(name)}
+                  >
+                    <TagPill
+                      label={name}
+                      color={tagColorOf(name)}
+                      class={form().tags.includes(name) ? 'ring-2 ring-primary' : 'opacity-90'}
+                    />
+                  </MenuItem>
+                ))}
+              </Menu>
+            </If>
+          </View>
 
           <If when={error()}>
             <View class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2">

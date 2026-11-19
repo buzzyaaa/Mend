@@ -97,6 +97,16 @@ SQLite 单文件（应用层字段加密）
 - 错误以字符串 `code|message` 返回；TSX `lib/errors.ts` 按 `code` 映射 i18n，未知 code 才显示原始 message。
 - 原生模块公开 DTO 在 `native/src/dto.rs`；nsh 自动生成 `.nsh/types/mend/native.d.ts`。
 
+### 5.1 站点图标（favicon 缓存）
+
+列表行首图标走**三级回退**：库里缓存的真实 favicon（`site_icon(url)` 返回 `data:` URI）→ 内置品牌 SVG（`lib/site-icons.ts`，离线即时）→ 分类 emoji。
+
+- **网络出口只有一处**：`Vault.fetchSiteIcons(limit)` 在 `nsh_core::prelude::blocking` 里用 ureq 抓取，直达条目自己填写的站点；`nsh.json` 不开 `capabilities.network`，TSX 从不发请求。请求复用 `system_proxy::apply()` 注入的系统代理。
+- **禁止第三方图标服务**：Google s2 / DuckDuckGo icon 之类的接口会把整份站点清单交给一家公司，对密码管理器是实质泄露。
+- **抓取策略**：先读首页 `<link rel="icon|apple-touch-icon">`（按 sizes 排序，优先 PNG），再退回 `/favicon.ico`；只接受 PNG/JPEG/GIF/WebP/SVG（ICO 用 `image` crate 转 PNG，因为 Linux 无法直接渲染 ICO），单张 ≤96KB，`MAX_ICON_SIDE=96`。
+- **缓存与退避**：结果写进同一个库文件的 `site_icons` 表（schema v5，随库拷走，不落明文图片文件）。成功 90 天过期重抓；失败按 `24h × 2^n`（封顶 30 天）退避，避免每次解锁都重试。
+- **触发时机**：TSX 在解锁进入主界面后等 3s 起跑（`lib/site-icons-cache.ts`），每批 4 个站点、批间隔 1.2s、站点间 250ms；新增/编辑条目会重新排队。设置里关掉「网站图标」= 零请求，列表立刻回退到内置图标。
+
 ## 6. UI 与交互决策
 
 | 旧实现 | 新实现 | 说明 |
@@ -104,17 +114,23 @@ SQLite 单文件（应用层字段加密）
 | 自定义 40px 标题栏 + Tauri 窗口控制 | **系统标题栏** + 应用内 Header | 原生窗口拖动/最小化/最大化/关闭由系统提供 |
 | 左侧 240px 侧栏 + 11 列表格 | **桌面 master-detail**：侧栏 + 列表 + 详情；手机单栏 | 列表只显示摘要，详情按需解密 |
 | 行内展开字段 | 右侧详情面板（手机为独立详情页） | 减少一次渲染的字段数量 |
-| SortableJS 拖拽排序 | 行菜单「上移 / 下移」+ 手动排序 | 无 DOM/DnD；排序语义仍是按分类分桶 |
+| SortableJS 拖拽排序 | 条目用行内按钮「上移 / 下移」；侧栏「我的分组」用鼠标拖动排序 | 无 DOM/DnD：条目排序语义仍按分类分桶，分类顺序写 `categories.sort_order` |
 | 自研 Markdown 渲染 | nsh `TextView`（原生 Markdown） | 不再处理 HTML/白名单 |
 | naïve-ui 组件 | nsh `View`/`Text`/`Input`/`Dialog`/`Select`/`Sheet` + Tailwind 类 | 全部自绘，适配浅/深色 |
 | Material 分类图标 | emoji + 颜色点 | 旧 Material 图标名保留在 DB，仅显示时映射 |
-| 条目图标只用分类 emoji | 网址匹配品牌 SVG，未匹配回退分类图标 | 116 个离线品牌 glyph（`assets/site-icons/`，Simple Icons / MDI），分类色做底色 |
+| 条目图标只用分类 emoji | 三级回退：库里缓存的真实 favicon → 内置品牌 SVG → 分类 emoji | 116 个离线品牌 glyph（`assets/site-icons/`，Simple Icons / MDI）+ 联网抓回的站点图标（schema v5 `site_icons`，见 §5.1）；分类色做底色 |
 | localStorage 偏好 | 数据目录下的 `preferences.json`（`loadPreferences`/`savePreferences`） | 解锁前也能应用语言/主题；**不再用 nsh `Storage`**——它会往 `%APPDATA%` 写 `storage.json`，进程权限不足时报「拒绝访问」 |
 | 加密快照导出/恢复（`.mendbak`） | 移除：库文件本身就是完整数据，提供「在文件夹中显示」让人直接拷走 | 少一套「导出→选目录→再导入」的仪式；受限权限下也不再需要解释「为什么导不进桌面」（§4.2） |
 | Tauri updater | 暂不启用 | 需要新的 nsh 签名清单与发布密钥；UI 保留版本信息 |
 | 弱密码/重复密码标记 | 暂未恢复 | 需要额外的原生安全报告接口；核心加密逻辑未受影响 |
 
-移动端：`platform.idiom` 为 `phone`/`pad` 或窗口宽度 < 900 时列表用单栏布局；分类通过顶部菜单打开的 Sheet；底部安全区用 `env(safe-area-inset-*)`。应用快速导航（NavRail）在窗口宽度 < 600（含 phone idiom）时横放底部，其余宽度保持最左竖栏；密码列表的单列断点仍是 900。
+列表布局（0.5.0 起）：标签写在标题下方，与标题共用 name 列并整体垂直居中（无标题时标签本身居中）；账号/密码、邮箱/手机号各纵向两行、共用一格，行内按「账号：xxx / 密码：•••• / 邮箱：xxx / 手机：xxx」呈现（前缀只显示，复制按钮只写原始字段值）；编辑、复制整条、星标、归档、删除、取消归档/恢复、彻底删除、上移/下移全部改成行内图标按钮，不再有「更多」弹出菜单。列偏好随之从 `username`/`password`/`email`/`phone`/`notes` 五列迁移为 `credentials`/`contact`/`notes` 三列：旧可见列任一为真则整格保留，旧宽度取两列中较宽者 + 52pt 后按新范围 clamp。
+
+主列表现在用 `nsh/base` 的 `DataTable` 渲染：选择列与标题列固定左侧、操作列固定右侧，中间列支持拖动调宽。列宽**不再持久化**：每次挂载或窗口尺寸变化都按当前表格宽（`onLayout`）重新平均分配——选择列与操作列恒定宽度，其余列平分剩下的空间（标题列保留一个能放下图标 + 两个标签胶囊的保底宽，宽窗口下仍是完全平分）。因此拖动完全交给 DataTable 内部处理，没有 `onColumnResize` 回调、没有去抖、没有写盘，也不会在拖动后重算 `columns` 造成第二次拖动发卡。工具栏最右的刷新图标改为「重置」（`common.reset` / testID `reset-table-layout`）：点击自增 `tableLayoutVersion`，强制按当前窗口宽度重新平分；列配置菜单里的「重置列宽」和它走同一个入口。所有重置都只在内存里重排，不落盘。选择列和操作列 `minWidth = maxWidth = 当前宽度` 且不可调整，表头与按钮居中。工具栏第二个图标在「列表视图 / 卡片视图」间切换，卡片视图是虚拟化的 `List` + 响应式列数（1~4 列），卡片内容与表格逐项一致。滚动条统一用 `Scrollbar`：启动时 `Scrollbar.setTheme` 设一次全局细胶囊外观，DataTable 走内置条，卡片视图用独立 `<Scrollbar scroll={listRef}>`。大数据兼容靠两层：`entries` 仍是一次取全量的非敏感摘要，敏感字段按 `PAGE_SIZE=200` 分批解密；DataTable 的 `rowCount` 是全表、`data` 只持有已解密窗口，`onVisibleRowsChange` 提前补密，`onLoadMore` 兜底；卡片 `List` 同样虚拟化和触底加载。单元格一律通过 accessor 读 signal，避免 DataTable 回收槽位后显示旧行快照。
+
+分类编辑与标签编辑共用 `ui.tsx` 的 `ColorPickerControl`（色域 + 色相滑杆 + hex 输入，8 位带 alpha 的值统一截成 `#RRGGBB`）；分类额外保留「无颜色」按钮，清除后写 `NULL`。侧栏「我的分组」用 `PanResponder` 做鼠标拖动排序：拖动中实时重排预览，松手调用 `Vault.reorderCategories` 把完整 id 顺序写进 `categories.sort_order`；拖动结束后补发的 press 被吞掉，不会误切当前分组。分组行末默认显示条目数；鼠标进入数字所在的 24pt 槽位只原位切换为「···」，**不自动弹菜单**；点击「···」才通过受控 nsh `Menu` 弹出「编辑 / 删除」，移开指针不会收起已打开的菜单，再点一次（或点其他位置/拖拽排序）才关掉；打开其他分组的菜单会立刻关掉旧菜单。删除项用 `text-destructive` 危险色并保留确认弹窗。
+
+移动端：`platform.idiom` 为 `phone`/`pad` 或窗口宽度 < 900 时主布局用单栏（无独立侧栏）；分类通过顶部菜单打开的 Sheet；底部安全区用 `env(safe-area-inset-*)`。应用快速导航（NavRail）在窗口宽度 < 600（含 phone idiom）时横放底部，其余宽度保持最左竖栏；列表视图横向滚动列，卡片视图按窗口宽 1~4 列自适应。
 
 设置页是独立页面（非弹窗）：< 1000（含 phone idiom）单页滚动展示全部分区卡片，不设设置内快速导航，控件全宽；≥ 1000 左侧四分类子导航（200px，≥ 2560 220px）+ 锚点滚动内容；内容 max-width 980px 居中，≥ 2560 1600px。页内所有下拉/输入框/主操作按钮统一宽度（240px，手机全宽）；字段统一纵向：主题/语言竖排，「外观与行为」标题作为 CardHeader 进主题/语言卡（≥1100 装饰画绝对定位右上角作卡片背景，不参与布局、不撑大标题与字段间距）；安全卡顺序为自动锁定 → 免主密码解锁 → 风险提示（开关紧贴文案左侧，说明文字另起一行与开关左缘对齐，SwitchField `leading`）；改主密码表单纵向。更新卡承载检查频率（最左，检查按钮在其正下方）；应用标识/版本信息（原「关于」卡融合而来，不再单独设卡）无边框无底色，置于检查结果横幅下方：桌面客户端 Badge 紧随 Mend 名称，版本与构建合并为「版本 x（构建 n）」一行。滚动高亮 = 视口中线 + 触顶/触底端点（触底仅在真能滚动时成立）；导航点击按「意图」收敛——程序化滚动期间不做几何判定、定时兜底解锁，避免目标分区靠尾部时滚动被夹到触底而抢错高亮。窄视口下 Scroll 内容宽度显式归属（手机 contentStyle 取窗口宽），不依赖内容容器自适应。
 
@@ -122,7 +138,7 @@ SQLite 单文件（应用层字段加密）
 
 已保留：建库/解锁/锁定/改主密码、条目 CRUD、分类 CRUD（名称/颜色/emoji 图标）、标签、搜索、排序（最近更新/名称/收藏/手动）、收藏、归档、回收站（恢复/彻底删除/清空）、预设值、强密码生成器、Markdown 备注、复制到剪贴板、打开网址、自动锁定、浅色/深色/跟随系统、中英文切换、库文件自选与「在文件夹中显示」。
 
-暂缓/简化：更新检查、弱密码/重复密码安全标记、拖拽排序、移动端备份“另存为”、WebDAV、TOTP、CSV/KDBX 导入导出（仍是非目标）。
+暂缓/简化：更新检查、弱密码/重复密码安全标记、移动端备份“另存为”、WebDAV、TOTP、CSV/KDBX 导入导出（仍是非目标）。
 
 ## 8. 开发与验证命令
 

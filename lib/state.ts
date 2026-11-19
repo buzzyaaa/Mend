@@ -5,6 +5,7 @@ import { errorText, parseError } from './errors'
 import { normalizeUrl, sortEntries } from './format'
 import * as native from './native'
 import { loadPreferences, preferences } from './preferences'
+import { kickSiteIconFetch } from './site-icons-cache'
 import {
   isBuiltinBucket,
   type Category,
@@ -18,6 +19,8 @@ import {
   type Preset,
   type PresetInput,
   type SortMode,
+  type Tag,
+  type TagInput,
   type ToastItem,
   type ToastKind,
   type VaultStatus,
@@ -45,6 +48,8 @@ export const detailBusy = signal(false)
 export const categories = signal<Category[]>([])
 export const entries = signal<EntrySummary[]>([])
 export const presets = signal<Preset[]>([])
+/** 标签定义（名称 + 颜色）。条目只存标签名，颜色统一从这里查。 */
+export const tags = signal<Tag[]>([])
 
 export const bucket = signal<string>('all')
 export const keyword = signal('')
@@ -68,14 +73,21 @@ export const entryNotes = signal<Record<string, string>>({})
 /** 备注编辑弹窗：null = 关闭，字符串 = 要编辑备注的 entry id。 */
 export const notesEditor = signal<string | null>(null)
 
-/** 滚动加载：一次加载/解密的条目数。 */
-export const PAGE_SIZE = 50
+/** 滚动加载：一次加载/解密的条目数。DataTable/卡片列表都按窗口分批解密，
+ *  避免上万条时一次性把字段明文灌进 UI。 */
+export const PAGE_SIZE = 200
 /** 当前已解密并交给列表渲染的条目数（visibleEntries 的前 N 条）。 */
 export const loadedCount = signal(0)
 /** 正在增量解密下一批（列表底部转圈）。 */
 export const fieldsLoading = signal(false)
-/** 视图：常规表格 / 紧凑。 */
-export const viewMode = signal<'list' | 'compact'>('list')
+/** 视图：DataTable 列表 / 卡片网格。 */
+export const viewMode = signal<'list' | 'card'>('list')
+/** 表格布局重置计数：自增一次，DataTable 就按当前窗口宽度重新平均分配列宽。
+ *  列宽不再持久化，这就是「重置」按钮和窗口尺寸变化之外唯一触发重排的入口。 */
+export const tableLayoutVersion = signal(0)
+export function resetTableLayout(): void {
+  tableLayoutVersion.set(tableLayoutVersion() + 1)
+}
 /** 全局“显示密码”开关（工具栏），锁定后重置。 */
 export const showPasswords = signal(true)
 /** 逐条密码临时隐藏（每行眼睛图标），锁定后清空。 */
@@ -89,6 +101,8 @@ export const toasts = signal<ToastItem[]>([])
 export const confirm = signal<ConfirmState | null>(null)
 export const entryEditor = signal<EntryEditorState | null>(null)
 export const presetsOpen = signal(false)
+/** 标签维护弹窗（右上角入口）。 */
+export const tagsOpen = signal(false)
 export const categoryEditor = signal<{ id: string | null } | null>(null)
 export const categoriesSheetOpen = signal(false)
 /** 更新确认弹窗：由设置页的「立即更新」打开，确认后交给 lib/update 下载安装。 */
@@ -108,6 +122,7 @@ export const modalOpen = computed<boolean>(
   () =>
     detailOpen() ||
     presetsOpen() ||
+    tagsOpen() ||
     confirm() !== null ||
     entryEditor() !== null ||
     categoryEditor() !== null ||
@@ -317,10 +332,12 @@ async function applyVaultFile(path: string | null): Promise<void> {
     tagFilters.set([])
     categories.set([])
     presets.set([])
+    tags.set([])
     closeDetail()
     activePage.set('entries')
     // 弹窗是独立原生窗口层，不会随主界面重建而消失，这里显式关掉。
     presetsOpen.set(false)
+    tagsOpen.set(false)
     entryEditor.set(null)
     categoryEditor.set(null)
     categoriesSheetOpen.set(false)
@@ -409,12 +426,14 @@ function clearSensitiveState(): void {
   typeFilter.set(null)
   viewMode.set('list')
   presets.set([])
+  tags.set([])
   selectedId.set(null)
   selected.set(null)
   detailOpen.set(false)
   activePage.set('entries')
   entryEditor.set(null)
   presetsOpen.set(false)
+  tagsOpen.set(false)
   categoryEditor.set(null)
   categoriesSheetOpen.set(false)
   confirm.set(null)
@@ -444,12 +463,14 @@ export async function lockVault(auto = false): Promise<void> {
 
 export async function loadAll(): Promise<void> {
   try {
-    const [categoryList, presetList] = await Promise.all([
+    const [categoryList, presetList, tagList] = await Promise.all([
       native.listCategories(),
       native.listPresets(),
+      native.listTags(),
     ])
     categories.set(categoryList)
     presets.set(presetList)
+    tags.set(tagList)
     await refreshEntries()
   } catch (error) {
     showError(error)
@@ -467,6 +488,14 @@ export async function refreshCategories(): Promise<void> {
 async function refreshPresets(): Promise<void> {
   try {
     presets.set(await native.listPresets())
+  } catch (error) {
+    showError(error)
+  }
+}
+
+async function refreshTags(): Promise<void> {
+  try {
+    tags.set(await native.listTags())
   } catch (error) {
     showError(error)
   }
@@ -659,7 +688,7 @@ export function setTypeFilter(categoryId: string | null): void {
   reloadVisibleWindow()
 }
 
-export function setViewMode(mode: 'list' | 'compact'): void {
+export function setViewMode(mode: 'list' | 'card'): void {
   viewMode.set(mode)
 }
 
@@ -820,6 +849,8 @@ export async function saveEntry(input: EntryInput, id: string | null): Promise<E
   selected.set(view)
   await refreshCategories()
   await refreshEntries()
+  // 新站点：让后台队列把它排在前面，几秒后列表就换上真实图标。
+  kickSiteIconFetch()
   toast(t('toast.saved'))
   return view
 }
@@ -956,6 +987,16 @@ export async function removeCategory(id: string): Promise<void> {
   await refreshEntries()
 }
 
+/** 侧栏拖拽后按给定 id 顺序持久化分类显示顺序（只写 sort_order）。 */
+export async function reorderCategories(ids: string[]): Promise<void> {
+  try {
+    native.reorderCategories(ids)
+    await refreshCategories()
+  } catch (error) {
+    showError(error)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Presets
 // ---------------------------------------------------------------------------
@@ -1002,6 +1043,59 @@ export async function movePreset(preset: Preset, delta: number): Promise<void> {
     preset.fieldType,
     next.map((item) => item.id),
   )
+}
+
+// ---------------------------------------------------------------------------
+// Tags
+// ---------------------------------------------------------------------------
+
+/** 标签名对应的定义颜色；未定义的旧标签返回 null，胶囊按文字 hash 兜底配色。 */
+export function tagColorOf(name: string): string | null {
+  return tags().find((tag) => tag.name === name)?.color ?? null
+}
+
+/** 当前详情弹窗里的条目标签可能已被改名/删除：重读一次保持同步。 */
+function refreshDetailTags(): void {
+  const current = selected()
+  if (!current) return
+  try {
+    selected.set(native.getEntry(current.id))
+  } catch {
+    // 详情本身已在关闭流程里，读不到就保持现状。
+  }
+}
+
+/** 新建 / 编辑标签定义。改名时后端会改写所有条目上的标签名，
+ *  这里同步迁移已生效的标签筛选并刷新列表与详情。 */
+export async function saveTag(input: TagInput, id: string | null): Promise<Tag | null> {
+  try {
+    const previous = id ? (tags().find((tag) => tag.id === id)?.name ?? null) : null
+    const tag = id ? await native.updateTag(id, input) : await native.createTag(input)
+    toast(t('toast.saved'))
+    await refreshTags()
+    if (previous !== null && previous !== tag.name) {
+      tagFilters.update((list) => list.map((item) => (item === previous ? tag.name : item)))
+      await refreshEntries()
+      refreshDetailTags()
+    }
+    return tag
+  } catch (error) {
+    showError(error)
+    return null
+  }
+}
+
+/** 删除标签定义：后端会同时从所有条目上摘掉它，筛选条件也要清掉这一项。 */
+export async function removeTag(id: string): Promise<void> {
+  const removed = tags().find((tag) => tag.id === id)?.name ?? null
+  const ok = await runAction(() => native.deleteTag(id), t('toast.deleted'))
+  if (ok === null) return
+  if (removed !== null) {
+    tagFilters.update((list) => list.filter((item) => item !== removed))
+  }
+  await refreshTags()
+  await refreshEntries()
+  refreshDetailTags()
 }
 
 // ---------------------------------------------------------------------------

@@ -2,22 +2,26 @@ import { computed, Text, token, View } from 'nsh'
 import { Menu, MenuItem, MenuSeparator } from 'nsh/base'
 import { t } from 'nsh/i18n'
 
-import { clearTagFilters, entries, setTagFilter, tagFilters } from '../lib/state'
+import { clearTagFilters, entries, setTagFilter, tagColorOf, tagFilters, tags } from '../lib/state'
 import { Icon } from './Icon'
 import { TagPill } from './TagPill'
 import { ActionButton } from './ui'
 
 /** 标签多选筛选：无 props。
- *  - 选项来自全库 `entries()` 的 tags 去重排序（不是当前 buckets），
- *    否则被筛掉的标签就再也选不回来。
+ *  - 选项来自**标签定义**（`tags()`，按维护弹窗里的顺序），而不是当前列表里
+ *    出现过的标签：这样删到空库也不会丢掉筛选入口，新标签建好即出现。
+ *  - 兜底：条目上仍带、但定义表里没有的旧标签（理论上迁移已回填）追加在末尾，
+ *    避免它们永远筛不到。
  *  - 每项 `closeOnSelect={false}`，点完菜单保持展开，可连续勾选多个标签。
- *  - 颜色走 `TagPill`（内部去 `#` 后确定性配色），与列表里的胶囊完全一致。 */
+ *  - 颜色取自标签定义，与列表里的胶囊完全一致；无定义时回退文字 hash 配色。 */
 export function TagFilterMenu() {
-  const allTags = computed(() =>
-    Array.from(new Set(entries().flatMap((entry) => entry.tags))).sort((a, b) =>
-      a.localeCompare(b),
-    ),
-  )
+  const allTags = computed(() => {
+    const defined = tags().map((tag) => tag.name)
+    const extra = Array.from(new Set(entries().flatMap((entry) => entry.tags)))
+      .filter((name) => !defined.includes(name))
+      .sort((a, b) => a.localeCompare(b))
+    return [...defined, ...extra]
+  })
 
   const trigger = (
     <ActionButton
@@ -69,6 +73,7 @@ export function TagFilterMenu() {
           >
             <TagPill
               label={tag}
+              color={tagColorOf(tag)}
               class={tagFilters().includes(tag) ? 'ring-2 ring-primary' : 'opacity-90'}
             />
           </MenuItem>

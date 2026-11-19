@@ -1,6 +1,19 @@
 import { cleanup, computed, effect, signal, Text, token, View } from 'nsh'
 import type { JSX } from 'nsh'
-import { Button, Input, Menu, MenuItem, Switch, Tooltip, type SelectItem } from 'nsh/base'
+import {
+  Button,
+  ColorArea,
+  ColorField,
+  ColorPicker,
+  ColorSlider,
+  Input,
+  Menu,
+  MenuItem,
+  Switch,
+  Tooltip,
+  type SelectItem,
+} from 'nsh/base'
+import { t } from 'nsh/i18n'
 
 import { touchActivity } from '../lib/state'
 
@@ -28,6 +41,53 @@ const BUTTON_CLASS: Record<ButtonVariant, string> = {
  *  所有弹窗统一加这两个类：popup 居中 + 半透明遮罩。 */
 export const MODAL_CLASS = 'm-auto'
 export const MODAL_BACKDROP_CLASS = 'bg-black/50'
+
+/** ColorPicker 在带 alpha 的格式下会给出 8 位 hex；库里只存 `#RRGGBB`。 */
+export function hexColor(value: string): string {
+  const trimmed = value.trim()
+  return /^#[0-9a-fA-F]{8}$/.test(trimmed) ? trimmed.slice(0, 7) : trimmed
+}
+
+/** 标签与分类共用的颜色选择器：饱和度/明度区域 + 色相滑杆 + 十六进制输入。
+ *  受控组件：值来自调用方 signal，每次改动经 `onChange` 回写已归一化的 7 位 hex。 */
+export function ColorPickerControl(props: {
+  value: string
+  onChange: (color: string) => void
+  class?: string
+}) {
+  return (
+    <ColorPicker
+      value={props.value}
+      format="hex"
+      onChange={({ value }) => props.onChange(hexColor(value))}
+      class={props.class ?? 'gap-1.5'}
+    >
+      <ColorArea
+        accessibilityLabel={t('tag.color')}
+        class="h-16"
+        panelClass="rounded-md"
+        thumbClass="h-3.5 w-3.5 rounded-full border-2 border-white"
+        fillThumb
+      />
+      <View class="flex-row items-center gap-2">
+        <ColorSlider
+          colorSpace="hsl"
+          channel="hue"
+          accessibilityLabel={t('tag.color')}
+          class="h-6 flex-1 justify-center px-2"
+          trackClass="h-2.5 rounded-full"
+          thumbClass="h-3.5 w-3.5 rounded-full border-2 border-white"
+          fillThumb
+        />
+        <ColorField
+          format="hex"
+          accessibilityLabel={t('tag.hex')}
+          class="h-7 w-24 rounded-md border border-border bg-background px-2 text-right text-[11px]"
+        />
+      </View>
+    </ColorPicker>
+  )
+}
 
 export function ActionButton(props: {
   label?: string

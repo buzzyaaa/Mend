@@ -48,6 +48,7 @@ import sparkles from '../assets/icons/sparkles.svg'
 import star from '../assets/icons/star.svg'
 import starFilled from '../assets/icons/star-filled.svg'
 import sun from '../assets/icons/sun.svg'
+import tag from '../assets/icons/tag.svg'
 import trash from '../assets/icons/trash.svg'
 import unlock from '../assets/icons/unlock.svg'
 import upload from '../assets/icons/upload.svg'
@@ -96,6 +97,7 @@ export type IconName =
   | 'star'
   | 'star-filled'
   | 'sun'
+  | 'tag'
   | 'trash'
   | 'unlock'
   | 'upload'
@@ -144,6 +146,7 @@ const ICON_ASSETS: Record<IconName, ImageAsset> = {
   star,
   'star-filled': starFilled,
   sun,
+  tag,
   trash,
   unlock,
   upload,

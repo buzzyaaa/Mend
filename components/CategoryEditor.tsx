@@ -9,6 +9,7 @@ import type { CategoryInput } from '../lib/types'
 import { Icon } from './Icon'
 import {
   ActionButton,
+  ColorPickerControl,
   Field,
   IconButton,
   TextField,
@@ -29,7 +30,6 @@ export function CategoryEditor(props: { state: { id: string | null } }) {
   const name = signal('')
   const color = signal<string | null>(null)
   const icon = signal<string | null>(null)
-  const colorText = signal('')
   const error = signal('')
   const busy = signal(false)
   const editing = () => props.state.id !== null
@@ -39,7 +39,6 @@ export function CategoryEditor(props: { state: { id: string | null } }) {
       name.set('')
       color.set(null)
       icon.set(null)
-      colorText.set('')
       return
     }
     const category = categories().find((item) => item.id === props.state.id)
@@ -47,7 +46,6 @@ export function CategoryEditor(props: { state: { id: string | null } }) {
     name.set(category.name)
     color.set(category.color ?? null)
     icon.set(category.icon ?? null)
-    colorText.set(category.color ?? '')
   })
 
   async function submit() {
@@ -57,7 +55,8 @@ export function CategoryEditor(props: { state: { id: string | null } }) {
       error.set(t('sidebar.nameRequired'))
       return
     }
-    if (colorText().trim() && !validHex(colorText())) {
+    const chosenColor = color()
+    if (chosenColor && !validHex(chosenColor)) {
       error.set(t('category.colorHint'))
       return
     }
@@ -65,7 +64,7 @@ export function CategoryEditor(props: { state: { id: string | null } }) {
     try {
       const input: CategoryInput = {
         name: trimmed,
-        color: validHex(colorText()),
+        color: chosenColor ? validHex(chosenColor) : null,
         icon: icon(),
       }
       const result = await saveCategory(input, props.state.id)
@@ -75,11 +74,6 @@ export function CategoryEditor(props: { state: { id: string | null } }) {
     } finally {
       busy.set(false)
     }
-  }
-
-  function chooseColor(value: string | null) {
-    color.set(value)
-    colorText.set(value ?? '')
   }
 
   return (
@@ -124,45 +118,26 @@ export function CategoryEditor(props: { state: { id: string | null } }) {
           </Field>
 
           <Field label={t('category.color')} hint={t('category.colorHint')}>
-            <View class="flex-row flex-wrap items-center gap-2">
-              <View
-                class={
-                  'h-7 w-7 items-center justify-center rounded-full border ' +
-                  (color() === null ? 'border-ring bg-muted' : 'border-border bg-card')
-                }
-                onPress={() => chooseColor(null)}
-                role="button"
-                accessibilityLabel={t('category.noColor')}
-              >
-                <Icon name="close" size={12} color={token('muted-foreground')} />
+            <View class="gap-2">
+              <View class="flex-row items-center gap-2">
+                <View
+                  class={
+                    'h-7 w-7 items-center justify-center rounded-full border ' +
+                    (color() === null ? 'border-ring bg-muted' : 'border-border bg-card')
+                  }
+                  onPress={() => color.set(null)}
+                  role="button"
+                  accessibilityLabel={t('category.noColor')}
+                >
+                  <Icon name="close" size={12} color={token('muted-foreground')} />
+                </View>
+                <Text class="text-[11px] text-muted-foreground">{t('category.noColor')}</Text>
               </View>
-              <Each of={CATEGORY_COLORS} key={(value) => value}>
-                {(value) => (
-                  <View
-                    class={
-                      'h-7 w-7 items-center justify-center rounded-full border ' +
-                      (color() === value() ? 'border-ring' : 'border-transparent')
-                    }
-                    style={{ backgroundColor: value() }}
-                    onPress={() => chooseColor(value())}
-                    role="button"
-                    accessibilityLabel={value()}
-                  >
-                    <If when={color() === value()}>
-                      <Icon name="check" size={12} color="#ffffff" />
-                    </If>
-                  </View>
-                )}
-              </Each>
-              <View class="w-24">
-                <TextField
-                  value={colorText()}
-                  onChange={colorText.set}
-                  placeholder="#RRGGBB"
-                  maxLength={7}
-                  accessibilityLabel={t('category.color')}
-                />
-              </View>
+              {/* 与标签编辑完全同一个选择器；「无颜色」由上面的按钮单独表达。 */}
+              <ColorPickerControl
+                value={color() ?? CATEGORY_COLORS[0]}
+                onChange={(value) => color.set(value)}
+              />
             </View>
           </Field>
 

@@ -3,6 +3,7 @@
 //! 表结构与字段落盘形态见 `docs/04-data-model-encryption.md` §2：
 //! 标题/分类/时间等元信息明文，账号/密码/邮箱/手机号/备注一律存密文列。
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -13,8 +14,9 @@ use rusqlite::{params, OptionalExtension, Transaction, TransactionBehavior};
 pub use rusqlite::Connection;
 
 use crate::error::{MendError, MendResult};
+use crate::tags;
 
-pub const SCHEMA_VERSION: i64 = 4;
+pub const SCHEMA_VERSION: i64 = 6;
 pub const DB_FILE_NAME: &str = "mend.db";
 
 /// SQLite 忙等待上限。必须在 `Connection::open` 之后、任何读写之前设置：
@@ -84,6 +86,43 @@ const MIGRATION_V3: &str = "ALTER TABLE entries ADD COLUMN sort_order INTEGER NO
 /// 归档不写 `archived_at`，归档列表按 `updated_at` 倒序展示（见 docs/04 §2.3 / §3）。
 const MIGRATION_V4: &str = "ALTER TABLE entries ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;";
 
+/// v4 → v5：站点图标缓存（条目列表行首的小图标）。
+///
+/// 图标本身是从条目自己的站点抓回来的公开图片，不是密钥材料；但「这台机器
+/// 上有哪些站点账号」本身就敏感，所以缓存必须跟库文件同处一地、随库一起拷
+/// 走，而不是散在数据目录里的一组明文图片文件。`mime`/`bytes` 为空的行表示
+/// 「抓过、没抓到」，`fail_count` 记连续失败次数，用来退避重试（见 docs/04）。
+const MIGRATION_V5: &str = r#"
+CREATE TABLE IF NOT EXISTS site_icons (
+    host       TEXT PRIMARY KEY,
+    mime       TEXT,
+    bytes      BLOB,
+    fetched_at INTEGER NOT NULL,
+    fail_count INTEGER NOT NULL DEFAULT 0
+);
+"#;
+
+/// v5 → v6：标签定义表（名称 + 颜色）。
+///
+/// 标签从「条目上的自由文本」升级为库内独立维护的实体：条目仍只存标签名
+/// （`entries.tags` JSON），名称→颜色的映射集中在这张表。迁移时把旧库里
+/// 出现过的标签名回填成定义（按首次出现顺序取默认色板），条目侧的旧名字
+/// （含 `#` 前缀、大小写变体）同步归一，保证升级后所有标签都能在维护弹窗里
+/// 看到、也都能在条目里选中。名称唯一索引不区分大小写，避免 `work` / `Work`
+/// 两个几乎一样的标签同时存在。
+const MIGRATION_V6: &str = r#"
+CREATE TABLE IF NOT EXISTS tag_defs (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    color      TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tag_defs_name ON tag_defs(name COLLATE NOCASE);
+"#;
+
 pub fn db_file_path(app_data_dir: &Path) -> PathBuf {
     app_data_dir.join(DB_FILE_NAME)
 }
@@ -143,6 +182,15 @@ pub fn migrate(conn: &Connection) -> MendResult<()> {
     if current < 4 && !column_exists(&tx, "entries", "archived")? {
         tx.execute_batch(MIGRATION_V4).map_err(db_err)?;
     }
+    // v5 只有一张新建的表：`CREATE TABLE IF NOT EXISTS` 幂等，半迁移状态也能补上。
+    if current < 5 {
+        tx.execute_batch(MIGRATION_V5).map_err(db_err)?;
+    }
+    // v6：建标签定义表，并把旧条目里的标签名回填成定义（幂等，可重入）。
+    if current < 6 {
+        tx.execute_batch(MIGRATION_V6).map_err(db_err)?;
+        backfill_tag_defs(&tx)?;
+    }
     meta_set(&tx, "schema_version", &SCHEMA_VERSION.to_string())?;
     tx.commit().map_err(db_err)?;
     Ok(())
@@ -157,6 +205,102 @@ fn column_exists(conn: &Connection, table: &str, column: &str) -> MendResult<boo
         )
         .map_err(db_err)?;
     Ok(count > 0)
+}
+
+/// v6 迁移：把 `entries.tags` 里出现过的旧标签名变成 `tag_defs` 行，
+/// 并把条目侧的写法归一（去 `#`、大小写统一为首次出现的拼写、去重）。
+///
+/// 只处理「表为空 / 版本未升」的库：名称唯一索引 + `INSERT OR IGNORE` 让重复
+/// 回填变成空操作，因此半迁移状态重跑也安全。
+fn backfill_tag_defs(tx: &Transaction<'_>) -> MendResult<()> {
+    let rows: Vec<(String, String)> = {
+        let mut stmt = tx
+            .prepare("SELECT id, tags FROM entries")
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+            .map_err(db_err)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(db_err)?;
+        rows
+    };
+
+    let ts = now_ms();
+    let mut canonical: Vec<String> = Vec::new();
+    let mut by_key: HashMap<String, String> = HashMap::new();
+    let mut rewritten: Vec<(String, Vec<String>)> = Vec::new();
+
+    // 半迁移重入时以已有定义为准：条目侧统一到已存的拼写，不另造第二套大小写。
+    {
+        let mut stmt = tx
+            .prepare("SELECT name FROM tag_defs ORDER BY sort_order, id")
+            .map_err(db_err)?;
+        let names = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(db_err)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(db_err)?;
+        for name in names {
+            let key = name.to_lowercase();
+            if by_key.contains_key(&key) {
+                continue;
+            }
+            by_key.insert(key, name.clone());
+            canonical.push(name);
+        }
+    }
+
+    for (id, raw) in rows {
+        let old_tags = tags_from_json(&raw)?;
+        let mut next: Vec<String> = Vec::new();
+        let mut seen: Vec<String> = Vec::new();
+        for raw_tag in &old_tags {
+            let Some(name) = tags::normalize_legacy_name(raw_tag) else {
+                continue;
+            };
+            let key = name.to_lowercase();
+            if seen.iter().any(|item| item == &key) {
+                continue;
+            }
+            let chosen = match by_key.get(&key) {
+                Some(existing) => existing.clone(),
+                None => {
+                    by_key.insert(key.clone(), name.clone());
+                    canonical.push(name.clone());
+                    name
+                }
+            };
+            seen.push(key);
+            next.push(chosen);
+        }
+        if next != old_tags {
+            rewritten.push((id, next));
+        }
+    }
+
+    for (index, name) in canonical.iter().enumerate() {
+        tx.execute(
+            "INSERT OR IGNORE INTO tag_defs(id, name, color, sort_order, created_at, updated_at)
+             VALUES(?1, ?2, ?3, ?4, ?5, ?5)",
+            params![
+                format!("tag-{ts}-{index}"),
+                name,
+                tags::default_color(index),
+                index as i64,
+                ts
+            ],
+        )
+        .map_err(db_err)?;
+    }
+
+    for (id, next) in rewritten {
+        tx.execute(
+            "UPDATE entries SET tags = ?2 WHERE id = ?1",
+            params![id, tags_to_json(&next)?],
+        )
+        .map_err(db_err)?;
+    }
+    Ok(())
 }
 
 // ---------- meta ----------
@@ -312,6 +456,27 @@ pub fn delete_category(conn: &Connection, id: &str) -> MendResult<()> {
     if changed == 0 {
         return Err(MendError::NotFound(format!("分类 {id}")));
     }
+    Ok(())
+}
+
+/// 按 UI 提交的顺序重排全部分类：只写 `sort_order`，名称/颜色/图标原样不动。
+/// `ids` 是完整有序列表，逐条赋 `0..n-1`；不存在的 id 静默跳过、不占号。
+/// 显式 `BEGIN IMMEDIATE` 先拿写锁，避免事务内读→写升级触发 SQLITE_BUSY。
+pub fn reorder_categories(conn: &Connection, ids: &[String]) -> MendResult<()> {
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate).map_err(db_err)?;
+    let mut order = 0i64;
+    for id in ids {
+        let changed = tx
+            .execute(
+                "UPDATE categories SET sort_order = ?2 WHERE id = ?1",
+                params![id, order],
+            )
+            .map_err(db_err)?;
+        if changed > 0 {
+            order += 1;
+        }
+    }
+    tx.commit().map_err(db_err)?;
     Ok(())
 }
 
@@ -811,8 +976,168 @@ pub fn reorder_presets(conn: &Connection, field_type: &str, ids: &[String]) -> M
     Ok(())
 }
 
-fn map_entry_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EntryRowEnc> {
-    Ok(EntryRowEnc {
+// ---------- tag definitions (v6) ----------
+
+/// 落盘形态的标签定义：名称与颜色都是明文元信息（语义同分类名）。
+#[derive(Debug, Clone)]
+pub struct TagRow {
+    pub id: String,
+    pub name: String,
+    pub color: String,
+    pub sort_order: i64,
+    pub created_at: i64,
+}
+
+pub fn list_tag_defs(conn: &Connection) -> MendResult<Vec<TagRow>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, name, color, sort_order, created_at
+               FROM tag_defs
+              ORDER BY sort_order ASC, created_at ASC",
+        )
+        .map_err(db_err)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(TagRow {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                color: row.get(2)?,
+                sort_order: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })
+        .map_err(db_err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(db_err)?;
+    Ok(rows)
+}
+
+/// 新建标签定义：`sort_order` 由调用方取 `next_tag_sort`（追加到列表末尾）。
+pub fn insert_tag_def(conn: &Connection, row: &TagRow) -> MendResult<()> {
+    conn.execute(
+        "INSERT INTO tag_defs(id, name, color, sort_order, created_at, updated_at)
+         VALUES(?1, ?2, ?3, ?4, ?5, ?5)",
+        params![row.id, row.name, row.color, row.sort_order, row.created_at],
+    )
+    .map_err(db_err)?;
+    Ok(())
+}
+
+pub fn next_tag_sort(conn: &Connection) -> MendResult<i64> {
+    let max: Option<i64> = conn
+        .query_row("SELECT MAX(sort_order) FROM tag_defs", [], |row| row.get(0))
+        .map_err(db_err)?;
+    Ok(max.unwrap_or(0) + 1)
+}
+
+/// 编辑标签：改名时同步把**所有条目**（含回收站/归档）上的同名标签换成新名字。
+/// 名称唯一索引（NOCASE）在冲突时返回 SQLite 约束错误，调用方应先用
+/// `list_tag_defs` 做一次可读的重复校验。
+///
+/// 事务内先读后写：显式 `BEGIN IMMEDIATE`，避免读锁升级写锁时绕过忙回调。
+pub fn rename_tag_def(
+    conn: &Connection,
+    id: &str,
+    name: &str,
+    color: &str,
+) -> MendResult<()> {
+    let old_name: Option<String> = conn
+        .query_row(
+            "SELECT name FROM tag_defs WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(db_err)?;
+    let Some(old_name) = old_name else {
+        return Err(MendError::NotFound(format!("标签 {id}")));
+    };
+
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate).map_err(db_err)?;
+    if old_name != name {
+        rewrite_entry_tags(&tx, Some(&old_name), name)?;
+    }
+    let changed = tx
+        .execute(
+            "UPDATE tag_defs SET name = ?2, color = ?3, updated_at = ?4 WHERE id = ?1",
+            params![id, name, color, now_ms()],
+        )
+        .map_err(db_err)?;
+    tx.commit().map_err(db_err)?;
+    if changed == 0 {
+        return Err(MendError::NotFound(format!("标签 {id}")));
+    }
+    Ok(())
+}
+
+/// 删除标签定义，并从所有条目上摘掉这个标签（条目不删）。
+pub fn delete_tag_def(conn: &Connection, id: &str) -> MendResult<()> {
+    let name: Option<String> = conn
+        .query_row(
+            "SELECT name FROM tag_defs WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(db_err)?;
+    let Some(name) = name else {
+        return Err(MendError::NotFound(format!("标签 {id}")));
+    };
+
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate).map_err(db_err)?;
+    rewrite_entry_tags(&tx, Some(&name), "")?;
+    let changed = tx
+        .execute("DELETE FROM tag_defs WHERE id = ?1", params![id])
+        .map_err(db_err)?;
+    tx.commit().map_err(db_err)?;
+    if changed == 0 {
+        return Err(MendError::NotFound(format!("标签 {id}")));
+    }
+    Ok(())
+}
+
+/// 把所有条目的标签从 `from` 改成 `to`（`to` 为空表示摘掉）；只写真正含该标签的行。
+fn rewrite_entry_tags(tx: &Transaction<'_>, from: Option<&str>, to: &str) -> MendResult<()> {
+    let Some(from) = from else {
+        return Ok(());
+    };
+    let rows: Vec<(String, String)> = {
+        let mut stmt = tx
+            .prepare("SELECT id, tags FROM entries")
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+            .map_err(db_err)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(db_err)?;
+        rows
+    };
+    for (id, raw) in rows {
+        let tags = tags_from_json(&raw)?;
+        if !tags.iter().any(|tag| tag == from) {
+            continue;
+        }
+        let mut next: Vec<String> = Vec::with_capacity(tags.len());
+        for tag in tags {
+            if tag == from {
+                let target = to.trim();
+                if !target.is_empty() && !next.iter().any(|item| item == target) {
+                    next.push(target.to_string());
+                }
+            } else if !next.iter().any(|item| item == &tag) {
+                next.push(tag);
+            }
+        }
+        tx.execute(
+            "UPDATE entries SET tags = ?2 WHERE id = ?1",
+            params![id, tags_to_json(&next)?],
+        )
+        .map_err(db_err)?;
+    }
+    Ok(())
+}
+
+fn map_entry_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EntryRowEnc> {    Ok(EntryRowEnc {
         id: row.get(0)?,
         category_id: row.get(1)?,
         title: row.get(2)?,
@@ -840,6 +1165,128 @@ fn map_entry_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EntryRowEnc> {
     })
 }
 
+// ---------- site icons (v5) ----------
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SiteIconRow {
+    pub host: String,
+    pub mime: String,
+    pub bytes: Vec<u8>,
+    pub fetched_at: i64,
+}
+
+/// 缓存状态快照，供抓取队列判断「这个站点接下来该不该再试」。
+#[derive(Debug, Clone, PartialEq)]
+pub struct SiteIconState {
+    pub host: String,
+    pub fetched_at: i64,
+    pub fail_count: i64,
+    /// `false` 表示只留下了一次失败记录，没有可用图标。
+    pub has_icon: bool,
+}
+
+/// 已缓存的站点图标；没有缓存、或只留下失败记录时返回 `None`。
+pub fn get_site_icon(conn: &Connection, host: &str) -> MendResult<Option<SiteIconRow>> {
+    conn.query_row(
+        "SELECT host, mime, bytes, fetched_at
+           FROM site_icons
+          WHERE host = ?1 AND bytes IS NOT NULL AND mime IS NOT NULL",
+        params![host],
+        |row| {
+            Ok(SiteIconRow {
+                host: row.get(0)?,
+                mime: row.get(1)?,
+                bytes: row.get(2)?,
+                fetched_at: row.get(3)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(db_err)
+}
+
+/// 写入/覆盖一个站点图标，并把失败计数清零。
+pub fn put_site_icon(
+    conn: &Connection,
+    host: &str,
+    mime: &str,
+    bytes: &[u8],
+    fetched_at: i64,
+) -> MendResult<()> {
+    conn.execute(
+        "INSERT INTO site_icons(host, mime, bytes, fetched_at, fail_count)
+         VALUES(?1, ?2, ?3, ?4, 0)
+         ON CONFLICT(host) DO UPDATE SET
+             mime = excluded.mime,
+             bytes = excluded.bytes,
+             fetched_at = excluded.fetched_at,
+             fail_count = 0",
+        params![host, mime, bytes, fetched_at],
+    )
+    .map_err(db_err)?;
+    Ok(())
+}
+
+/// 记一次「抓过但没抓到」：保留失败次数与时间，让下一次重试按指数退避延后。
+pub fn mark_site_icon_failed(conn: &Connection, host: &str, attempted_at: i64) -> MendResult<()> {
+    conn.execute(
+        "INSERT INTO site_icons(host, mime, bytes, fetched_at, fail_count)
+         VALUES(?1, NULL, NULL, ?2, 1)
+         ON CONFLICT(host) DO UPDATE SET
+             mime = NULL,
+             bytes = NULL,
+             fetched_at = excluded.fetched_at,
+             fail_count = site_icons.fail_count + 1",
+        params![host, attempted_at],
+    )
+    .map_err(db_err)?;
+    Ok(())
+}
+
+/// 全部缓存行的状态（成功与失败都在内），一次查询供队列筛选。
+pub fn site_icon_states(conn: &Connection) -> MendResult<Vec<SiteIconState>> {
+    let mut stmt = conn
+        .prepare("SELECT host, fetched_at, fail_count, bytes IS NOT NULL FROM site_icons")
+        .map_err(db_err)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(SiteIconState {
+                host: row.get(0)?,
+                fetched_at: row.get(1)?,
+                fail_count: row.get(2)?,
+                has_icon: row.get::<_, i64>(3)? != 0,
+            })
+        })
+        .map_err(db_err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(db_err)?;
+    Ok(rows)
+}
+
+/// 条目里出现过的全部网址（只读 `url` 一列；含归档，不含回收站）。
+/// 站点图标的抓取队列完全由它派生：没有网址的条目不会产生任何请求。
+pub fn list_entry_urls(conn: &Connection) -> MendResult<Vec<String>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT DISTINCT url FROM entries
+              WHERE url IS NOT NULL AND deleted_at IS NULL",
+        )
+        .map_err(db_err)?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(db_err)?;
+    let urls = rows.collect::<Result<Vec<_>, _>>().map_err(db_err)?;
+    Ok(urls)
+}
+
+/// 清空图标缓存，返回删掉的行数。
+pub fn clear_site_icons(conn: &Connection) -> MendResult<u64> {
+    let removed = conn
+        .execute("DELETE FROM site_icons", [])
+        .map_err(db_err)?;
+    Ok(removed as u64)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -856,7 +1303,7 @@ mod tests {
         migrate(&conn).unwrap();
         assert_eq!(
             meta_get(&conn, "schema_version").unwrap().as_deref(),
-            Some("4")
+            Some("6")
         );
         assert!(!is_initialized(&conn).unwrap());
         assert!(list_entries(&conn, None, None).unwrap().is_empty());
@@ -874,7 +1321,7 @@ mod tests {
         migrate(&conn).unwrap();
         assert_eq!(
             meta_get(&conn, "schema_version").unwrap().as_deref(),
-            Some("4")
+            Some("6")
         );
         assert!(column_exists(&conn, "entries", "tags").unwrap());
         assert!(column_exists(&conn, "entries", "sort_order").unwrap());
@@ -892,7 +1339,7 @@ mod tests {
         migrate(&conn).unwrap();
         assert_eq!(
             meta_get(&conn, "schema_version").unwrap().as_deref(),
-            Some("4")
+            Some("6")
         );
         assert!(column_exists(&conn, "entries", "tags").unwrap());
         assert!(column_exists(&conn, "entries", "sort_order").unwrap());
@@ -961,7 +1408,7 @@ mod tests {
         migrate(&conn).unwrap();
         assert_eq!(
             meta_get(&conn, "schema_version").unwrap().as_deref(),
-            Some("4")
+            Some("6")
         );
         let rows = list_entries(&conn, None, None).unwrap();
         assert_eq!(rows.len(), 1);
@@ -982,7 +1429,7 @@ mod tests {
         migrate(&conn).unwrap();
         assert_eq!(
             meta_get(&conn, "schema_version").unwrap().as_deref(),
-            Some("4")
+            Some("6")
         );
         assert!(column_exists(&conn, "entries", "sort_order").unwrap());
     }
@@ -1248,6 +1695,41 @@ mod tests {
         assert_eq!(row.icon.as_deref(), Some("home"));
     }
 
+    #[test]
+    fn reorder_categories_persists_order_and_keeps_metadata() {
+        let conn = mem_db();
+        let color = validate_category_color(&Some("#a1b2c3".into())).unwrap();
+        create_category(&conn, "cat-1", "工作", color.as_deref(), Some("work")).unwrap();
+        create_category(&conn, "cat-2", "生活", None, Some("home")).unwrap();
+        create_category(&conn, "cat-3", "购物", None, Some("cart")).unwrap();
+
+        let ids = vec![
+            "cat-3".to_string(),
+            "cat-1".to_string(),
+            "cat-2".to_string(),
+        ];
+        reorder_categories(&conn, &ids).unwrap();
+        let rows = list_categories(&conn).unwrap();
+        assert_eq!(
+            rows.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
+            vec!["cat-3", "cat-1", "cat-2"]
+        );
+        assert_eq!(
+            rows.iter().map(|row| row.sort_order).collect::<Vec<_>>(),
+            vec![0, 1, 2]
+        );
+        assert_eq!(rows[1].name, "工作");
+        assert_eq!(rows[1].color.as_deref(), Some("#A1B2C3"));
+        assert_eq!(rows[1].icon.as_deref(), Some("work"));
+
+        // 混入不存在的 id 不应占号；空列表是合法空操作。
+        reorder_categories(&conn, &["missing".to_string(), "cat-2".to_string()]).unwrap();
+        let rows = list_categories(&conn).unwrap();
+        assert_eq!(rows[0].id, "cat-2");
+        assert_eq!(rows[0].sort_order, 0);
+        reorder_categories(&conn, &[]).unwrap();
+    }
+
     /// v4 迁移幂等：全新库多次迁移版本保持 4，`archived` 列存在且新建条目默认未归档。
     #[test]
     fn schema_migration_v4_is_idempotent() {
@@ -1255,7 +1737,7 @@ mod tests {
         migrate(&conn).unwrap();
         assert_eq!(
             meta_get(&conn, "schema_version").unwrap().as_deref(),
-            Some("4")
+            Some("6")
         );
         assert!(column_exists(&conn, "entries", "archived").unwrap());
         insert_entry(&conn, &sample_row("e1", None)).unwrap();
@@ -1276,7 +1758,7 @@ mod tests {
         migrate(&conn).unwrap();
         assert_eq!(
             meta_get(&conn, "schema_version").unwrap().as_deref(),
-            Some("4")
+            Some("6")
         );
         assert!(column_exists(&conn, "entries", "archived").unwrap());
     }
@@ -1298,7 +1780,7 @@ mod tests {
         migrate(&conn).unwrap();
         assert_eq!(
             meta_get(&conn, "schema_version").unwrap().as_deref(),
-            Some("4")
+            Some("6")
         );
         let rows = list_entries(&conn, None, None).unwrap();
         assert_eq!(rows.len(), 1);
@@ -1374,5 +1856,170 @@ mod tests {
             deleted_at: None,
             archived: false,
         }
+    }
+
+    #[test]
+    fn site_icons_round_trip_and_failures() {
+        let conn = mem_db();
+        migrate(&conn).unwrap();
+        assert_eq!(SCHEMA_VERSION, 6);
+
+        // 没有缓存时读不到东西。
+        assert!(get_site_icon(&conn, "mail.example.com").unwrap().is_none());
+
+        put_site_icon(&conn, "mail.example.com", "image/png", b"png-bytes", 10).unwrap();
+        let row = get_site_icon(&conn, "mail.example.com").unwrap().unwrap();
+        assert_eq!(row.mime, "image/png");
+        assert_eq!(row.bytes, b"png-bytes");
+
+        // 失败记录覆盖掉旧图标，并累计次数（抓不到时宁可回退内置图标）。
+        mark_site_icon_failed(&conn, "mail.example.com", 20).unwrap();
+        assert!(get_site_icon(&conn, "mail.example.com").unwrap().is_none());
+        mark_site_icon_failed(&conn, "mail.example.com", 30).unwrap();
+        let states = site_icon_states(&conn).unwrap();
+        let state = states
+            .iter()
+            .find(|state| state.host == "mail.example.com")
+            .unwrap();
+        assert!(!state.has_icon);
+        assert_eq!(state.fail_count, 2);
+        assert_eq!(state.fetched_at, 30);
+
+        // 再次抓到时计数归零，队列不会再把它当失败目标。
+        put_site_icon(&conn, "mail.example.com", "image/png", b"fresh", 40).unwrap();
+        let states = site_icon_states(&conn).unwrap();
+        let state = states
+            .iter()
+            .find(|state| state.host == "mail.example.com")
+            .unwrap();
+        assert!(state.has_icon);
+        assert_eq!(state.fail_count, 0);
+
+        assert_eq!(clear_site_icons(&conn).unwrap(), 1);
+        assert!(site_icon_states(&conn).unwrap().is_empty());
+    }
+
+    #[test]
+    fn entry_urls_skip_trash_and_blanks() {
+        let conn = mem_db();
+        migrate(&conn).unwrap();
+        let mut row = sample_row("e1", None);
+        insert_entry(&conn, &row).unwrap();
+        row.id = "e2".into();
+        row.deleted_at = Some(2);
+        insert_entry(&conn, &row).unwrap();
+        row.id = "e3".into();
+        row.deleted_at = None;
+        row.url = None;
+        insert_entry(&conn, &row).unwrap();
+
+        let urls = list_entry_urls(&conn).unwrap();
+        assert_eq!(urls, vec!["https://mail.example.com".to_string()]);
+    }
+
+    /// 标签定义的增改删：改名同步改写条目上的标签名，删除则从所有条目上摘掉，
+    /// 且跨归档 / 回收站条目一起生效（标签是纯元信息，不随条目状态隔离）。
+    #[test]
+    fn tag_defs_rename_and_delete_rewrite_entries() {
+        let conn = mem_db();
+        let mut e1 = sample_row("e1", None);
+        e1.tags = vec!["工作".into(), "金融".into()];
+        insert_entry(&conn, &e1).unwrap();
+        let mut e2 = sample_row("e2", None);
+        e2.tags = vec!["工作".into()];
+        e2.archived = true;
+        insert_entry(&conn, &e2).unwrap();
+        let mut e3 = sample_row("e3", None);
+        e3.tags = vec!["工作".into()];
+        insert_entry(&conn, &e3).unwrap();
+        delete_entry(&conn, "e3").unwrap();
+
+        insert_tag_def(
+            &conn,
+            &TagRow {
+                id: "t1".into(),
+                name: "工作".into(),
+                color: "#2563EB".into(),
+                sort_order: 1,
+                created_at: 1,
+            },
+        )
+        .unwrap();
+        insert_tag_def(
+            &conn,
+            &TagRow {
+                id: "t2".into(),
+                name: "金融".into(),
+                color: "#16A34A".into(),
+                sort_order: 2,
+                created_at: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(list_tag_defs(&conn).unwrap().len(), 2);
+
+        // 改名：所有条目上的「工作」都变成「办公」。
+        rename_tag_def(&conn, "t1", "办公", "#0D9488").unwrap();
+        let defs = list_tag_defs(&conn).unwrap();
+        let renamed = defs.iter().find(|row| row.id == "t1").unwrap();
+        assert_eq!(renamed.name, "办公");
+        assert_eq!(renamed.color, "#0D9488");
+        // get_entry_any 能读到归档条目；回收站条目走 list_trashed_entries。
+        let archived = get_entry_any(&conn, "e2").unwrap().unwrap();
+        assert_eq!(archived.tags, vec!["办公".to_string()]);
+        let trashed = list_trashed_entries(&conn).unwrap();
+        assert_eq!(trashed[0].tags, vec!["办公".to_string()]);
+        assert_eq!(
+            get_entry(&conn, "e1").unwrap().unwrap().tags,
+            vec!["办公".to_string(), "金融".to_string()]
+        );
+
+        // 删除：条目上的标签被摘掉，定义消失，条目本身还在。
+        delete_tag_def(&conn, "t2").unwrap();
+        assert_eq!(list_tag_defs(&conn).unwrap().len(), 1);
+        assert_eq!(
+            get_entry(&conn, "e1").unwrap().unwrap().tags,
+            vec!["办公".to_string()]
+        );
+        assert!(delete_tag_def(&conn, "t2").is_err(), "重复删除应报未找到");
+    }
+
+    /// v6 迁移回填：旧库里的标签（含 `#` 前缀、大小写重复）变成标签定义，
+    /// 条目侧写法归一（去 `#`、保留首次出现的拼写、去重）。
+    #[test]
+    fn migration_backfills_legacy_tags() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA_V1).unwrap();
+        conn.execute_batch(MIGRATION_V2).unwrap();
+        conn.execute_batch(MIGRATION_V3).unwrap();
+        conn.execute_batch(MIGRATION_V4).unwrap();
+        conn.execute_batch(MIGRATION_V5).unwrap();
+        conn.execute(
+            "INSERT INTO entries(id, title, username_enc, password_enc, email_enc, phone_enc,
+                                 notes_enc, favorite, tags, created_at, updated_at)
+             VALUES('e1', 't', 'u', 'p', 'm', 'ph', 'n', 0, '[\"#工作\",\"Work\",\"work\",\"金融\",\"#工作\"]', 1, 1)",
+            [],
+        )
+        .unwrap();
+        meta_set(&conn, "schema_version", "5").unwrap();
+
+        migrate(&conn).unwrap();
+        assert_eq!(
+            meta_get(&conn, "schema_version").unwrap().as_deref(),
+            Some("6")
+        );
+        let defs = list_tag_defs(&conn).unwrap();
+        assert_eq!(
+            defs.iter().map(|row| row.name.as_str()).collect::<Vec<_>>(),
+            vec!["工作", "Work", "金融"],
+            "按首次出现顺序回填，大小写重复只保留第一次拼写"
+        );
+        assert_eq!(
+            get_entry(&conn, "e1").unwrap().unwrap().tags,
+            vec!["工作".to_string(), "Work".to_string(), "金融".to_string()]
+        );
+        // 回填幂等：再次迁移不新增定义。
+        migrate(&conn).unwrap();
+        assert_eq!(list_tag_defs(&conn).unwrap().len(), 3);
     }
 }

@@ -16,9 +16,9 @@
 ## 2. 当前状态（0.4.0）
 
 - 旧 Tauri 2 + Vue 3 代码已移除；`src/`、`src-tauri/`、Vite/Tailwind 配置不再存在。
-- 数据兼容：应用 id 仍为 `com.mend.app`，库文件 `mend.db`、schema v4、Argon2 参数、XChaCha20 AAD 全部保持；旧库直接可用（`.mendbak` 容器仍在 core 里，但 UI 已不再提供导出/恢复）。
-- 已保留：建库/解锁/锁定/改主密码、条目 CRUD、分类 CRUD、标签、搜索、排序、收藏、归档、回收站、预设值、强密码生成器、Markdown 备注、复制、打开网址、自动锁定、深浅色主题、中英文、**数据库文件自选**（打开/新建/恢复默认 + 在文件夹中显示；库文件自带主密码，拷走即备份，不做加密快照导出）。
-- 主要 UI 结构：桌面 master-detail（侧栏 + 列表 + 详情）；手机单栏（详情页 + 分类 Sheet）。系统标题栏；应用内 Header 放搜索/新增/预设/设置/锁定。
+- 数据兼容：应用 id 仍为 `com.mend.app`，库文件 `mend.db`、schema v6、Argon2 参数、XChaCha20 AAD 全部保持；旧库直接可用（`.mendbak` 容器仍在 core 里，但 UI 已不再提供导出/恢复）。
+- 已保留：建库/解锁/锁定/改主密码、条目 CRUD、分类 CRUD、**标签维护**（名称+颜色，独立弹窗，条目侧只能选）、搜索、排序、收藏、归档、回收站、预设值、强密码生成器、Markdown 备注、复制、打开网址、自动锁定、深浅色主题、中英文、**数据库文件自选**（打开/新建/恢复默认 + 在文件夹中显示；库文件自带主密码，拷走即备份，不做加密快照导出）。
+- 主要 UI 结构：桌面 master-detail（侧栏 + 列表 + 详情）；手机单栏（详情页 + 分类 Sheet）。系统标题栏；应用内 Header 放搜索/新增/预设/标签/设置/锁定（预设值与标签入口都是图标+文字）。
 - 测试：`nsh test .`（native cargo test + TSX headless）；`cargo test --manifest-path core\Cargo.toml`；`npm run typecheck`。
 - 发布：`.github/workflows/release.yml` 打 `v*` tag 时构建 Windows/Linux/macOS 包、签名 OTA 包、生成签名 `latest.json` 并发布 GitHub Release；应用更新与 OTA 共用 `nsh.json` 的 `"updater"`，详见 `docs/10-release-update.md`。
 - 启动诊断（0.4.1）：`Vault.init` 前置探测数据目录/库文件写权限，不可写返回 `db_readonly`（含路径），Fatal 页显示实际数据库路径；不静默换库。详见 `docs/11-native-shell.md` §4。
@@ -28,7 +28,7 @@
 1. **落盘即加密**：账号、密码、邮箱、手机号、备注、预设值在写入 SQLite 前必须在 Rust 侧加密；数据库文件中不得出现这些字段的明文。
 2. **前端不直连数据库**：TSX 只通过 `mend/native` 的类型化接口读写；不接触 SQLite 连接或原始密钥。
 3. **密钥不落盘**：主密码不存储；KEK 仅内存；DEK 由 KEK 包裹后存 `meta`；锁定/退出时清零会话密钥。
-4. **离线优先**：默认零网络请求；库文件本地单文件、整库加密；WebDAV 仍是未实现的预留。
+4. **离线优先**：业务数据零外发。只有两处会联网，且都能在设置里关掉——更新检查（GitHub）与站点图标抓取（只请求条目自己填写的站点，**禁止**经过 Google s2 / DuckDuckGo 这类第三方图标服务，那会把整份站点清单交给别人）。库文件本地单文件、整库加密；WebDAV 仍是未实现的预留。
 5. **i18n 先行**：所有界面文案走 `locales/`，组件不硬编码中/英文字符串。
 6. **原生导出的同步/异步分界**：默认同步（引擎线程执行，signal 写入天然在引擎线程）；只有「昂贵 CPU（Argon2id）或阻塞 I/O（文件对话框、备份读写）」才用 `async fn`，且昂贵段走 `nsh_core::prelude::blocking`。两条红线：
    - **同步导出里不能调 ambient 服务**（`data_dir()` 等），否则 panic `no reactive runtime`；所以 `init` 是 `async`，其余同步函数只读 `Backend.data_dir` 字段。

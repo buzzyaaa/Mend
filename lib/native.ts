@@ -9,9 +9,12 @@ import type {
   EntrySummary,
   EntryView,
   GeneratorOptions,
+  IconFetchReport,
   ListFilter,
   Preset,
   PresetInput,
+  Tag,
+  TagInput,
   VaultStatus,
 } from './types'
 
@@ -107,6 +110,10 @@ export function deleteCategory(id: string): void {
   return Vault.deleteCategory(id)
 }
 
+export function reorderCategories(ids: string[]): void {
+  return Vault.reorderCategories(ids)
+}
+
 export function listPresets(): Preset[] {
   return Vault.listPresets()
 }
@@ -126,6 +133,24 @@ export function deletePreset(id: string): void {
 /** Persist a manual order for presets of one field type (sort_order only). */
 export function reorderPresets(fieldType: string, ids: string[]): void {
   return Vault.reorderPresets(fieldType, ids)
+}
+
+export function listTags(): Tag[] {
+  return Vault.listTags()
+}
+
+export function createTag(input: TagInput): Tag {
+  return Vault.createTag(input)
+}
+
+/** 改名时后端会把所有条目上的旧标签名一起换掉。 */
+export function updateTag(id: string, input: TagInput): Tag {
+  return Vault.updateTag(id, input)
+}
+
+/** 删除标签定义，同时从所有条目上摘掉这个标签。 */
+export function deleteTag(id: string): void {
+  return Vault.deleteTag(id)
 }
 
 export function generatePassword(options: GeneratorOptions): string {
@@ -190,4 +215,20 @@ export function loadPreferences(): Promise<string> {
 
 export function savePreferences(json: string): void {
   Vault.savePreferences(json)
+}
+
+/** 条目网址对应的缓存站点图标（`data:` URI）；没有时为空串。
+ *  同步、不联网：图标由原生侧的 `fetchSiteIcons` 抓回并缓存进库。 */
+export function siteIcon(url: string): string {
+  return Vault.siteIcon(url)
+}
+
+/** 抓取并缓存下一批站点图标（网络与解码都在原生侧的阻塞线程）。 */
+export function fetchSiteIcons(limit: number): Promise<IconFetchReport> {
+  return Vault.fetchSiteIcons(limit)
+}
+
+/** 清空图标缓存，返回删掉的行数。 */
+export function clearSiteIcons(): number {
+  return Vault.clearSiteIcons()
 }

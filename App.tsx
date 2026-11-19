@@ -1,4 +1,5 @@
 import { appInfo, effect, mount, Text, token, View } from 'nsh'
+import { Scrollbar } from 'nsh/base'
 import { currentWindow, isAvailable } from 'nsh/desktop'
 import { t } from 'nsh/i18n'
 
@@ -57,6 +58,24 @@ function Fatal() {
     </View>
   )
 }
+
+/** 全局滚动条外观：DataTable、侧栏、设置页等所有 `scrollbar=true` 的视图共用。
+ *  细胶囊默认半透明，鼠标靠近轨道时变宽变深；内容放得下时组件自己隐藏。 */
+Scrollbar.setTheme({
+  mode: 'hover',
+  motion: { idle: 1200, enter: 120, exit: 240 },
+  minThumbLength: 44,
+  vertical: {
+    class: 'absolute inset-y-0 right-0 w-3 items-end p-0.5',
+    thumbClass:
+      'w-1.5 rounded-full bg-muted-foreground/55 transition-all group-hover:w-2 hover:bg-muted-foreground/90 active:w-2',
+  },
+  horizontal: {
+    class: 'absolute inset-x-0 bottom-0 h-3 items-end p-0.5',
+    thumbClass:
+      'h-1.5 rounded-full bg-muted-foreground/55 transition-all group-hover:h-2 hover:bg-muted-foreground/90 active:h-2',
+  },
+})
 
 let bootRequested = false
 

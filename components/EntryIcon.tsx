@@ -1,8 +1,10 @@
-// The small leading tile in an entry row: a brand glyph when the entry's
-// website is known, otherwise the category emoji on the category color.
+// The small leading tile in an entry row: the site's real favicon when one has
+// been cached, otherwise a brand glyph when the entry's website is known,
+// otherwise the category emoji on the category colour.
 import { Image, Text, View, token } from 'nsh'
 
 import { categoryEmoji } from '../lib/category-icons'
+import { siteIconFor } from '../lib/site-icons-cache'
 import { siteIconForUrl } from '../lib/site-icons'
 import type { Category, EntrySummary } from '../lib/types'
 
@@ -24,7 +26,11 @@ function brandTint(hex: string): string {
 }
 
 export function EntryIcon(props: { entry: EntrySummary; category: Category | null | undefined }) {
-  const site = () => siteIconForUrl(props.entry.url)
+  // 三级回退：库里缓存的真实 favicon → 内置品牌 SVG（离线可用）→ 分类 emoji。
+  // 真实图标是彩色位图，不能再叠 tintColor（那会把它压成单色剪影）。
+  const real = () => siteIconFor(props.entry.url)
+  // 真实图标优先：离线/未抓到时才用内置品牌 glyph。
+  const brand = () => (real() ? null : siteIconForUrl(props.entry.url))
   const categoryColor = () => props.category?.color ?? token('muted-foreground')
 
   return (
@@ -32,7 +38,8 @@ export function EntryIcon(props: { entry: EntrySummary; category: Category | nul
       class="h-8 w-8 shrink-0 items-center justify-center rounded-lg"
       style={{ backgroundColor: withAlpha(categoryColor(), '22') }}
     >
-      <If when={site()}>
+      <If when={real()}>{(icon) => <Image src={icon()} style={{ width: 20, height: 20 }} />}</If>
+      <If when={brand()}>
         {(icon) => (
           <Image
             src={icon().asset}
@@ -41,7 +48,7 @@ export function EntryIcon(props: { entry: EntrySummary; category: Category | nul
           />
         )}
       </If>
-      <If when={!site()}>
+      <If when={!real() && !brand()}>
         <Text class="text-sm">{categoryEmoji(props.category?.icon)}</Text>
       </If>
     </View>

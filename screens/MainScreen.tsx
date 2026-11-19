@@ -13,10 +13,12 @@ import { NotesDialog } from '../components/NotesDialog'
 import { PresetsDialog } from '../components/PresetsDialog'
 import { SettingsPage } from '../components/SettingsDialog'
 import { Sidebar } from '../components/Sidebar'
+import { TagsDialog } from '../components/TagsDialog'
 import { UpdateDialog } from '../components/UpdateDialog'
 import { UpdateProgressHost } from '../components/UpdateProgressHost'
 import { IconButton, MODAL_BACKDROP_CLASS, MODAL_CLASS, ModalFrame } from '../components/ui'
 import { preferences, setColumnSizes } from '../lib/preferences'
+import { startSiteIconFetch } from '../lib/site-icons-cache'
 import { checkForUpdatesOnStartup, clearUpdateCheckResult } from '../lib/update'
 import {
   activePage,
@@ -40,6 +42,12 @@ export function MainScreen() {
     if (startupUpdateCheckRequested) return
     startupUpdateCheckRequested = true
     void checkForUpdatesOnStartup()
+  })
+
+  // 站点图标：解锁后等列表静下来，再一批批补齐列表行首的真实 favicon。
+  // 开关关掉时内部直接返回，不会发任何请求。
+  effect(() => {
+    startSiteIconFetch()
   })
 
   // 手动检查更新的结果只属于设置页：离开时清掉，下次进入不残留旧横幅。
@@ -127,6 +135,7 @@ export function MainScreen() {
 
       <UpdateDialog />
       <PresetsDialog />
+      <TagsDialog />
       <NotesDialog />
       <ConfirmDialog />
       <UpdateProgressHost />
