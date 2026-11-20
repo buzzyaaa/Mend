@@ -431,13 +431,12 @@ fn entry_manual_sort_order_persists_across_reopen() {
             .collect();
         assert_eq!(order, vec![1, 2, 0], "c=0, a=1, b=2");
 
-        // 迁移幂等：重复执行不报错、版本保持 4
+        // 迁移幂等：重复执行不报错、版本保持当前 SCHEMA_VERSION。
+        // 不写死字面量——schema 升到 5（站点图标）/6（标签实体化）后这里曾长期挂 CI。
         db::migrate(&conn).expect("重复迁移");
         assert_eq!(
-            db::meta_get(&conn, "schema_version")
-                .expect("读版本")
-                .as_deref(),
-            Some("4")
+            db::meta_get(&conn, "schema_version").expect("读版本"),
+            Some(db::SCHEMA_VERSION.to_string())
         );
     }
 
