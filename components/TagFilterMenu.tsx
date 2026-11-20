@@ -45,7 +45,7 @@ export function TagFilterMenu() {
       {/* 顶部：取消全部筛选。 */}
       <MenuItem
         closeOnSelect={false}
-        class="h-8 flex-row items-center gap-2 rounded px-2 hover:bg-accent"
+        class="h-8 cursor-pointer flex-row items-center gap-2 rounded px-2 transition hover:bg-accent"
         accessibilityLabel={t('entry.clearFilters')}
         onSelect={() => clearTagFilters()}
       >
@@ -63,7 +63,7 @@ export function TagFilterMenu() {
             checked={tagFilters().includes(tag)}
             closeOnSelect={false}
             class={
-              'h-8 flex-row items-center gap-2 rounded px-2 ' +
+              'h-8 cursor-pointer flex-row items-center gap-2 rounded px-2 transition ' +
               (tagFilters().includes(tag) ? 'bg-accent' : 'hover:bg-accent')
             }
             indicatorClass="w-4 items-center justify-center opacity-0 checked:opacity-100"
@@ -84,7 +84,7 @@ export function TagFilterMenu() {
       <If when={allTags().length === 0}>
         <MenuItem
           disabled
-          class="h-8 flex-row items-center rounded px-2"
+          class="h-8 cursor-not-allowed flex-row items-center rounded px-2"
           accessibilityLabel={t('entry.allTags')}
         >
           <Text class="text-xs text-muted-foreground">{t('entry.allTags')}</Text>

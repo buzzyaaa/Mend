@@ -2,47 +2,9 @@ import { setColorScheme, signal } from 'nsh'
 import { setLocale } from 'nsh/i18n'
 
 import * as native from './native'
-import type { ColumnKey, Preferences, ResizableColumnKey, ThemeMode } from './types'
+import type { ColumnKey, Preferences, ThemeMode } from './types'
 
 const DEFAULT_COLUMN_SIZES = [240, 360]
-const RESIZABLE_COLUMN_KEYS: readonly ResizableColumnKey[] = [
-  'check',
-  'name',
-  'category',
-  'credentials',
-  'contact',
-  'notes',
-  'actions',
-]
-/** 默认宽度需与 EntryList 的 colStyle 保持一致，保证老用户无感知。
- *  账号/密码与邮箱/手机号各占两行，所以比旧单列宽；操作按钮全部摊开后也需要位置。 */
-const DEFAULT_COLUMN_WIDTHS: Record<ResizableColumnKey, number> = {
-  check: 32,
-  name: 148,
-  category: 64,
-  credentials: 148,
-  contact: 148,
-  notes: 88,
-  actions: 232,
-}
-/** 内容列能压到的最窄宽度（points）—— 表头字号 11px，两个汉字约 22px，
- *  留出余量。这是唯一的真源：拖动范围校验与布局层 minWidth 都用它。 */
-const MIN_TWO_CHAR_COLUMN_WIDTH = 28
-/** 标题列还带着行首图标（32）和间隙（8），比纯文字列再宽一点。 */
-const MIN_NAME_COLUMN_WIDTH = 56
-/** 每列的拖动范围。 */
-const COLUMN_WIDTH_RANGE: Record<ResizableColumnKey, { min: number; max: number }> = {
-  check: { min: 24, max: 56 },
-  name: { min: MIN_NAME_COLUMN_WIDTH, max: 480 },
-  category: { min: MIN_TWO_CHAR_COLUMN_WIDTH, max: 480 },
-  // 存的是基准宽度；表格会在窗口变宽时按比例放大，所以上限留出余量，
-  // 避免「放大后再拖一次」被 clamp 回去。
-  credentials: { min: 72, max: 960 },
-  contact: { min: 72, max: 960 },
-  notes: { min: MIN_TWO_CHAR_COLUMN_WIDTH, max: 960 },
-  // 行内按钮全部可见，DataTable 固定列至少放得下 8~9 个图标按钮。
-  actions: { min: 216, max: 360 },
-}
 const COLUMN_MIN = 160
 const COLUMN_MAX = 640
 
@@ -55,7 +17,6 @@ const DEFAULTS: Preferences = {
   siteIcons: true,
   columnSizes: [...DEFAULT_COLUMN_SIZES],
   visibleColumns: { credentials: true, contact: true, notes: true },
-  columnWidths: { ...DEFAULT_COLUMN_WIDTHS },
 }
 
 export const preferences = signal<Preferences>({ ...DEFAULTS })
@@ -112,30 +73,6 @@ function sanitizeVisibleColumns(value: unknown): Record<ColumnKey, boolean> {
   return result
 }
 
-/** 旧宽度映射：两行格取原来两列里较宽的那列再加余量，比直接回落默认值
- *  更接近用户拖过的手感。 */
-const LEGACY_WIDTH_KEYS: Partial<Record<ResizableColumnKey, readonly string[]>> = {
-  credentials: LEGACY_VISIBLE_KEYS.credentials,
-  contact: LEGACY_VISIBLE_KEYS.contact,
-}
-
-/** 逐键白名单重建：缺省或非法一律回落默认，并按列范围 clamp。 */
-function sanitizeColumnWidths(value: unknown): Record<ResizableColumnKey, number> {
-  const raw = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
-  const result = {} as Record<ResizableColumnKey, number>
-  for (const key of RESIZABLE_COLUMN_KEYS) {
-    const size = Number(raw[key])
-    const { min, max } = COLUMN_WIDTH_RANGE[key]
-    const legacy = (LEGACY_WIDTH_KEYS[key] ?? [])
-      .map((legacyKey) => Number(raw[legacyKey]))
-      .filter((width) => Number.isFinite(width) && width > 0)
-    const fallback = legacy.length > 0 ? Math.max(...legacy) + 52 : DEFAULT_COLUMN_WIDTHS[key]
-    const chosen = Number.isFinite(size) && size > 0 ? size : fallback
-    result[key] = Math.max(min, Math.min(max, Math.round(chosen)))
-  }
-  return result
-}
-
 function sanitize(raw: unknown): Preferences {
   if (!raw || typeof raw !== 'object') return { ...DEFAULTS }
   const value = raw as Partial<Preferences>
@@ -156,7 +93,6 @@ function sanitize(raw: unknown): Preferences {
     siteIcons: typeof value.siteIcons === 'boolean' ? value.siteIcons : DEFAULTS.siteIcons,
     columnSizes: sanitizeColumns(value.columnSizes),
     visibleColumns: sanitizeVisibleColumns(value.visibleColumns),
-    columnWidths: sanitizeColumnWidths(value.columnWidths),
   }
 }
 
@@ -226,11 +162,6 @@ export function setColumnSizes(sizes: number[]): void {
 
 export function setColumnVisible(column: ColumnKey, visible: boolean): void {
   updatePreferences({ visibleColumns: { ...preferences().visibleColumns, [column]: visible } })
-}
-
-/** 某列的拖动范围。拖动时用它约束列宽，保证表头可读。 */
-export function columnWidthRange(column: ResizableColumnKey): { min: number; max: number } {
-  return COLUMN_WIDTH_RANGE[column]
 }
 
 export function setUpdateCheckIntervalDays(days: number): void {

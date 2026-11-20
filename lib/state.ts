@@ -82,12 +82,6 @@ export const loadedCount = signal(0)
 export const fieldsLoading = signal(false)
 /** 视图：DataTable 列表 / 卡片网格。 */
 export const viewMode = signal<'list' | 'card'>('list')
-/** 表格布局重置计数：自增一次，DataTable 就按当前窗口宽度重新平均分配列宽。
- *  列宽不再持久化，这就是「重置」按钮和窗口尺寸变化之外唯一触发重排的入口。 */
-export const tableLayoutVersion = signal(0)
-export function resetTableLayout(): void {
-  tableLayoutVersion.set(tableLayoutVersion() + 1)
-}
 /** 全局“显示密码”开关（工具栏），锁定后重置。 */
 export const showPasswords = signal(true)
 /** 逐条密码临时隐藏（每行眼睛图标），锁定后清空。 */

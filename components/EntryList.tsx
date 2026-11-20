@@ -13,7 +13,6 @@ import {
   isTrashView,
   keyword,
   presetsOpen,
-  resetTableLayout,
   selectedIds,
   setKeyword,
   setShowPasswords,
@@ -123,14 +122,19 @@ function ColumnHeader() {
         <If when={viewMode() === 'list'}>
           <ColumnConfigMenu />
         </If>
-        <Text class="text-[11px] text-muted-foreground">{t('entry.showPasswords')}</Text>
-        <Switch
-          checked={showPasswords()}
-          onChange={(event) => setShowPasswords(event.checked)}
-          accessibilityLabel={t('entry.showPasswords')}
-          trackClass="h-5 w-9 flex-row items-center justify-start rounded-full bg-muted p-0.5 checked:bg-primary"
-          thumbClass="h-4 w-4 rounded-full bg-background checked:translate-x-4"
-        />
+        <View
+          class="cursor-pointer flex-row items-center gap-2"
+          onPress={() => setShowPasswords(!showPasswords())}
+        >
+          <Text class="text-[11px] text-muted-foreground">{t('entry.showPasswords')}</Text>
+          <Switch
+            checked={showPasswords()}
+            onChange={(event) => setShowPasswords(event.checked)}
+            accessibilityLabel={t('entry.showPasswords')}
+            trackClass="h-5 w-9 cursor-pointer flex-row items-center justify-start rounded-full bg-muted p-0.5 transition checked:bg-primary"
+            thumbClass="h-4 w-4 rounded-full bg-background checked:translate-x-4"
+          />
+        </View>
         {/* 预设值 / 标签入口只在宽屏工具栏展示图标+文字；窄屏由 AppHeader
             统一提供同样的两个入口，避免一行挤到放不下。 */}
         <If when={!compactToolbar()}>
@@ -149,14 +153,6 @@ function ColumnHeader() {
             onPress={() => tagsOpen.set(true)}
           />
         </If>
-        {/* 刷新图标改为「重置」：按当前窗口宽度重新平均分配表格列宽。 */}
-        <IconButton
-          icon="refresh"
-          label={t('common.reset')}
-          class="h-7 w-7"
-          testID="reset-table-layout"
-          onPress={resetTableLayout}
-        />
       </View>
     </>
   )

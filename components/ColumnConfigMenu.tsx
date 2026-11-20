@@ -1,9 +1,8 @@
 import { computed, Text, token } from 'nsh'
-import { Menu, MenuItem, MenuSeparator } from 'nsh/base'
+import { Menu, MenuItem } from 'nsh/base'
 import { t } from 'nsh/i18n'
 
 import { preferences, setColumnVisible } from '../lib/preferences'
-import { resetTableLayout } from '../lib/state'
 import type { ColumnKey } from '../lib/types'
 import { Icon } from './Icon'
 import { ActionButton } from './ui'
@@ -25,7 +24,7 @@ export function ColumnConfigMenu() {
     () => COLUMNS.filter((col) => preferences().visibleColumns[col.key]).length,
   )
 
-  const trigger = <ActionButton icon="settings" label={t('entry.columns')} />
+  const trigger = <ActionButton icon="settings" label={t('entry.columns')} testID="column-config" />
 
   return (
     <Menu
@@ -43,10 +42,16 @@ export function ColumnConfigMenu() {
             closeOnSelect={false}
             // 最后一列可见时禁止取消，避免出现只剩标题的空列表。
             disabled={visible && visibleCount() === 1}
-            class="h-8 min-w-[176px] flex-row items-center gap-2 rounded px-2 hover:bg-accent"
+            class={
+              'h-8 min-w-[176px] flex-row items-center gap-2 rounded px-2 transition ' +
+              (visible && visibleCount() === 1
+                ? 'cursor-not-allowed'
+                : 'cursor-pointer hover:bg-accent')
+            }
             indicatorClass="w-4 items-center justify-center opacity-0 checked:opacity-100"
             indicator={<Icon name="check" size={12} color={token('primary')} />}
             accessibilityLabel={t(col.labelKey)}
+            testID={`column-toggle-${col.key}`}
             onSelect={() => setColumnVisible(col.key, !preferences().visibleColumns[col.key])}
           >
             <Text
@@ -61,15 +66,6 @@ export function ColumnConfigMenu() {
           </MenuItem>
         )
       })}
-      <MenuSeparator class="my-1 h-px bg-border" />
-      {/* 宽度不再持久化：一键按当前窗口宽度重新平均分配。 */}
-      <MenuItem
-        class="h-8 min-w-[176px] flex-row items-center rounded px-2 hover:bg-accent"
-        accessibilityLabel={t('entry.resetColumnWidths')}
-        onSelect={() => resetTableLayout()}
-      >
-        <Text class="text-xs text-popover-foreground">{t('entry.resetColumnWidths')}</Text>
-      </MenuItem>
     </Menu>
   )
 }

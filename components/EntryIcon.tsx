@@ -7,6 +7,7 @@ import { categoryEmoji } from '../lib/category-icons'
 import { siteIconFor } from '../lib/site-icons-cache'
 import { siteIconForUrl } from '../lib/site-icons'
 import type { Category, EntrySummary } from '../lib/types'
+import { TINTED_SITE_ICONS } from './tinted-icons'
 
 /** token() may return 6-digit (#rrggbb) or 8-digit (#rrggbbaa) hex.
  *  Append an alpha suffix to the RGB part only, avoiding invalid 10-digit colors. */
@@ -40,13 +41,18 @@ export function EntryIcon(props: { entry: EntrySummary; category: Category | nul
     >
       <If when={real()}>{(icon) => <Image src={icon()} style={{ width: 20, height: 20 }} />}</If>
       <If when={brand()}>
-        {(icon) => (
-          <Image
-            src={icon().asset}
-            accessibilityLabel={icon().name}
-            style={{ width: 18, height: 18, tintColor: brandTint(icon().hex) }}
-          />
-        )}
+        {(icon) => {
+          // 烘焙变体免 tintColor（逐帧 D2D 特效是列表拖列宽卡顿的主因）；未收录时回退。
+          const tint = brandTint(icon().hex)
+          const baked = TINTED_SITE_ICONS[`${icon().name}|${tint.slice(1).toLowerCase()}`]
+          return (
+            <Image
+              src={baked ?? icon().asset}
+              accessibilityLabel={icon().name}
+              style={{ width: 18, height: 18, tintColor: baked ? undefined : tint }}
+            />
+          )
+        }}
       </If>
       <If when={!real() && !brand()}>
         <Text class="text-sm">{categoryEmoji(props.category?.icon)}</Text>

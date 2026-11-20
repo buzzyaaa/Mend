@@ -25,17 +25,20 @@ type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 const BUTTON_CLASS: Record<ButtonVariant, string> = {
   primary:
     'h-8 flex-row items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-primary-foreground ' +
-    'hover:opacity-90 active:opacity-75 disabled:opacity-45',
+    'transition hover:opacity-90 active:opacity-75 disabled:opacity-45',
   secondary:
     'h-8 flex-row items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2.5 ' +
-    'text-foreground hover:bg-accent active:opacity-75 disabled:opacity-45',
+    'text-foreground transition hover:bg-accent active:opacity-75 disabled:opacity-45',
   ghost:
     'h-8 flex-row items-center justify-center gap-1.5 rounded-md px-2.5 text-foreground ' +
-    'hover:bg-accent active:opacity-75 disabled:opacity-45',
+    'transition hover:bg-accent active:opacity-75 disabled:opacity-45',
   danger:
     'h-8 flex-row items-center justify-center gap-1.5 rounded-md bg-destructive px-2.5 ' +
-    'text-white hover:opacity-90 active:opacity-75 disabled:opacity-45',
+    'text-white transition hover:opacity-90 active:opacity-75 disabled:opacity-45',
 }
+
+/** 所有文字按钮统一的小手光标；禁用态由 Button 的 disabled 变体接管。 */
+const BUTTON_CURSOR = 'cursor-pointer disabled:cursor-not-allowed'
 
 /** nsh 的 `Dialog` 在桌面把 popup 放在透明层的左上角，且默认没有遮罩视图。
  *  所有弹窗统一加这两个类：popup 居中 + 半透明遮罩。 */
@@ -102,7 +105,7 @@ export function ActionButton(props: {
   const variant = props.variant ?? 'secondary'
   return (
     <Button
-      class={`${BUTTON_CLASS[variant]} ${props.class ?? ''}`}
+      class={`${BUTTON_CLASS[variant]} ${BUTTON_CURSOR} ${props.class ?? ''}`}
       onPress={
         props.onPress
           ? () => {
@@ -156,46 +159,91 @@ export function IconButton(props: {
   size?: number
   class?: string
   testID?: string
-  /** 图标色，不传时按 `active` 走主题色（星标这类有状态的图标用它上色）。 */
+  /** 图标色，不传时按 `tone` / `active` 取主题色（星标这类有状态的图标用 tone 上色）。 */
   iconColor?: string
+  /** 语义色：删除类红、星标类黄；悬停底色用同族浅色 tint，图标保持语义色。 */
+  tone?: 'destructive' | 'warning'
 }) {
+  // Button 没有 onMouseEnter/Leave（ComponentHostProps 不含），外层 View 的
+  // mouseenter 含子视图，用它驱动悬停态：图标色随悬停提亮，底色走 hover: 类。
+  const hovered = signal(false)
+  const toneColor = () =>
+    props.tone === 'destructive'
+      ? token('destructive')
+      : props.tone === 'warning'
+        ? token('warning')
+        : null
+  const baseColor = () =>
+    props.iconColor ?? toneColor() ?? token(props.active ? 'foreground' : 'muted-foreground')
+  const hoverColor = () => props.iconColor ?? toneColor() ?? token('foreground')
+  const hoverBg = props.disabled
+    ? ''
+    : props.tone === 'destructive'
+      ? 'hover:bg-destructive/10 '
+      : props.tone === 'warning'
+        ? 'hover:bg-warning/10 '
+        : props.active
+          ? 'hover:bg-accent/70 '
+          : 'hover:bg-accent '
   return (
-    <Button
-      testID={props.testID}
+    <View
       class={
-        'h-7 w-7 items-center justify-center rounded-md ' +
-        (props.active
-          ? 'bg-accent text-foreground '
-          : 'text-muted-foreground hover:bg-accent hover:text-foreground ') +
-        'active:opacity-70 disabled:opacity-35 ' +
+        'h-7 w-7 items-center justify-center rounded-md transition ' +
+        (props.active ? 'bg-accent ' : '') +
+        hoverBg +
+        (props.disabled ? 'cursor-not-allowed ' : props.onPress ? 'cursor-pointer ' : '') +
         (props.class ?? '')
       }
-      onPress={
-        props.onPress
-          ? () => {
-              touchActivity()
-              props.onPress?.()
-            }
-          : undefined
-      }
-      disabled={props.disabled}
-      accessibilityLabel={props.label}
-      tooltip={
-        <Tooltip
-          placement="top"
-          delay={350}
-          class="rounded-md border border-border bg-popover px-2 py-1 shadow-md"
-        >
-          <Text class="text-[11px] text-popover-foreground">{props.label}</Text>
-        </Tooltip>
-      }
+      onMouseEnter={() => hovered.set(true)}
+      onMouseLeave={() => hovered.set(false)}
     >
-      <Icon
-        name={props.icon}
-        size={props.size ?? 16}
-        color={props.iconColor ?? token(props.active ? 'foreground' : 'muted-foreground')}
-      />
-    </Button>
+      <Button
+        testID={props.testID}
+        class="h-full w-full items-center justify-center rounded-md active:opacity-70 disabled:opacity-35"
+        onPress={
+          props.onPress
+            ? () => {
+                touchActivity()
+                props.onPress?.()
+              }
+            : undefined
+        }
+        disabled={props.disabled}
+        accessibilityLabel={props.label}
+        tooltip={
+          <Tooltip
+            placement="top"
+            delay={350}
+            class="rounded-md border border-border bg-popover px-2 py-1 shadow-md"
+          >
+            <Text class="text-[11px] text-popover-foreground">{props.label}</Text>
+          </Tooltip>
+        }
+      >
+        <Icon
+          name={props.icon}
+          size={props.size ?? 16}
+          color={hovered() && !props.disabled ? hoverColor() : baseColor()}
+        />
+      </Button>
+    </View>
+  )
+}
+
+/** 单元格截断文字的悬停完整内容气泡：列表里省略号裁掉的部分靠它读全。
+ *  长备注允许换行到 8 行，气泡宽度封顶避免铺满屏幕。 */
+export function fullTextTip(text: string): JSX.Element {
+  return (
+    <Tooltip
+      placement="top"
+      delay={350}
+      testID="full-text-tip"
+      class="max-w-[320px] rounded-md border border-border bg-popover px-2 py-1 shadow-md"
+    >
+      <Text class="text-[11px] text-popover-foreground" style={{ numberOfLines: 8 }}>
+        {text}
+      </Text>
+    </Tooltip>
   )
 }
 
@@ -335,8 +383,8 @@ export function SelectField(props: {
     <Button
       class={
         'h-8 w-full flex-row items-center justify-between gap-2 rounded-md border border-input ' +
-        'bg-background px-2.5 ' +
-        (props.disabled ? 'opacity-45' : 'hover:bg-accent')
+        'bg-background px-2.5 transition ' +
+        (props.disabled ? 'opacity-45 cursor-not-allowed' : 'cursor-pointer hover:bg-accent')
       }
       disabled={props.disabled}
       accessibilityLabel={title()}
@@ -370,7 +418,7 @@ export function SelectField(props: {
         {props.items.map((item) => (
           <MenuItem
             class={
-              'h-7 min-w-[120px] flex-row items-center rounded px-2 ' +
+              'h-7 min-w-[120px] cursor-pointer flex-row items-center rounded px-2 transition ' +
               (item.value === props.value ? 'bg-accent' : 'hover:bg-accent')
             }
             accessibilityLabel={item.title}
@@ -404,6 +452,7 @@ export function SwitchField(props: {
   /** 开关紧贴文案左侧（默认开关在行尾右侧）。 */
   leading?: boolean
 }) {
+  const cursorClass = props.disabled ? 'cursor-not-allowed' : 'cursor-pointer'
   const control = (
     <Switch
       checked={props.checked}
@@ -413,7 +462,7 @@ export function SwitchField(props: {
       }}
       disabled={props.disabled}
       accessibilityLabel={props.label}
-      trackClass="h-5 w-9 flex-row items-center justify-start rounded-full bg-muted p-0.5 checked:bg-primary"
+      trackClass={`h-5 w-9 flex-row items-center justify-start rounded-full bg-muted p-0.5 transition checked:bg-primary ${cursorClass}`}
       thumbClass="h-4 w-4 rounded-full bg-background checked:translate-x-4"
     />
   )
@@ -426,7 +475,7 @@ export function SwitchField(props: {
   if (props.leading) {
     // 开关 + 标题一行；说明另起一行，左缘与开关对齐。
     return (
-      <View class="gap-1.5 py-1.5" onPress={press}>
+      <View class={`gap-1.5 py-1.5 ${props.disabled ? '' : 'cursor-pointer'}`} onPress={press}>
         <View class="flex-row items-center gap-2.5">
           {control}
           <Text class="text-xs text-foreground">{props.label}</Text>
@@ -436,7 +485,10 @@ export function SwitchField(props: {
     )
   }
   return (
-    <View class="flex-row items-center justify-between gap-2 py-1.5" onPress={press}>
+    <View
+      class={`flex-row items-center justify-between gap-2 py-1.5 ${props.disabled ? '' : 'cursor-pointer'}`}
+      onPress={press}
+    >
       <View class="flex-1 gap-0.5">
         <Text class="text-xs text-foreground">{props.label}</Text>
         {props.hint ? <Text class="text-[11px] text-muted-foreground">{props.hint}</Text> : null}
@@ -457,7 +509,7 @@ export function Chip(props: {
       class={
         'flex-row items-center gap-1 rounded-full px-2 py-0.5 ' +
         (props.active ? 'bg-primary text-primary-foreground ' : 'bg-muted text-muted-foreground ') +
-        (props.onPress ? 'hover:bg-accent active:opacity-70 ' : '') +
+        (props.onPress ? 'cursor-pointer transition hover:bg-accent active:opacity-70 ' : '') +
         (props.class ?? '')
       }
       onPress={props.onPress}

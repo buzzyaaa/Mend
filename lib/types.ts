@@ -25,19 +25,10 @@ export type ThemeMode = 'system' | 'light' | 'dark'
  *  0.5.0 起账号+密码、邮箱+手机号各合并为一格，旧的四列偏好在读取时迁移。 */
 export type ColumnKey = 'credentials' | 'contact' | 'notes'
 
-/** 支持拖动调整宽度的列：标题/分类/账号密码/邮箱手机号/备注，加首尾固定列。
+/** 表格列标识：首尾固定列 + 数据列。列宽不可拖动，由表格按窗口宽度分配。
  *  标签不再独占一列：它写在标题下面，与标题共用 name 列。 */
-export type ResizableColumnKey =
+export type TableColumnKey =
   'check' | 'name' | 'category' | 'credentials' | 'contact' | 'notes' | 'actions'
-
-/** 表格中实际有数据的列（不含最左选择框与最右操作列）的顺序。 */
-export const DATA_COLUMN_KEYS: readonly ResizableColumnKey[] = [
-  'name',
-  'category',
-  'credentials',
-  'contact',
-  'notes',
-] as const
 
 export interface Preferences {
   language: string | null
@@ -51,8 +42,6 @@ export interface Preferences {
   columnSizes: number[]
   /** 列表各列是否显示。 */
   visibleColumns: Record<ColumnKey, boolean>
-  /** 用户拖动调整后的各列宽（points）。 */
-  columnWidths: Record<ResizableColumnKey, number>
 }
 
 export type SortMode = 'updated' | 'title' | 'favorite' | 'manual'

@@ -114,8 +114,6 @@
     "columnCredentials": "Username / Password",
     "columnContact": "Email / Phone",
     "columnNotes": "Notes",
-    "columnResizeHandle": "Drag to resize column",
-    "resetColumnWidths": "Reset column widths",
     "notesSaved": "Notes saved",
     "clearFilters": "Clear filters",
     "countSuffix": "items",
@@ -381,8 +379,7 @@
     "actions": "Actions",
     "loading": "Loading…",
     "retry": "Try again",
-    "retrying": "Retrying…",
-    "reset": "Reset"
+    "retrying": "Retrying…"
   },
   "category": {
     "color": "Color",

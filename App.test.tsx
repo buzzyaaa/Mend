@@ -106,9 +106,10 @@ test('sets up a vault, creates an entry, and locks', async () => {
   await app.press('Create and enter')
   await app.waitFor('text:Passwords')
 
-  // 列表视图换成 nsh DataTable：表头和列宽把手由组件自己渲染，旧的 resize-* 把手不再存在。
-  expect(app.shows('id:resize-check')).toBe(false)
-  expect(app.shows('id:resize-notes')).toBe(false)
+  // 列表由 nsh DataTable 承载：列宽不可拖（固定列 + 其余平分）。
+  // 把手的真实 testID 是 `resize:<key>`（冒号），写成连字符会永远查不到、假通过。
+  expect(app.shows('id:resize:check')).toBe(false)
+  expect(app.shows('id:resize:notes')).toBe(false)
   expect(app.shows('id:table-header-name')).toBe(true)
   expect(app.texts()).toContain('Username / Password')
 
@@ -131,14 +132,40 @@ test('sets up a vault, creates an entry, and locks', async () => {
   await app.press('id:view-card')
   await app.waitFor('text:octocat')
   expect(app.shows('id:table-header-name')).toBe(false)
+  expect(app.shows('id:category-edge')).toBe(false)
   await app.press('id:view-list')
   await app.waitFor('id:table-header-name')
 
-  // 工具栏最右的刷新图标改成「重置」：点它把列宽按当前窗口宽度重新平均分配。
-  expect(app.shows('label:Reset')).toBe(true)
-  await app.press('id:reset-table-layout')
+  // 列宽拖动已整体取消：任何列都不再有把手，工具栏也没有「重置列宽」入口。
+  expect(app.shows('label:Reset')).toBe(false)
+  expect(app.shows('id:reset-table-layout')).toBe(false)
+  for (const key of ['name', 'category', 'credentials', 'contact', 'notes', 'actions']) {
+    expect(app.shows(`id:resize:${key}`)).toBe(false)
+  }
+  // 「全部」视图里分类列右缘有一条自绘浅灰竖线，与固定列左缘线同款。
+  expect(app.shows('id:category-edge')).toBe(true)
+  // 列配置菜单只保留「显示哪些列」，不再夹带重置列宽的菜单项。
+  await app.press('id:column-config')
+  await app.waitFor('id:column-toggle-notes')
+  expect(app.shows('label:Reset column widths')).toBe(false)
+  await app.press('id:column-toggle-notes')
+  await app.wait(100)
+  expect(app.shows('id:table-header-notes')).toBe(false)
+  await app.press('id:column-toggle-notes')
+  await app.waitFor('id:table-header-notes')
+  await app.press('id:column-config')
+  await app.wait(100)
+
+  // 固定列（分类 120 / 操作 160）之外的列平分剩余宽度，窗口缩放后整表重新平分。
+  await app.setViewport(1500, 780)
   await app.waitFor('id:table-header-name')
   expect(app.texts()).toContain('Username / Password')
+  await app.setViewport(900, 780)
+  await app.waitFor('id:table-header-name')
+  expect(app.shows('id:table-header-actions')).toBe(true)
+  expect(app.texts()).toContain('octocat')
+  await app.setViewport(1100, 780)
+  await app.waitFor('id:table-header-name')
 
   await app.press('label:Settings')
   await app.waitFor('text:Appearance & behavior')
@@ -300,6 +327,15 @@ test('sidebar categories can be reordered by dragging', async () => {
   await addCategory('Beta')
   expect(app.texts().indexOf('Alpha')).toBeLessThan(app.texts().indexOf('Beta'))
 
+  // 进入分类视图后分类列整列消失，右缘浅灰线也不该再画；回到「全部」恢复。
+  await app.press('label:Alpha')
+  await app.waitFor('id:table-header-name')
+  expect(app.shows('id:table-header-category')).toBe(false)
+  expect(app.shows('id:category-edge')).toBe(false)
+  await app.press('label:All')
+  await app.waitFor('id:table-header-category')
+  expect(app.shows('id:category-edge')).toBe(true)
+
   await app.drag('label:Alpha', { x: 0, y: 45 })
   await app.wait(400)
   expect(app.texts().indexOf('Beta')).toBeLessThan(app.texts().indexOf('Alpha'))
@@ -340,4 +376,80 @@ test('phone settings is a single scroll page without quick nav', async () => {
   expect(app.texts()).toContain('Update')
   expect(app.shows('id:settings-check-update')).toBe(true)
   expect(app.texts()).toContain('Desktop app')
+  // 和其他用例一样退出到解锁页，避免进程级会话把下一个用例直接送进主界面。
+  await app.press('id:nav-lock')
+  await app.waitFor('label:Master password')
+})
+
+// 列宽均分后单元格必然截断：省略号裁掉的内容靠悬停气泡读全，复制永远写完整原值；
+// 掩码状态的密码不进气泡（悬停也不泄露）。
+test('truncated cells reveal full text on hover and copy full values', async () => {
+  const app = await open('./App.tsx', { platform: 'windows' })
+  await app.setViewport(1100, 780)
+  await app.waitFor('label:Master password')
+  await app.type('label:Master password', 'test-password-1234')
+  if (app.shows('label:Confirm master password')) {
+    await app.type('label:Confirm master password', 'test-password-1234')
+    await app.press('Create and enter')
+  } else {
+    await app.press('text:Unlock')
+  }
+  await app.waitFor('text:Passwords')
+
+  const username = 'very.long.account.name.for.truncation@example.com'
+  const notes =
+    'Recovery codes live offline; rotate the authenticator after switching devices and keep the old session for thirty days.'
+  await app.press('id:add-entry')
+  await app.waitFor('text:New entry')
+  await app.type('label:Title', 'Truncation')
+  await app.type('label:Username', username)
+  await app.type('label:Password', 'p@ss-long-value-123')
+  await app.type('label:Notes', notes)
+  await app.press('text:Save')
+  await app.waitFor('text:Truncation')
+  // 只留这一行，避免同库旧条目的同名按钮干扰选择器。
+  await app.type('label:Search username, password, email, phone, notes...', 'Truncation')
+  await app.wait(150)
+
+  expect(app.shows('id:full-text-tip')).toBe(false)
+  await app.hover(`text:${username}`)
+  await app.wait(500)
+  expect(app.shows('id:full-text-tip')).toBe(true)
+  await app.hover('id:add-entry')
+  await app.wait(500)
+  expect(app.shows('id:full-text-tip')).toBe(false)
+
+  await app.hover(`text:${notes}`)
+  await app.wait(500)
+  expect(app.shows('id:full-text-tip')).toBe(true)
+  await app.hover('id:add-entry')
+  await app.wait(500)
+  expect(app.shows('id:full-text-tip')).toBe(false)
+
+  // 行内图标按钮的悬停态要能到达（共享 IconButton 的外层 View 承接 mouseenter）：
+  // 悬停后 tooltip 文案出现，移开后消失。
+  expect(app.texts()).not.toContain('Copy username')
+  await app.hover('label:Copy username')
+  await app.wait(500)
+  expect(app.texts()).toContain('Copy username')
+  await app.hover('id:add-entry')
+  await app.wait(500)
+  expect(app.texts()).not.toContain('Copy username')
+
+  // 掩码密码：先关掉全局「显示密码」，气泡里不得出现明文，也不该为掩码圆点弹「完整内容」。
+  await app.press('label:Show passwords')
+  await app.wait(150)
+  expect(app.texts()).not.toContain('p@ss-long-value-123')
+  if (app.shows('text:••••••••')) {
+    await app.hover('text:••••••••')
+    await app.wait(500)
+    expect(app.shows('id:full-text-tip')).toBe(false)
+  }
+
+  await app.press('label:Copy username')
+  await app.wait(100)
+  expect(app.clipboard()).toBe(username)
+
+  await app.press('label:Lock')
+  await app.waitFor('label:Master password')
 })

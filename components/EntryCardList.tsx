@@ -32,7 +32,7 @@ function EntryCard(props: { entry: () => EntrySummary }) {
 
   return (
     <View
-      class="gap-2 rounded-xl border border-border bg-card p-3 shadow-sm hover:border-primary/40 hover:shadow-md"
+      class="cursor-pointer gap-2 rounded-xl border border-border bg-card p-3 shadow-sm transition hover:border-primary/40 hover:shadow-md"
       accessibilityLabel={entry().title}
       role="button"
       onPress={() => void selectEntry(entry().id)}
@@ -56,7 +56,7 @@ function EntryCard(props: { entry: () => EntrySummary }) {
           <Text class="text-[10px] text-muted-foreground" style={{ numberOfLines: 1 }}>
             {category()?.name ?? t('entry.uncategorized')}
           </Text>
-          <EntryNotesCell entry={entry} />
+          <EntryNotesCell entry={entry} card />
         </View>
         <EntryActions entry={entry} card />
       </View>

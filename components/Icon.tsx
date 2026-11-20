@@ -7,6 +7,7 @@
 import { Image } from 'nsh'
 import type { ImageAsset } from 'nsh'
 
+import { TINTED_ICONS } from './tinted-icons'
 import alertTriangle from '../assets/icons/alert-triangle.svg'
 import archive from '../assets/icons/archive.svg'
 import arrowDown from '../assets/icons/arrow-down.svg'
@@ -165,14 +166,29 @@ export interface IconProps {
   accessibilityLabel?: string
 }
 
+/** 颜色已烘进 SVG 的变体（scripts/gen-tinted-icons.mjs 生成）：命中就直接画缓存位图，
+ *  不走 tintColor —— Windows 上 tint 每次绘制都过 D2D 颜色矩阵特效，列表拖列宽时
+ *  上百个行内图标逐帧重绘会明显掉帧。未收录的颜色仍回退到 tintColor。 */
+function bakedAsset(name: IconName, color: string | undefined): ImageAsset | undefined {
+  if (!color) return undefined
+  const match = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(color.trim())
+  if (!match) return undefined
+  if (match[2] && match[2].toLowerCase() !== 'ff') return undefined
+  return TINTED_ICONS[`${name}|${match[1].toLowerCase()}`]
+}
+
 /** A tinted 24x24 native icon scaled to `size` (default 16). */
 export function Icon(props: IconProps) {
   const size = props.size ?? 16
   return (
     <Image
-      src={ICON_ASSETS[props.name]}
+      src={bakedAsset(props.name, props.color) ?? ICON_ASSETS[props.name]}
       class={props.class}
-      style={{ width: size, height: size, tintColor: props.color }}
+      style={{
+        width: size,
+        height: size,
+        tintColor: bakedAsset(props.name, props.color) ? undefined : props.color,
+      }}
       accessibilityLabel={props.accessibilityLabel}
     />
   )

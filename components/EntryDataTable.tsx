@@ -16,12 +16,11 @@ import {
   loadedCount,
   loadMoreEntries,
   selectEntry,
-  tableLayoutVersion,
   toggleSelectAll,
   visibleEntries,
 } from '../lib/state'
-import { columnWidthRange, preferences } from '../lib/preferences'
-import type { ColumnKey, ResizableColumnKey } from '../lib/types'
+import { preferences } from '../lib/preferences'
+import type { ColumnKey, TableColumnKey } from '../lib/types'
 import {
   categoryOf,
   contactRows,
@@ -31,36 +30,41 @@ import {
   EntryFieldPair,
   EntryNotesCell,
   EntryTitleCell,
+  FIELD_PAIR_COMPACT_WIDTH,
   SelectAllCheckbox,
 } from './EntryCells'
+import { fullTextTip } from './ui'
 
 type NshNode = ReturnType<typeof View>
 
-/** 选择列 / 操作列宽度恒定：两者都不参与平均分配，也不允许拖动。 */
+/** 固定列宽：选择 / 分类 / 操作都不参与平分，也不允许拖动改宽。 */
 const CHECK_COLUMN_WIDTH = 32
-const ACTIONS_COLUMN_WIDTH = 232
-/** 平分时标题列的保底宽：行首图标 + 两个标签胶囊，低于这个就被裁掉。
- *  宽窗口下平分值会大于它，此时仍是完全平均分配。 */
-const NAME_DISTRIBUTION_MIN = 180
+const CATEGORY_COLUMN_WIDTH = 120
+const ACTIONS_COLUMN_WIDTH = 160
+/** 平分的下限：窗口极窄时保证每列还放得下省略号，而不是被压成 0。 */
+const FLEX_COLUMN_MIN = 40
 /** onLayout 拿到真实宽度之前的第一帧用这个名义宽度，避免列宽算成 0。 */
 const NOMINAL_TABLE_WIDTH = 1000
+/** 表头高度与表根 1px 边框：自绘竖线要和固定列边缘线一样从表头下缘画到表底。 */
+const TABLE_HEADER_HEIGHT = 34
+const TABLE_BORDER_WIDTH = 1
 
 type ColumnDef = {
-  key: ResizableColumnKey
+  key: TableColumnKey
   title: string
-  /** 除选择列与操作列外，其余列一起平分可用宽度。 */
+  /** 除固定列外，其余列一起平分剩余宽度。 */
   flex: boolean
   fixed?: 'left' | 'right'
   align?: 'start' | 'center' | 'end'
-  resizable?: boolean
   movable?: boolean
   selectable?: boolean
-  fitPadding?: number
 }
 
 /** 固定列用恒定宽度，其余列参与平分。 */
-function fixedWidth(key: ResizableColumnKey): number {
-  return key === 'check' ? CHECK_COLUMN_WIDTH : ACTIONS_COLUMN_WIDTH
+function fixedWidth(key: TableColumnKey): number {
+  if (key === 'check') return CHECK_COLUMN_WIDTH
+  if (key === 'category') return CATEGORY_COLUMN_WIDTH
+  return ACTIONS_COLUMN_WIDTH
 }
 
 function buildColumnDefs(): ColumnDef[] {
@@ -70,18 +74,16 @@ function buildColumnDefs(): ColumnDef[] {
       title: '',
       flex: false,
       fixed: 'left',
-      resizable: false,
       movable: false,
       selectable: false,
     },
-    { key: 'name', title: t('entry.title'), flex: true, fixed: 'left', fitPadding: 40 },
+    { key: 'name', title: t('entry.title'), flex: true, fixed: 'left' },
   ]
   if (!currentCategoryId()) {
     defs.push({
       key: 'category',
       title: t('entry.category'),
-      flex: true,
-      fitPadding: 16,
+      flex: false,
     })
   }
   const optional: { key: ColumnKey; title: string }[] = [
@@ -91,7 +93,7 @@ function buildColumnDefs(): ColumnDef[] {
   ]
   for (const col of optional) {
     if (!preferences().visibleColumns[col.key]) continue
-    defs.push({ key: col.key, title: col.title, flex: true, fitPadding: 48 })
+    defs.push({ key: col.key, title: col.title, flex: true })
   }
   defs.push({
     key: 'actions',
@@ -99,7 +101,6 @@ function buildColumnDefs(): ColumnDef[] {
     flex: false,
     fixed: 'right',
     align: 'center',
-    resizable: false,
     movable: false,
     selectable: false,
   })
@@ -113,28 +114,31 @@ export function EntryDataTable(props: { empty: NshNode }) {
 
   const columnDefs = computed<ColumnDef[]>(() => buildColumnDefs())
 
-  /** 列宽不做任何持久化：每次挂载（打开视图）或窗口宽度变化都按当前宽度平分。
-   *  「重置」按钮自增 tableLayoutVersion，强制重新算一遍并交回 DataTable。 */
+  /** DataTable 的自定义表头槽位按列序号复用，中间删列（进分类视图去掉分类列、
+   *  列配置关掉中间列）时旧槽位不会重渲染，表头会停留在旧列上。
+   *  用列键签名做 Each 的键：列集合一变就整表重建；仅宽度变化（窗口缩放）不重建。 */
+  const columnSignature = computed(() =>
+    columnDefs()
+      .map((def) => def.key)
+      .join('|'),
+  )
+
+  /** 列宽不持久化、不可拖：固定列吃掉恒定宽度，其余列平分剩余空间，
+   *  窗口缩放时 onLayout 更新 tableWidth，整张表跟着重新平分。 */
   const columns = computed<DataTableColumn[]>(() => {
-    tableLayoutVersion() // 依赖重置计数；值本身不参与计算，只要触发重算即可。
     const defs = columnDefs()
     const total = tableWidth() > 0 ? tableWidth() : NOMINAL_TABLE_WIDTH
     const fixed = defs.reduce((sum, def) => sum + (def.flex ? 0 : fixedWidth(def.key)), 0)
     const flexDefs = defs.filter((def) => def.flex)
-    const minTotal = flexDefs.reduce((sum, def) => sum + columnWidthRange(def.key).min, 0)
-    const available = Math.max(total - fixed, minTotal)
+    const available = Math.max(total - fixed, flexDefs.length * FLEX_COLUMN_MIN)
     const each = flexDefs.length > 0 ? Math.floor(available / flexDefs.length) : 0
     let extra = available - each * flexDefs.length
     return defs.map((def) => {
-      const range = columnWidthRange(def.key)
       let width: number
       if (!def.flex) {
-        // 固定列 min=max=width 且不可调整，备注拖再宽也不会拉出可拖边缘。
         width = fixedWidth(def.key)
       } else {
-        // 标题列带行首图标和两个标签胶囊，需要一个保底宽；其余列按平分值。
-        const floor = def.key === 'name' ? NAME_DISTRIBUTION_MIN : range.min
-        width = Math.max(floor, each)
+        width = each
         if (extra > 0) {
           width += 1
           extra -= 1
@@ -144,17 +148,39 @@ export function EntryDataTable(props: { empty: NshNode }) {
         key: def.key,
         title: def.title,
         width,
-        minWidth: def.flex ? range.min : width,
-        maxWidth: def.flex ? range.max : width,
+        minWidth: def.flex ? FLEX_COLUMN_MIN : width,
+        maxWidth: def.flex ? 100_000 : width,
         fixed: def.fixed,
         align: def.align,
-        resizable: def.flex,
         movable: def.movable,
         selectable: def.selectable,
-        fitPadding: def.fitPadding,
       }
     })
   })
+
+  /** 分类列右缘的浅灰竖线，与固定列边缘线同款（1px `bg-border`）。
+   *  DataTable 只给固定区画边缘线（标题列右缘那条），分类列不是固定列，所以这条自己画；
+   *  那条线被不透明表头盖住表头段，看起来从表头下缘贯穿到表底（含空白区），这里对齐同款范围。
+   *  出现横向滚动（极窄窗口）时不画：拿不到像素级 scroll 偏移，画了会跟错列。 */
+  const categoryEdgeLeft = computed<number | null>(() => {
+    if (!columnDefs().some((def) => def.key === 'category')) return null
+    const widths = columns()
+    const total = widths.reduce((sum, column) => sum + (column.width ?? 0), 0)
+    if (tableWidth() <= 0 || total > tableWidth()) return null
+    let x = 0
+    for (const column of widths) {
+      x += column.width ?? 0
+      if (column.key === 'category') return x - 1
+    }
+    return null
+  })
+
+  /** 均分后列宽可能很窄：字段格据此决定是否让「账号：」前缀让位给值。
+   *  走 accessor 而不是快照，窗口缩放后回收槽位里的旧单元格也能跟着变。 */
+  function pairCompact(key: TableColumnKey): boolean {
+    const width = columns().find((column) => column.key === key)?.width ?? 0
+    return width > 0 && width < FIELD_PAIR_COMPACT_WIDTH
+  }
 
   /** DataTable 的单元格会被回收：所有内容都通过 accessor 读 signal，
    *  这样插入新条目或字段解密完成时，旧槽位也能显示新行的内容。 */
@@ -170,14 +196,28 @@ export function EntryDataTable(props: { empty: NshNode }) {
               return <EntryTitleCell entry={entry} category={category} />
             case 'category':
               return (
-                <Text class="text-[11px] text-muted-foreground" style={{ numberOfLines: 1 }}>
+                <Text
+                  class="text-[11px] text-muted-foreground"
+                  style={{ numberOfLines: 1 }}
+                  tooltip={fullTextTip(category()?.name ?? t('entry.uncategorized'))}
+                >
                   {category()?.name ?? t('entry.uncategorized')}
                 </Text>
               )
             case 'credentials':
-              return <EntryFieldPair rows={() => credentialsRows(entry())} />
+              return (
+                <EntryFieldPair
+                  rows={() => credentialsRows(entry())}
+                  compact={() => pairCompact('credentials')}
+                />
+              )
             case 'contact':
-              return <EntryFieldPair rows={() => contactRows(entry())} />
+              return (
+                <EntryFieldPair
+                  rows={() => contactRows(entry())}
+                  compact={() => pairCompact('contact')}
+                />
+              )
             case 'notes':
               return <EntryNotesCell entry={entry} />
             case 'actions':
@@ -207,60 +247,75 @@ export function EntryDataTable(props: { empty: NshNode }) {
   }
 
   return (
-    <DataTable
-      ref={(ref) => tableRef.set(ref)}
-      onLayout={({ bounds }) => {
-        const width = Math.round(bounds.size.width)
-        if (width > 0 && width !== tableWidth()) tableWidth.set(width)
-      }}
-      columns={columns()}
-      data={displayedEntries()}
-      dataStart={0}
-      rowCount={visibleEntries().length}
-      rowHeight={56}
-      headerHeight={34}
-      rowHeader={false}
-      stripe
-      rowSelectable
-      columnSelectable={false}
-      cellSelectable={false}
-      selectOnModifierPress={false}
-      selection={null}
-      resizableColumns
-      movableColumns={false}
-      hasMore={hasMoreEntries()}
-      loading={fieldsLoading()}
-      loadMoreThreshold={40}
-      scrollbar
-      accessibilityLabel={t('entry.listTitle')}
-      empty={props.empty}
-      classes={{
-        root: 'rounded-xl border border-border bg-card',
-        header: 'bg-secondary',
-        headerCell: 'px-2',
-        headerContent: 'gap-1',
-        cell: 'px-2',
-        resizeHandle: 'bg-border group-hover:bg-primary',
-        row: '',
-        rowOdd: 'bg-muted/20',
-        rowHover: 'bg-accent/70',
-        rowSelected: 'bg-primary/5',
-        fixedEdge: 'bg-border',
-        empty: 'p-6',
-      }}
-      renderCell={renderCell}
-      renderHeaderCell={renderHeaderCell}
-      onRowPress={({ row }) => {
-        const entry = displayedEntries()[row]
-        if (entry) void selectEntry(entry.id)
-      }}
-      onVisibleRowsChange={({ range }) => {
-        // DataTable 的 rowCount 是全表，但 data 只持有已解密窗口；视野接近窗口末尾就提前补密。
-        if (range.end + 80 >= loadedCount() && hasMoreEntries()) loadMoreEntries()
-      }}
-      onLoadMore={() => loadMoreEntries()}
-      class="mx-4 mb-1 min-h-0 flex-1"
-      style={{ flex: 1 }}
-    />
+    <View class="relative mx-4 mb-1 min-h-0 flex-1">
+      <Each of={[columnSignature()]}>
+        {() => (
+          <DataTable
+            ref={(ref) => tableRef.set(ref)}
+            onLayout={({ bounds }) => {
+              const width = Math.round(bounds.size.width)
+              if (width > 0 && width !== tableWidth()) tableWidth.set(width)
+            }}
+            columns={columns()}
+            data={displayedEntries()}
+            dataStart={0}
+            rowCount={visibleEntries().length}
+            rowHeight={56}
+            headerHeight={TABLE_HEADER_HEIGHT}
+            rowHeader={false}
+            stripe
+            rowSelectable
+            columnSelectable={false}
+            cellSelectable={false}
+            selectOnModifierPress={false}
+            selection={null}
+            movableColumns={false}
+            resizableColumns={false}
+            hasMore={hasMoreEntries()}
+            loading={fieldsLoading()}
+            loadMoreThreshold={40}
+            scrollbar
+            accessibilityLabel={t('entry.listTitle')}
+            empty={props.empty}
+            classes={{
+              root: 'rounded-xl border border-border bg-card',
+              header: 'bg-secondary',
+              headerCell: 'px-2',
+              headerContent: 'gap-1',
+              cell: 'px-2',
+              row: '',
+              rowOdd: 'bg-muted/20',
+              rowHover: 'bg-accent/70',
+              rowSelected: 'bg-primary/5',
+              fixedEdge: 'bg-border',
+              empty: 'p-6',
+            }}
+            renderCell={renderCell}
+            renderHeaderCell={renderHeaderCell}
+            onRowPress={({ row }) => {
+              const entry = displayedEntries()[row]
+              if (entry) void selectEntry(entry.id)
+            }}
+            onVisibleRowsChange={({ range }) => {
+              // DataTable 的 rowCount 是全表，但 data 只持有已解密窗口；视野接近窗口末尾就提前补密。
+              if (range.end + 80 >= loadedCount() && hasMoreEntries()) loadMoreEntries()
+            }}
+            onLoadMore={() => loadMoreEntries()}
+            class="h-full w-full"
+          />
+        )}
+      </Each>
+      <If when={categoryEdgeLeft() !== null}>
+        <View
+          class="pointer-events-none absolute w-px bg-border"
+          style={{
+            left: categoryEdgeLeft() ?? 0,
+            top: TABLE_BORDER_WIDTH + TABLE_HEADER_HEIGHT,
+            bottom: TABLE_BORDER_WIDTH,
+          }}
+          testID="category-edge"
+        />
+      </If>
+    </View>
   )
 }

@@ -114,8 +114,6 @@
     "columnCredentials": "账号 / 密码",
     "columnContact": "邮箱 / 手机号",
     "columnNotes": "备注",
-    "columnResizeHandle": "拖动调整列宽",
-    "resetColumnWidths": "重置列宽",
     "notesSaved": "备注已保存",
     "clearFilters": "清除筛选",
     "countSuffix": "项",
@@ -381,8 +379,7 @@
     "actions": "操作",
     "loading": "加载中…",
     "retry": "重试",
-    "retrying": "重试中…",
-    "reset": "重置"
+    "retrying": "重试中…"
   },
   "category": {
     "color": "颜色",
