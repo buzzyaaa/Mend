@@ -5,6 +5,11 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.5.2] - 2026-11-20
+
+#### Fixed
+- **列表操作列按钮光标不变小手**：nsh 的 DataTable 在表体上方盖有 hit layer 转发点击/悬停，Windows 光标解析命中的是它而非 cell 内的按钮，导致行内编辑/复制/星标/删除按钮 hover 有底色却是默认箭头（顶栏「预设值」等普通 View 里的按钮正常）。给表格 root 加 `cursor-pointer`，让光标沿父链上溯命中；整表显示手型，与卡片视图一致。
+
 ## [0.5.1] - 2026-11-20
 
 #### Added

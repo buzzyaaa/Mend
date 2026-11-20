@@ -278,7 +278,11 @@ export function EntryDataTable(props: { empty: NshNode }) {
             accessibilityLabel={t('entry.listTitle')}
             empty={props.empty}
             classes={{
-              root: 'rounded-xl border border-border bg-card',
+              // nsh DataTable 在表体上方盖了一层 hit layer 转发点击/悬停，光标 pick
+              // 命中的是它而非 cell 里的按钮，按钮自身的 cursor-pointer 会被挡住。
+              // root 是 hit layer 的祖先，光标沿父链上溯到这里取到手型（表格 rowSelectable
+              // 本就是可交互区，整表手型与卡片视图一致）。
+              root: 'cursor-pointer rounded-xl border border-border bg-card',
               header: 'bg-secondary',
               headerCell: 'px-2',
               headerContent: 'gap-1',
