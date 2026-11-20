@@ -7,6 +7,8 @@ import type { ColumnKey, Preferences, ThemeMode } from './types'
 const DEFAULT_COLUMN_SIZES = [240, 360]
 const COLUMN_MIN = 160
 const COLUMN_MAX = 640
+/** 最近使用的数据库最多记这么多个，避免偏好文件无限增长。 */
+const MAX_RECENT_VAULTS = 8
 
 const DEFAULTS: Preferences = {
   language: null,
@@ -15,6 +17,7 @@ const DEFAULTS: Preferences = {
   updateCheckIntervalDays: 7,
   lastUpdateCheckTs: 0,
   siteIcons: true,
+  recentVaults: [],
   columnSizes: [...DEFAULT_COLUMN_SIZES],
   visibleColumns: { credentials: true, contact: true, notes: true },
 }
@@ -73,6 +76,28 @@ function sanitizeVisibleColumns(value: unknown): Record<ColumnKey, boolean> {
   return result
 }
 
+/** 最近库：只留非空字符串、去重（大小写/斜杠不敏感由调用方的路径比较负责），限长。 */
+function sanitizeRecentVaults(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const item of value) {
+    if (typeof item !== 'string' || !item.trim() || seen.has(item)) continue
+    seen.add(item)
+    result.push(item)
+    if (result.length >= MAX_RECENT_VAULTS) break
+  }
+  return result
+}
+
+/** 把某个库文件提到「最近使用」列表最前；路径为空则忽略。
+ *  最多留 MAX_RECENT_VAULTS 个，重复路径移到最前而不是保留旧位置。 */
+export function rememberVault(path: string | null | undefined): void {
+  if (!path || !path.trim()) return
+  const rest = preferences().recentVaults.filter((item) => item !== path)
+  updatePreferences({ recentVaults: [path, ...rest].slice(0, MAX_RECENT_VAULTS) })
+}
+
 function sanitize(raw: unknown): Preferences {
   if (!raw || typeof raw !== 'object') return { ...DEFAULTS }
   const value = raw as Partial<Preferences>
@@ -91,6 +116,7 @@ function sanitize(raw: unknown): Preferences {
       : DEFAULTS.updateCheckIntervalDays,
     lastUpdateCheckTs: Number.isFinite(lastCheck) && lastCheck >= 0 ? lastCheck : 0,
     siteIcons: typeof value.siteIcons === 'boolean' ? value.siteIcons : DEFAULTS.siteIcons,
+    recentVaults: sanitizeRecentVaults(value.recentVaults),
     columnSizes: sanitizeColumns(value.columnSizes),
     visibleColumns: sanitizeVisibleColumns(value.visibleColumns),
   }

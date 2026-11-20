@@ -38,7 +38,8 @@
     "categoryManage": "分类管理",
     "myGroups": "我的分组",
     "newGroup": "新建分组",
-    "extensions": "扩展"
+    "extensions": "扩展",
+    "switchVault": "切换数据库"
   },
   "entry": {
     "title": "标题",
@@ -258,6 +259,8 @@
   "vault": {
     "sectionTitle": "数据库文件",
     "current": "当前文件",
+    "recentTitle": "最近使用",
+    "noRecent": "暂无记录，先打开一个数据库文件",
     "switch": "打开其他数据库文件…",
     "create": "新建数据库文件…",
     "useDefault": "使用默认位置",

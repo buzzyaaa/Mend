@@ -4,7 +4,7 @@ import { t } from 'nsh/i18n'
 import { errorText, parseError } from './errors'
 import { normalizeUrl, sortEntries } from './format'
 import * as native from './native'
-import { loadPreferences, preferences } from './preferences'
+import { loadPreferences, preferences, rememberVault } from './preferences'
 import { kickSiteIconFetch } from './site-icons-cache'
 import {
   isBuiltinBucket,
@@ -223,6 +223,8 @@ export async function boot(): Promise<void> {
         // 偏好不是启动必需品：读不出来就用模块里的默认值。
       }
       status.set(await native.status())
+      // 当前库计入「最近使用」：偏好在全局数据目录，切库/重开都留在列表里。
+      rememberVault(status().dbPath)
       // 用户开过「免主密码解锁」就直接进主界面，不再要求输密码。
       tryDeviceUnlock()
       if (status().unlocked) await loadAll()
@@ -337,6 +339,8 @@ async function applyVaultFile(path: string | null): Promise<void> {
     categoriesSheetOpen.set(false)
     confirm.set(null)
     status.set(next)
+    // 立即把新库提到最近列表最前，菜单下次打开就能看到当前库排在首位。
+    rememberVault(next.dbPath)
     deviceUnlockOn.set(native.deviceUnlockEnabled() === true)
     toast(t('vault.switched', { path: next.dbPath }), 'info', 5000)
   } catch (error) {
@@ -346,6 +350,11 @@ async function applyVaultFile(path: string | null): Promise<void> {
     authBusy.set(false)
   }
   await retryBoot()
+}
+
+/** 从「最近使用」列表直接切到某个已知库文件（无需再弹文件对话框）。 */
+export async function switchToVaultFile(path: string): Promise<void> {
+  await applyVaultFile(path)
 }
 
 /** 选一个已有的库文件并切换过去。 */

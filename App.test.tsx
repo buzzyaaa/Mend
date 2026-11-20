@@ -436,6 +436,14 @@ test('truncated cells reveal full text on hover and copy full values', async () 
   await app.wait(500)
   expect(app.texts()).not.toContain('Copy username')
 
+  // 操作列那排动作（编辑/复制整条/星标/删除）同样走共享 IconButton，悬停反馈要能到达。
+  await app.hover('label:Copy full entry')
+  await app.wait(500)
+  expect(app.texts()).toContain('Copy full entry')
+  await app.hover('id:add-entry')
+  await app.wait(500)
+  expect(app.texts()).not.toContain('Copy full entry')
+
   // 掩码密码：先关掉全局「显示密码」，气泡里不得出现明文，也不该为掩码圆点弹「完整内容」。
   await app.press('label:Show passwords')
   await app.wait(150)
@@ -452,4 +460,41 @@ test('truncated cells reveal full text on hover and copy full values', async () 
 
   await app.press('label:Lock')
   await app.waitFor('label:Master password')
+})
+
+// 左下「切换数据库」按钮：菜单列出偏好里的最近库（只显示文件名），并附
+// 打开其他/新建/使用默认三个入口；点当前库不动、假路径不在这里实际切换
+// （切换链路由 applyVaultFile 的既有测试覆盖）。
+test('switch database menu lists recent vaults and quick actions', async () => {
+  const app = await open(
+    './App.tsx',
+    preferencesModule(
+      JSON.stringify({
+        recentVaults: ['C:/Vaults/Work.menddb', 'D:/Backup/Old-vault.menddb'],
+      }),
+    ),
+  )
+  await app.waitFor('label:Master password')
+  if (app.shows('label:Confirm master password')) {
+    await app.type('label:Master password', 'test-password-1234')
+    await app.type('label:Confirm master password', 'test-password-1234')
+    await app.press('Create and enter')
+  } else {
+    await app.type('label:Master password', 'test-password-1234')
+    await app.press('text:Unlock')
+  }
+  await app.waitFor('text:Passwords')
+
+  expect(app.shows('id:nav-switch')).toBe(true)
+  await app.press('id:nav-switch')
+  await app.waitFor('id:nav-switch-recent-0')
+  expect(app.texts()).toContain('Work.menddb')
+  expect(app.texts()).toContain('Old-vault.menddb')
+  expect(app.shows('id:nav-switch-other')).toBe(true)
+  expect(app.shows('id:nav-switch-new')).toBe(true)
+  expect(app.shows('id:nav-switch-default')).toBe(true)
+  // 点当前库（列表首项）不切库，菜单收起后仍在主界面。
+  await app.press('id:nav-switch-recent-0')
+  await app.wait(150)
+  expect(app.texts()).toContain('Passwords')
 })

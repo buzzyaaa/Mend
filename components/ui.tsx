@@ -176,15 +176,18 @@ export function IconButton(props: {
   const baseColor = () =>
     props.iconColor ?? toneColor() ?? token(props.active ? 'foreground' : 'muted-foreground')
   const hoverColor = () => props.iconColor ?? toneColor() ?? token('foreground')
+  // 悬停反馈要「一眼可见」：accent(#e8efff) 与页面背景(#f4f6ff)/卡片(#fff) 几乎同色，
+  // 单换底色在小图标上根本看不出来。改用主色浅底 + 同族淡描边，语义按钮用 destructive/warning
+  // 同族浅底 + 描边；图标本身在 hovered 时从 muted 提亮到 foreground/语义色。
   const hoverBg = props.disabled
     ? ''
     : props.tone === 'destructive'
-      ? 'hover:bg-destructive/10 '
+      ? 'hover:bg-destructive/20 hover:ring-1 hover:ring-destructive/30 '
       : props.tone === 'warning'
-        ? 'hover:bg-warning/10 '
+        ? 'hover:bg-warning/20 hover:ring-1 hover:ring-warning/30 '
         : props.active
-          ? 'hover:bg-accent/70 '
-          : 'hover:bg-accent '
+          ? 'hover:bg-primary/25 hover:ring-1 hover:ring-primary/30 '
+          : 'hover:bg-primary/15 hover:ring-1 hover:ring-primary/30 '
   return (
     <View
       class={
@@ -199,7 +202,7 @@ export function IconButton(props: {
     >
       <Button
         testID={props.testID}
-        class="h-full w-full items-center justify-center rounded-md active:opacity-70 disabled:opacity-35"
+        class="h-full w-full cursor-pointer items-center justify-center rounded-md active:opacity-70 disabled:cursor-not-allowed disabled:opacity-35"
         onPress={
           props.onPress
             ? () => {

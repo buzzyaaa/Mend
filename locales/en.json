@@ -38,7 +38,8 @@
     "categoryManage": "Categories",
     "myGroups": "My Groups",
     "newGroup": "New group",
-    "extensions": "Extensions"
+    "extensions": "Extensions",
+    "switchVault": "Switch database"
   },
   "entry": {
     "title": "Title",
@@ -258,6 +259,8 @@
   "vault": {
     "sectionTitle": "Database file",
     "current": "Current file",
+    "recentTitle": "Recent",
+    "noRecent": "No recent vaults — open a database file first",
     "switch": "Open another database file…",
     "create": "Create a database file…",
     "useDefault": "Use the default location",

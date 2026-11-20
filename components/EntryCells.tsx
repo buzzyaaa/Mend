@@ -279,7 +279,7 @@ export function EntryNotesCell(props: { entry: () => EntrySummary; card?: boolea
   return (
     <View
       class={
-        'cursor-pointer rounded-md transition hover:bg-accent/50 ' +
+        'cursor-pointer rounded-md transition hover:bg-primary/10 ' +
         (props.card ? 'flex-row items-center' : 'h-full min-w-0 flex-row items-start pt-1.5')
       }
       role="button"
