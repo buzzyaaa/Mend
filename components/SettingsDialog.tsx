@@ -1,6 +1,7 @@
 import { appInfo, cleanup, computed, effect, platform, Scroll, signal, Text, token, View, windowSize } from 'nsh'
 import type { Bounds, ScrollEvent, ScrollRef, ViewRef } from 'nsh'
 import { t } from 'nsh/i18n'
+import { runningPackage, shellInfo } from 'nsh/updater'
 
 import { errorText } from '../lib/errors'
 import type { ThemeMode } from '../lib/types'
@@ -675,7 +676,9 @@ export function SettingsPage() {
                 <View class="h-px w-full bg-border" />
 
                 {/* 应用标识 + 版本：无边框无底色，放在检查结果横幅下方；
-                    Badge 紧随 Mend 名称，版本与构建合并成一行。 */}
+                    Badge 紧随 Mend 名称，版本与构建合并成一行。
+                    OTA 代码包运行时「外壳」与「代码」是两个版本（标题栏
+                    显示的是外壳），分两行如实展示，避免看起来自相矛盾。 */}
                 <View class="flex-row flex-wrap items-center gap-3">
                   <View class="h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary">
                     <Icon name="shield" size={20} color={token('primary-foreground')} />
@@ -687,12 +690,29 @@ export function SettingsPage() {
                       </Text>
                       <Badge label={t('settings.clientKind')} />
                     </View>
-                    <Text class="text-xs text-muted-foreground">
-                      {t('update.shellInfo', {
-                        version: appInfo().version ?? '',
-                        build: appInfo().build ?? 0,
-                      })}
-                    </Text>
+                    <If when={runningPackage()}>
+                      {(running) => (
+                        <Text class="text-xs text-muted-foreground">
+                          {t('update.shellLine', {
+                            version: shellInfo().version ?? appInfo().version ?? '',
+                            build: shellInfo().build ?? appInfo().build ?? 0,
+                          })}
+                          {' · '}
+                          {t('update.packageLine', {
+                            version: running().version,
+                            build: running().build,
+                          })}
+                        </Text>
+                      )}
+                    </If>
+                    <If when={!runningPackage()}>
+                      <Text class="text-xs text-muted-foreground">
+                        {t('update.shellInfo', {
+                          version: appInfo().version ?? '',
+                          build: appInfo().build ?? 0,
+                        })}
+                      </Text>
+                    </If>
                   </View>
                 </View>
               </SettingsCard>

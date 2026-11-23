@@ -357,7 +357,9 @@
     "installReady": "Install now (already downloaded)",
     "readyHint": "This update was fully downloaded and verified last time. The button below installs it directly and restarts the app — no re-download.",
     "pendingResume": "The last update did not finish. Install it now to continue.",
-    "installStuck": "The update did not finish installing. If an update is already downloaded, it will continue on the next launch; you can also retry later."
+    "installStuck": "The update did not finish installing. If an update is already downloaded, it will continue on the next launch; you can also retry later.",
+    "shellLine": "Shell version %{version} (build %{build})",
+    "packageLine": "Running code package %{version} (build %{build})"
   },
   "about": {
     "title": "About",
