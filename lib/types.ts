@@ -36,6 +36,14 @@ export interface Preferences {
   autoLockMinutes: number
   updateCheckIntervalDays: number
   lastUpdateCheckTs: number
+  /** 上次更新流程里已下载完成但没能重启应用的版本（整包/代码包都可能）。
+   *  下次启动若发现该版本仍然可用，跳过检查频率节流立即重新弹窗。 */
+  pendingUpdateVersion: string
+  pendingUpdateTs: number
+  /** 上一次「直接安装已下载代码包」的触发时间；>0 表示装过一次但版本
+   *  仍未更新（启动器可能拒绝了旧包），再次遇到已下载包时回退为重新
+   *  下载，避免反复重启进一个无效包。确认已最新时清零。 */
+  packageReadyInstallTs: number
   /** 是否从条目自己的网站抓取真实 favicon（缓存进库；关掉即零请求）。 */
   siteIcons: boolean
   /** 离线模式：不发起任何外部网络请求（站点图标抓取、更新检查与下载）。 */

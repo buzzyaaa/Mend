@@ -217,6 +217,12 @@ export function savePreferences(json: string): void {
   Vault.savePreferences(json)
 }
 
+/** 数据目录里是否已有完整下载、校验通过的代码包（updates/next.nshpkg）
+ *  在等下次启动应用；有则 UI 可以直接安装，不用重新下载。 */
+export function checkPackageReady(): boolean {
+  return Vault.checkPackageReady()
+}
+
 /** 条目网址对应的缓存站点图标（`data:` URI）；没有时为空串。
  *  同步、不联网：图标由原生侧的 `fetchSiteIcons` 抓回并缓存进库。 */
 export function siteIcon(url: string): string {

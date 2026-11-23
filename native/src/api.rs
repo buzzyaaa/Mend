@@ -82,6 +82,13 @@ impl Vault {
         service::save_preferences(json)
     }
 
+    /// Whether a fully downloaded, verified code package (`updates/next.nshpkg`
+    /// in the app data directory) is waiting for the next start. Lets the UI
+    /// offer to install it right away instead of downloading it again.
+    pub fn check_package_ready() -> Result<bool, String> {
+        service::check_package_ready()
+    }
+
     /// List entries for a bucket (`all`, `favorites`, `uncategorized`,
     /// `archive`, `trash`, `category`), optionally filtered by keyword/tag.
     /// Secret fields are decrypted only when a keyword is used.

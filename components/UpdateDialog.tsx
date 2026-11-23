@@ -2,15 +2,23 @@ import { Scroll, Text, token, View, windowSize } from 'nsh'
 import { Dialog, TextView } from 'nsh/base'
 import { t } from 'nsh/i18n'
 
-import { closeUpdatePrompt, startUpdate, updateApp, updatePackage } from '../lib/update'
+import { closeUpdatePrompt, startUpdate, updateApp, updatePackage, updatePackageReady } from '../lib/update'
+import { preferences } from '../lib/preferences'
 import { updatePromptOpen, updateTarget } from '../lib/state'
 
 import { Icon } from './Icon'
 import { ActionButton, IconButton, MODAL_BACKDROP_CLASS, MODAL_CLASS, ModalFrame } from './ui'
 
-/** 更新确认弹窗：固定高度，Changelog 区域独立滚动，底部两个操作按钮。 */
+/** 更新确认弹窗：固定高度，Changelog 区域独立滚动，底部两个操作按钮。
+ *  代码包已在本地校验通过（上次下载完没重启成功）时，标题下方提示
+ *  「无需重新下载」，按钮变为直接安装。 */
 export function UpdateDialog() {
   const isPackage = () => updateTarget() === 'package'
+  const ready = () => isPackage() && updatePackageReady()
+  const resumed = () => {
+    const pending = preferences().pendingUpdateVersion
+    return !ready() && pending !== '' && pending === version()
+  }
   const notes = () => (isPackage() ? updatePackage()?.notes : updateApp()?.notes)?.trim() ?? ''
   const version = () =>
     isPackage() ? (updatePackage()?.version ?? '') : (updateApp()?.version ?? '')
@@ -54,6 +62,14 @@ export function UpdateDialog() {
         </View>
 
         <Scroll class="min-h-0 flex-1" style={{ height: height() - 148 }} contentClass="p-4">
+          <If when={ready() || resumed()}>
+            <View class="mb-2 flex-row items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2">
+              <Icon name="download" size={13} color={token('primary')} />
+              <Text class="flex-1 text-[11px] text-foreground">
+                {ready() ? t('update.readyHint') : t('update.pendingResume')}
+              </Text>
+            </View>
+          </If>
           <View class="rounded-lg border border-border bg-background p-3">
             <If when={notes()}>
               {(value) => (
@@ -82,7 +98,7 @@ export function UpdateDialog() {
           <View class="flex-1" />
           <ActionButton label={t('common.cancel')} onPress={closeUpdatePrompt} />
           <ActionButton
-            label={t('update.updateNow')}
+            label={ready() ? t('update.installReady') : t('update.updateNow')}
             icon="download"
             variant="primary"
             testID="update-prompt-confirm"

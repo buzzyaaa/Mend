@@ -16,6 +16,9 @@ const DEFAULTS: Preferences = {
   autoLockMinutes: 15,
   updateCheckIntervalDays: 7,
   lastUpdateCheckTs: 0,
+  pendingUpdateVersion: '',
+  pendingUpdateTs: 0,
+  packageReadyInstallTs: 0,
   siteIcons: true,
   offline: false,
   recentVaults: [],
@@ -116,6 +119,14 @@ function sanitize(raw: unknown): Preferences {
       ? updateDays
       : DEFAULTS.updateCheckIntervalDays,
     lastUpdateCheckTs: Number.isFinite(lastCheck) && lastCheck >= 0 ? lastCheck : 0,
+    pendingUpdateVersion:
+      typeof value.pendingUpdateVersion === 'string' ? value.pendingUpdateVersion : '',
+    pendingUpdateTs: Number.isFinite(Number(value.pendingUpdateTs))
+      ? Math.max(0, Number(value.pendingUpdateTs))
+      : 0,
+    packageReadyInstallTs: Number.isFinite(Number(value.packageReadyInstallTs))
+      ? Math.max(0, Number(value.packageReadyInstallTs))
+      : 0,
     siteIcons: typeof value.siteIcons === 'boolean' ? value.siteIcons : DEFAULTS.siteIcons,
     offline: typeof value.offline === 'boolean' ? value.offline : DEFAULTS.offline,
     recentVaults: sanitizeRecentVaults(value.recentVaults),
@@ -208,4 +219,28 @@ export function setOffline(enabled: boolean): void {
 
 export function markUpdateChecked(): void {
   updatePreferences({ lastUpdateCheckTs: Date.now() })
+}
+
+/** 记下「下载完成但没能重启应用」的版本；下次启动据此跳过节流立即重提示。 */
+export function markPendingUpdate(version: string): void {
+  updatePreferences({ pendingUpdateVersion: version, pendingUpdateTs: Date.now() })
+}
+
+/** 待更新流程已走完（已最新 / 已重新提示并处理）：清掉记录。 */
+export function clearPendingUpdate(): void {
+  if (preferences().pendingUpdateVersion) {
+    updatePreferences({ pendingUpdateVersion: '', pendingUpdateTs: 0 })
+  }
+}
+
+/** 记录一次「直接安装已下载代码包」；再次启动仍见旧包时不再跳过下载。 */
+export function markPackageReadyInstall(): void {
+  updatePreferences({ packageReadyInstallTs: Date.now() })
+}
+
+/** 确认已是最新版本（或包已被启动器应用）：清掉防循环标记。 */
+export function clearPackageReadyInstall(): void {
+  if (preferences().packageReadyInstallTs) {
+    updatePreferences({ packageReadyInstallTs: 0 })
+  }
 }

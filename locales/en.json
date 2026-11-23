@@ -353,7 +353,11 @@
     "notesTitle": "What's new",
     "noNotes": "No release notes for this update.",
     "offlineSkipped": "Offline mode is on — no update request was made",
-    "running": "Updating — the app will restart when it finishes"
+    "running": "Updating — the app will restart when it finishes",
+    "installReady": "Install now (already downloaded)",
+    "readyHint": "This update was fully downloaded and verified last time. The button below installs it directly and restarts the app — no re-download.",
+    "pendingResume": "The last update did not finish. Install it now to continue.",
+    "installStuck": "The update did not finish installing. If an update is already downloaded, it will continue on the next launch; you can also retry later."
   },
   "about": {
     "title": "About",
