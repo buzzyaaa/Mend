@@ -13,6 +13,7 @@ import {
   isTrashView,
   keyword,
   presetsOpen,
+  requestDeleteSelected,
   selectedIds,
   setKeyword,
   setShowPasswords,
@@ -234,9 +235,18 @@ export function EntryList() {
             onPress={() => void copySelectedEntries()}
           />
           <ActionButton
-            label={t('common.close')}
+            label={t('entry.deleteSelected')}
+            icon="trash"
+            variant="danger-ghost"
+            class="h-6"
+            testID="delete-selected"
+            onPress={requestDeleteSelected}
+          />
+          <ActionButton
+            label={t('entry.clearSelection')}
             variant="ghost"
             class="h-6"
+            testID="clear-selection"
             onPress={clearSelection}
           />
         </If>

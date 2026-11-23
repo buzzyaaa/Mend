@@ -18,7 +18,7 @@
 - 旧 Tauri 2 + Vue 3 代码已移除；`src/`、`src-tauri/`、Vite/Tailwind 配置不再存在。
 - 数据兼容：应用 id 仍为 `com.mend.app`，库文件 `mend.db`、schema v6、Argon2 参数、XChaCha20 AAD 全部保持；旧库直接可用（`.mendbak` 容器仍在 core 里，但 UI 已不再提供导出/恢复）。
 - 已保留：建库/解锁/锁定/改主密码、条目 CRUD、分类 CRUD、**标签维护**（名称+颜色，独立弹窗，条目侧只能选）、搜索、排序、收藏、归档、回收站、预设值、强密码生成器、Markdown 备注、复制、打开网址、自动锁定、深浅色主题、中英文、**数据库文件自选**（打开/新建/恢复默认 + 在文件夹中显示；库文件自带主密码，拷走即备份，不做加密快照导出）。
-- 主要 UI 结构：桌面 master-detail（侧栏 + 列表 + 详情）；手机单栏（详情页 + 分类 Sheet）。系统标题栏；应用内 Header 放搜索/新增/预设/标签/设置/锁定（预设值与标签入口都是图标+文字）。
+- 主要 UI 结构：桌面侧栏 + 列表/卡片 + 行内操作（无详情面板/弹窗）；手机单栏（列表/卡片 + 分类 Sheet）。系统标题栏；应用内 Header 放搜索/新增/预设/标签/设置/锁定（预设值与标签入口都是图标+文字）。
 - 测试：`nsh test .`（native cargo test + TSX headless）；`cargo test --manifest-path core\Cargo.toml`；`npm run typecheck`。
 - 发布：`.github/workflows/release.yml` 打 `v*` tag 时构建 Windows/Linux/macOS 包、签名 OTA 包、生成签名 `latest.json` 并发布 GitHub Release；应用更新与 OTA 共用 `nsh.json` 的 `"updater"`，详见 `docs/10-release-update.md`。
 - 启动诊断（0.4.1）：`Vault.init` 前置探测数据目录/库文件写权限，不可写返回 `db_readonly`（含路径），Fatal 页显示实际数据库路径；不静默换库。详见 `docs/11-native-shell.md` §4。

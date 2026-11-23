@@ -2,7 +2,7 @@ import { List, platform, signal, Text, View, windowSize, type ListRef } from 'ns
 import { Scrollbar } from 'nsh/base'
 import { t } from 'nsh/i18n'
 
-import { displayedEntries, loadMoreEntries, selectEntry } from '../lib/state'
+import { displayedEntries, loadMoreEntries } from '../lib/state'
 import type { EntrySummary } from '../lib/types'
 import {
   categoryOf,
@@ -31,12 +31,7 @@ function EntryCard(props: { entry: () => EntrySummary }) {
   const category = () => categoryOf(entry())
 
   return (
-    <View
-      class="cursor-pointer gap-2 rounded-xl border border-border bg-card p-3 shadow-sm transition hover:border-primary/40 hover:shadow-md"
-      accessibilityLabel={entry().title}
-      role="button"
-      onPress={() => void selectEntry(entry().id)}
-    >
+    <View class="gap-2 rounded-xl border border-border bg-card p-3 shadow-sm" accessibilityLabel={entry().title}>
       <View class="flex-row items-start gap-2">
         <View class="min-w-0 flex-1">
           <EntryTitleCell entry={entry} category={category} card />

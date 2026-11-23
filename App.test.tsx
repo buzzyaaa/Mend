@@ -133,8 +133,13 @@ test('sets up a vault, creates an entry, and locks', async () => {
   await app.waitFor('text:octocat')
   expect(app.shows('id:table-header-name')).toBe(false)
   expect(app.shows('id:category-edge')).toBe(false)
+  // 详情弹窗已整体删除：卡片态与列表态都没有它的关闭按钮/弹层标签。
+  expect(app.shows('id:detail-close')).toBe(false)
+  expect(app.shows('label:View details')).toBe(false)
   await app.press('id:view-list')
   await app.waitFor('id:table-header-name')
+  expect(app.shows('id:detail-close')).toBe(false)
+  expect(app.shows('label:View details')).toBe(false)
 
   // 列宽拖动已整体取消：任何列都不再有把手，工具栏也没有「重置列宽」入口。
   expect(app.shows('label:Reset')).toBe(false)
@@ -201,6 +206,62 @@ test('sets up a vault, creates an entry, and locks', async () => {
   await app.waitFor('label:Master password')
 })
 
+// 多选底部工具栏：批量删除必须先二次确认，取消不动数据，确认后条目消失且退出多选态。
+test('batch delete selected entries requires confirmation', async () => {
+  const app = await open('./App.tsx', { platform: 'windows' })
+  await app.setViewport(1100, 780)
+  await app.waitFor('label:Master password')
+  if (app.shows('label:Confirm master password')) {
+    await app.type('label:Master password', 'test-password-1234')
+    await app.type('label:Confirm master password', 'test-password-1234')
+    await app.press('Create and enter')
+  } else {
+    await app.type('label:Master password', 'test-password-1234')
+    await app.press('text:Unlock')
+  }
+  await app.waitFor('text:Passwords')
+
+  // 单独建一条用于删除，避免影响后续用例依赖的 GitHub 条目。
+  await app.press('id:add-entry')
+  await app.waitFor('text:New entry')
+  await app.type('label:Title', 'Batch Delete Target')
+  await app.press('text:Save')
+  await app.waitFor('text:Batch Delete Target')
+
+  // 未勾选时没有批量操作；勾选后按钮文案由 i18n 提供。
+  expect(app.shows('id:delete-selected')).toBe(false)
+  await app.press('label:Batch Delete Target')
+  await app.waitFor('id:delete-selected')
+  expect(app.texts()).toContain('1 selected')
+  expect(app.texts()).toContain('Clear selection')
+  // 批量删除是危险动作：文字用 destructive 红，与「取消选择」的常规前景色区分。
+  expect(app.spanStyle('id:delete-selected >> text:Delete selected').color).not.toBe(
+    app.spanStyle('id:clear-selection >> text:Clear selection').color,
+  )
+
+  // 取消路径：条目仍在，多选态保持。
+  await app.press('id:delete-selected')
+  await app.wait(100)
+  expect(app.texts().join(' ')).toContain('Delete the selected 1 entries')
+  await app.press('id:confirm-cancel')
+  await app.wait(100)
+  expect(app.texts()).toContain('Batch Delete Target')
+  expect(app.shows('id:delete-selected')).toBe(true)
+
+  // 确认路径：条目移除、选择清空，工具栏回到普通状态。
+  await app.press('id:delete-selected')
+  await app.waitFor('id:confirm-ok')
+  await app.press('id:confirm-ok')
+  await app.wait(200)
+  expect(app.texts()).not.toContain('Batch Delete Target')
+  expect(app.shows('id:delete-selected')).toBe(false)
+  expect(app.shows('label:Clear selection')).toBe(false)
+  expect(app.texts()).toContain('Deleted 1 entries')
+
+  await app.press('label:Lock')
+  await app.waitFor('label:Master password')
+})
+
 // 标签改为库内独立维护（与预设值同级）：名称 + 颜色在右上角「标签」弹窗里
 // 新建/编辑/删除；条目编辑里只能从列表点选，标签列表为空时是灰色不可选提示，
 // 不再有逗号分隔的自由输入。
@@ -238,15 +299,22 @@ test('tags are maintained in a dialog and only selectable on entries', async () 
   await app.waitFor('label:finance')
   await app.press('id:tags-close')
 
-  // 再次新建条目：标签改成和「标签筛选」一致的下拉多选，点开菜单连续勾选。
+  // 再次新建条目：标签用官方 Combobox 多选，弹层能在编辑 Dialog 里浮出并连续勾选。
   await app.press('id:add-entry')
   await app.waitFor('text:New entry')
-  await app.waitFor('id:entry-tags-trigger')
-  await app.press('id:entry-tags-trigger')
-  await app.waitFor('label:work')
-  await app.press('label:work')
-  await app.press('label:finance')
-  await app.press('id:entry-tags-trigger')
+  await app.waitFor('id:entry-tags-combobox')
+  // 输入即打开并筛选，连续选两项；这条路径与真实鼠标操作一致。
+  await app.type('id:entry-tags-input', 'w')
+  await app.waitFor('text:work')
+  await app.press('text:work')
+  await app.clear('id:entry-tags-input')
+  await app.type('id:entry-tags-input', 'f')
+  await app.waitFor('text:finance')
+  await app.press('text:finance')
+  await app.clear('id:entry-tags-input')
+  // 选中的两个标签以胶囊形式留在组合框这一行，而不是另起一段。
+  expect(app.shows('id:entry-tags-combobox >> label:work')).toBe(true)
+  expect(app.shows('id:entry-tags-combobox >> label:finance')).toBe(true)
   await app.type('label:Title', 'Tagged')
   await app.press('text:Save')
   await app.waitFor('text:Tagged')
@@ -459,6 +527,69 @@ test('truncated cells reveal full text on hover and copy full values', async () 
   expect(app.clipboard()).toBe(username)
 
   await app.press('label:Lock')
+  await app.waitFor('label:Master password')
+})
+
+// 导航栏底部一组含锁定/离线/切换库/设置；离线开关必须二次确认，
+// 主题改成卡片选择（三张卡都可点），两者都通过 testID 稳定定位。
+test('bottom rail has offline shortcut with confirmation, and theme uses cards', async () => {
+  let openedUrl: string | null = null
+  const app = await open('./App.tsx', {
+    platform: 'windows',
+    modules: {
+      nsh: {
+        openUrl: (url: string) => {
+          openedUrl = url
+          return { opened: true }
+        },
+      },
+    },
+  })
+  await app.setViewport(1100, 780)
+  await app.waitFor('label:Master password')
+  if (app.shows('label:Confirm master password')) {
+    await app.type('label:Master password', 'test-password-1234')
+    await app.type('label:Confirm master password', 'test-password-1234')
+    await app.press('Create and enter')
+  } else {
+    await app.type('label:Master password', 'test-password-1234')
+    await app.press('text:Unlock')
+  }
+  await app.waitFor('text:Passwords')
+
+  expect(app.shows('id:nav-lock')).toBe(true)
+  expect(app.shows('id:nav-offline')).toBe(true)
+  // 开启离线模式必须先弹二次确认，且说明里点明图标与更新两类请求。
+  await app.press('id:nav-offline')
+  await app.waitFor('text:Turn on anyway')
+  expect(app.texts().join(' ')).toContain('site icons')
+  await app.press('text:Turn on anyway')
+  await app.wait(150)
+
+  await app.press('id:nav-settings')
+  await app.waitFor('text:Appearance & behavior')
+  for (const theme of ['light', 'dark', 'system']) {
+    expect(app.shows(`id:settings-theme-${theme}`)).toBe(true)
+  }
+  await app.press('id:settings-theme-dark')
+  await app.wait(150)
+  // 安全分区的离线开关与导航栏快捷按钮是同一个偏好，文案必须一致出现。
+  expect(app.texts()).toContain('Offline mode')
+  await app.press('id:nav-offline')
+  await app.wait(150)
+
+  // 「关于」卡在更新分区末尾：两个整卡入口显示完整网址，点卡片本体就交给浏览器。
+  expect(app.shows('id:about-link-github')).toBe(true)
+  expect(app.shows('id:about-link-cnb')).toBe(true)
+  const allText = app.texts()
+  expect(allText).toContain('https://github.com/buzzyaaa/Mend')
+  expect(allText).toContain('https://cnb.cool/smybxg/Mend')
+  expect(allText.filter((text) => text === 'Open now').length).toBeGreaterThanOrEqual(2)
+  await app.press('id:about-link-cnb')
+  await app.wait(100)
+  expect(openedUrl).toBe('https://cnb.cool/smybxg/Mend')
+
+  await app.press('id:nav-lock')
   await app.waitFor('label:Master password')
 })
 

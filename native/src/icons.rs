@@ -55,6 +55,22 @@ pub fn parse_site(url: &str) -> Option<Site> {
     if authority.is_empty() || authority.len() > 253 || !valid_authority(authority) {
         return None;
     }
+    // 抢在缓存查询与网络请求之前判掉「不是网址」的输入（例如随手填的 `fa`）：
+    // 只有域名 / IP 字面量 / localhost 才算站点，裸词不发任何请求、也不留失败记录。
+    let host = if authority.starts_with('[') {
+        authority
+            .split_once(']')
+            .map(|(host, _)| format!("{host}]"))
+            .unwrap_or_default()
+    } else {
+        authority
+            .split_once(':')
+            .map_or(authority, |(host, _)| host)
+            .to_string()
+    };
+    if !valid_host(&host) {
+        return None;
+    }
     let key = strip_default_port(authority)
         .trim_end_matches('.')
         .to_string();
@@ -90,6 +106,61 @@ fn valid_authority(authority: &str) -> bool {
             !host.is_empty() && !port.is_empty() && port.chars().all(|c| c.is_ascii_digit())
         }
     }
+}
+
+/// 只有这些形状才算「网址里的主机」：点号分隔的域名、IPv4/IPv6 字面量、
+/// 或 localhost。裸词（`fa`、`intranet`）一律拒绝——那通常是缩写或误输入，
+/// 拿它去发请求既浪费一次网络往返，还会在库里留下退避记录。
+fn valid_host(host: &str) -> bool {
+    if host.is_empty() || host.len() > 253 {
+        return false;
+    }
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    if let Some(inner) = host.strip_prefix('[').and_then(|h| h.strip_suffix(']')) {
+        // IPv6：只含十六进制数字、冒号与 IPv4 嵌入段里的点。
+        return !inner.is_empty()
+            && inner
+                .chars()
+                .all(|c| c.is_ascii_hexdigit() || matches!(c, ':' | '.'));
+    }
+    if is_ipv4(host) {
+        return true;
+    }
+    let labels: Vec<&str> = host.split('.').collect();
+    if labels.len() < 2 || !labels.iter().all(|label| valid_label(label)) {
+        return false;
+    }
+    // 末段是 TLD：至少 2 位、字母开头，挡掉 `foo.1` / `foo.-x` 这类伪域名。
+    let tld = labels[labels.len() - 1];
+    tld.len() >= 2
+        && tld.as_bytes()[0].is_ascii_alphabetic()
+        && tld.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
+fn is_ipv4(host: &str) -> bool {
+    let parts: Vec<&str> = host.split('.').collect();
+    parts.len() == 4
+        && parts.iter().all(|part| {
+            !part.is_empty()
+                && part.len() <= 3
+                && part.chars().all(|c| c.is_ascii_digit())
+                && part.parse::<u8>().is_ok()
+        })
+}
+
+fn valid_label(label: &str) -> bool {
+    if label.is_empty() || label.len() > 63 {
+        return false;
+    }
+    let bytes = label.as_bytes();
+    if bytes[0] == b'-' || bytes[bytes.len() - 1] == b'-' {
+        return false;
+    }
+    label
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
 }
 
 fn strip_default_port(authority: &str) -> &str {
@@ -395,6 +466,18 @@ mod tests {
 
         let default_port = parse_site("https://example.com:443/x").unwrap();
         assert_eq!(default_port.key, "example.com");
+
+        // 裸词不是网址：不进待抓队列、不发请求、不留缓存记录。
+        for bare in [
+            "fa", "intranet", "a", "foo.1", "foo..com", "-foo.com", "fa.",
+        ] {
+            assert!(parse_site(bare).is_none(), "should reject: {bare}");
+        }
+        // 域名、IP 与 localhost 仍照常识别（内网主机不能被误伤）。
+        assert_eq!(parse_site("fa.com").unwrap().key, "fa.com");
+        assert_eq!(parse_site("127.0.0.1:8080").unwrap().key, "127.0.0.1:8080");
+        assert_eq!(parse_site("localhost:3000").unwrap().key, "localhost:3000");
+        assert_eq!(parse_site("[::1]").unwrap().key, "[::1]");
 
         assert!(parse_site("").is_none());
         assert!(parse_site("mailto:me@example.com").is_none());

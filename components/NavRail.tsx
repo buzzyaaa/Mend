@@ -5,19 +5,19 @@ import { t } from 'nsh/i18n'
 import { preferences } from '../lib/preferences'
 import {
   activePage,
-  closeDetail,
   lockVault,
   pickExistingVaultFile,
   pickNewVaultFile,
   status,
   switchToVaultFile,
+  toggleOfflineMode,
   useDefaultVaultFile,
 } from '../lib/state'
 import { Icon } from './Icon'
 import { IconButton } from './ui'
 
-/** 解锁后的左侧功能导航栏：列表 / 设置 / 锁定，底部是「切换数据库」入口。
- *  紧凑布局下复用同一组动作（含切换位），横向放在内容区下方。
+/** 解锁后的功能导航栏：顶部只留「列表」，底部一组依次是
+ *  锁定 → 离线模式 → 切换数据库 → 设置（紧凑布局横向同序）。
  *  选中项用品牌色底 + 品牌色图标，与设置子导航的选中态一致。 */
 export function NavRail(props: { compact?: boolean }) {
   const currentPath = () => status().dbPath
@@ -115,34 +115,22 @@ export function NavRail(props: { compact?: boolean }) {
     </Menu>
   )
 
-  const actions = (
+  const entriesButton = (
+    <IconButton
+      icon="list"
+      label={t('entry.listTitle')}
+      testID="nav-entries"
+      active={activePage() === 'entries'}
+      iconColor={activePage() === 'entries' ? token('primary') : undefined}
+      size={18}
+      class={'h-10 w-10 rounded-xl ' + (activePage() === 'entries' ? 'bg-primary/10' : '')}
+      onPress={() => activePage.set('entries')}
+    />
+  )
+
+  /** 底部一组：锁定 → 离线 → 切换数据库 → 设置。 */
+  const bottomActions = (
     <>
-      <IconButton
-        icon="list"
-        label={t('entry.listTitle')}
-        testID="nav-entries"
-        active={activePage() === 'entries'}
-        iconColor={activePage() === 'entries' ? token('primary') : undefined}
-        size={18}
-        class={'h-10 w-10 rounded-xl ' + (activePage() === 'entries' ? 'bg-primary/10' : '')}
-        onPress={() => {
-          closeDetail()
-          activePage.set('entries')
-        }}
-      />
-      <IconButton
-        icon="settings"
-        label={t('nav.settings')}
-        testID="nav-settings"
-        active={activePage() === 'settings'}
-        iconColor={activePage() === 'settings' ? token('primary') : undefined}
-        size={18}
-        class={'h-10 w-10 rounded-xl ' + (activePage() === 'settings' ? 'bg-primary/10' : '')}
-        onPress={() => {
-          closeDetail()
-          activePage.set('settings')
-        }}
-      />
       <IconButton
         icon="lock"
         label={t('header.lock')}
@@ -151,23 +139,44 @@ export function NavRail(props: { compact?: boolean }) {
         class="h-10 w-10 rounded-xl"
         onPress={() => void lockVault()}
       />
+      <IconButton
+        icon="wifi-off"
+        label={t('settings.offline')}
+        testID="nav-offline"
+        active={preferences().offline}
+        iconColor={preferences().offline ? token('primary') : undefined}
+        size={18}
+        class={'h-10 w-10 rounded-xl ' + (preferences().offline ? 'bg-primary/10' : '')}
+        onPress={() => toggleOfflineMode(!preferences().offline)}
+      />
+      {switcher}
+      <IconButton
+        icon="settings"
+        label={t('nav.settings')}
+        testID="nav-settings"
+        active={activePage() === 'settings'}
+        iconColor={activePage() === 'settings' ? token('primary') : undefined}
+        size={18}
+        class={'h-10 w-10 rounded-xl ' + (activePage() === 'settings' ? 'bg-primary/10' : '')}
+        onPress={() => activePage.set('settings')}
+      />
     </>
   )
 
   if (props.compact) {
     return (
       <View class="flex-row items-center justify-around border-t border-border bg-card px-2 py-1">
-        {actions}
-        {switcher}
+        {entriesButton}
+        {bottomActions}
       </View>
     )
   }
 
   return (
     <View class="h-full w-16 shrink-0 items-center gap-2 border-r border-border bg-secondary py-3">
-      {actions}
+      {entriesButton}
       <View class="flex-1" />
-      {switcher}
+      {bottomActions}
     </View>
   )
 }

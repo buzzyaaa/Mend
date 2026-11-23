@@ -80,6 +80,11 @@ export function closeUpdatePrompt(): void {
 /** Check for an OTA package first, then for a whole-app update. */
 export async function checkForUpdates(): Promise<void> {
   if (updateBusy()) return
+  // 离线模式：连一次请求都不发，也不显示「已是最新版本」这类误导结果。
+  if (preferences().offline) {
+    toast(t('update.offlineSkipped'), 'info')
+    return
+  }
   updateBusy.set(true)
   updateError.set('')
   updateProgress.set(0)
@@ -111,6 +116,7 @@ export async function checkForUpdatesOnStartup(): Promise<void> {
   // 开发/测试运行不检查：updater 在这类环境直接返回 null，且测试替身可能
   // 制造假更新弹窗干扰用例；生产包才真正请求。
   if (appInfo().development) return
+  if (preferences().offline) return
 
   const { updateCheckIntervalDays: days, lastUpdateCheckTs: last } = preferences()
   // last === 0 表示从未检查过，必定检查一次；days === 0 表示每次启动都查。
@@ -147,6 +153,11 @@ function progressOf(received: number, total?: number | null): number {
 export async function startUpdate(): Promise<void> {
   const target = updateTarget()
   if (!target || updateBusy() || updateRunning()) return
+  // 更新包下载同样属于外部请求，离线模式下直接拒绝。
+  if (preferences().offline) {
+    toast(t('update.offlineSkipped'), 'info')
+    return
+  }
   const packageUpdate = target === 'package' ? updatePackage() : null
   const appUpdate = target === 'app' ? updateApp() : null
   if (!packageUpdate && !appUpdate) return

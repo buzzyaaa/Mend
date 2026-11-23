@@ -38,6 +38,8 @@ export interface Preferences {
   lastUpdateCheckTs: number
   /** 是否从条目自己的网站抓取真实 favicon（缓存进库；关掉即零请求）。 */
   siteIcons: boolean
+  /** 离线模式：不发起任何外部网络请求（站点图标抓取、更新检查与下载）。 */
+  offline: boolean
   /** 最近使用的库文件绝对路径（最新在前，去重限长）；偏好在全局数据目录，切库不丢。 */
   recentVaults: string[]
   /** Desktop three-column widths (sidebar, list); the detail column takes the rest. */

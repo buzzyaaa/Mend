@@ -20,7 +20,7 @@ import { touchActivity } from '../lib/state'
 import { Icon, type IconName } from './Icon'
 import { ToastHost } from './ToastHost'
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-ghost'
 
 const BUTTON_CLASS: Record<ButtonVariant, string> = {
   primary:
@@ -35,6 +35,10 @@ const BUTTON_CLASS: Record<ButtonVariant, string> = {
   danger:
     'h-8 flex-row items-center justify-center gap-1.5 rounded-md bg-destructive px-2.5 ' +
     'text-white transition hover:opacity-90 active:opacity-75 disabled:opacity-45',
+  /** 危险动作的轻量版：只把文字/图标染红，不铺满底色，适合工具栏里的小按钮。 */
+  'danger-ghost':
+    'h-8 flex-row items-center justify-center gap-1.5 rounded-md px-2.5 text-destructive ' +
+    'transition hover:bg-destructive/10 active:opacity-75 disabled:opacity-45',
 }
 
 /** 所有文字按钮统一的小手光标；禁用态由 Button 的 disabled 变体接管。 */
@@ -128,7 +132,9 @@ export function ActionButton(props: {
                 ? token('primary-foreground')
                 : variant === 'danger'
                   ? '#ffffff'
-                  : token('foreground')
+                  : variant === 'danger-ghost'
+                    ? token('destructive')
+                    : token('foreground')
             }
           />
         ) : null}
@@ -139,7 +145,9 @@ export function ActionButton(props: {
                 ? 'text-xs font-medium text-primary-foreground'
                 : variant === 'danger'
                   ? 'text-xs font-medium text-white'
-                  : 'text-xs font-medium text-foreground'
+                  : variant === 'danger-ghost'
+                    ? 'text-xs font-medium text-destructive'
+                    : 'text-xs font-medium text-foreground'
             }
           >
             {props.label}

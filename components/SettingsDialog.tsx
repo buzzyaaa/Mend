@@ -3,6 +3,7 @@ import type { Bounds, ScrollEvent, ScrollRef, ViewRef } from 'nsh'
 import { t } from 'nsh/i18n'
 
 import { errorText } from '../lib/errors'
+import type { ThemeMode } from '../lib/types'
 import {
   checkForUpdates,
   openUpdatePrompt,
@@ -18,12 +19,14 @@ import {
   confirm,
   copyText,
   deviceUnlockOn,
+  openExternal,
   pickExistingVaultFile,
   pickNewVaultFile,
   setDeviceUnlock,
   showError,
   status,
   toast,
+  toggleOfflineMode,
   useDefaultVaultFile,
 } from '../lib/state'
 import {
@@ -54,6 +57,23 @@ import { Icon, type IconName } from './Icon'
 
 const AUTO_LOCK_OPTIONS = [0, 1, 5, 10, 15, 30, 60]
 const UPDATE_INTERVAL_OPTIONS = [0, 7, 30, 365]
+
+/** 「关于」里的外链：整张卡都是点击区，图标只作平台识别。 */
+const ABOUT_LINKS: ReadonlyArray<{ key: string; icon: IconName; url: string }> = [
+  { key: 'github', icon: 'github', url: 'https://github.com/buzzyaaa/Mend' },
+  { key: 'cnb', icon: 'cnb', url: 'https://cnb.cool/smybxg/Mend' },
+]
+
+/** 主题卡选项：数据驱动渲染，后续加主题只需追加一项并补一个预览画法。 */
+const THEME_CHOICES: ReadonlyArray<{
+  value: ThemeMode
+  titleKey: string
+  preview: 'light' | 'dark' | 'system'
+}> = [
+  { value: 'light', titleKey: 'settings.themeLight', preview: 'light' },
+  { value: 'dark', titleKey: 'settings.themeDark', preview: 'dark' },
+  { value: 'system', titleKey: 'settings.themeSystem', preview: 'system' },
+]
 
 /** 设置页分区表：子导航与内容锚点都由此生成。
  *  以后加分区只需在这里追加一项，并在 Scroll 里放一个带 anchor 的 View。 */
@@ -322,20 +342,39 @@ export function SettingsPage() {
                     label={t('settings.theme')}
                     hint={t('settings.themeHint')}
                     icon="sun"
-                    class={controlClass()}
+                    class="w-full"
                   >
-                    <SelectField
-                      items={[
-                        { value: 'system', title: t('settings.themeSystem') },
-                        { value: 'light', title: t('settings.themeLight') },
-                        { value: 'dark', title: t('settings.themeDark') },
-                      ]}
-                      value={preferences().theme}
-                      onChange={(value) => {
-                        if (value) setTheme(value as import('../lib/types').ThemeMode)
-                      }}
-                      class="w-full"
-                    />
+                    <View class="flex-row flex-wrap gap-2">
+                      <Each of={THEME_CHOICES} key={(choice) => choice.value}>
+                        {(choice) => {
+                          const selected = () => preferences().theme === choice().value
+                          return (
+                            <View
+                              role="button"
+                              testID={`settings-theme-${choice().value}`}
+                              accessibilityLabel={t(choice().titleKey)}
+                              class={
+                                'min-w-[92px] max-w-[160px] flex-1 cursor-pointer gap-1.5 rounded-lg border p-1.5 transition ' +
+                                (selected()
+                                  ? 'border-primary ring-1 ring-primary '
+                                  : 'border-border hover:bg-accent ')
+                              }
+                              onPress={() => setTheme(choice().value)}
+                            >
+                              <ThemePreview kind={choice().preview} />
+                              <Text
+                                class={
+                                  'text-center text-[11px] ' +
+                                  (selected() ? 'font-medium text-primary' : 'text-muted-foreground')
+                                }
+                              >
+                                {t(choice().titleKey)}
+                              </Text>
+                            </View>
+                          )
+                        }}
+                      </Each>
+                    </View>
                   </Field>
                   <Field
                     label={t('settings.language')}
@@ -424,6 +463,13 @@ export function SettingsPage() {
                   leading
                 />
                 <WarningBanner text={t('settings.deviceUnlockWarning')} />
+                <SwitchField
+                  checked={preferences().offline}
+                  onChange={(checked) => toggleOfflineMode(checked)}
+                  label={t('settings.offline')}
+                  hint={t('settings.offlineHint')}
+                  leading
+                />
               </SettingsCard>
 
               <SettingsCard>
@@ -650,9 +696,79 @@ export function SettingsPage() {
                   </View>
                 </View>
               </SettingsCard>
+
+              {/* 关于：源码与镜像入口，整张卡都是跳转区（用户主动打开浏览器，不受离线模式拦截）。 */}
+              <SettingsCard>
+                <CardHeader icon="info" title={t('about.title')} hint={t('about.hint')} />
+                <View class="gap-2.5">
+                  <Each of={ABOUT_LINKS} key={(link) => link.key}>
+                    {(link) => (
+                      <View
+                        role="button"
+                        testID={`about-link-${link().key}`}
+                        accessibilityLabel={`${t('about.open')} ${link().url}`}
+                        class="flex-row items-center gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2.5 cursor-pointer transition hover:bg-accent active:opacity-70"
+                        onPress={() => void openExternal(link().url)}
+                      >
+                        <View class="h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                          <Icon name={link().icon} size={17} color={token('primary')} />
+                        </View>
+                        <View class="min-w-0 flex-1 gap-0.5">
+                          <Text class="text-xs font-medium text-foreground">
+                            {t('about.open')}
+                          </Text>
+                          <Text
+                            class="text-[11px] text-muted-foreground"
+                            style={{ numberOfLines: 1 }}
+                          >
+                            {link().url}
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                  </Each>
+                </View>
+              </SettingsCard>
             </View>
           </Scroll>
         </View>
+    </View>
+  )
+}
+
+/** 主题卡缩略图：用固定色画一个「窗口」，跟随系统则左右各画一半浅/深。
+ *  这里故意不用主题 token —— 缩略图要忠实呈现该主题本身，而不是当前主题。 */
+function ThemePreview(props: { kind: 'light' | 'dark' | 'system' }) {
+  const light = (
+    <View class="h-full flex-1 gap-1 p-1.5" style={{ backgroundColor: '#f4f6ff' }}>
+      <View class="flex-row gap-0.5">
+        <View class="h-1 w-1 rounded-full" style={{ backgroundColor: '#c9d2e8' }} />
+        <View class="h-1 w-1 rounded-full" style={{ backgroundColor: '#c9d2e8' }} />
+      </View>
+      <View class="h-1 w-9 rounded-full" style={{ backgroundColor: '#cfd8ec' }} />
+      <View class="h-1 w-6 rounded-full" style={{ backgroundColor: '#dfe5f2' }} />
+      <View class="h-1 w-8 rounded-full" style={{ backgroundColor: '#dfe5f2' }} />
+    </View>
+  )
+  const dark = (
+    <View class="h-full flex-1 gap-1 p-1.5" style={{ backgroundColor: '#1b1f3a' }}>
+      <View class="flex-row gap-0.5">
+        <View class="h-1 w-1 rounded-full" style={{ backgroundColor: '#5b6494' }} />
+        <View class="h-1 w-1 rounded-full" style={{ backgroundColor: '#5b6494' }} />
+      </View>
+      <View class="h-1 w-9 rounded-full" style={{ backgroundColor: '#4a5488' }} />
+      <View class="h-1 w-6 rounded-full" style={{ backgroundColor: '#333c6b' }} />
+      <View class="h-1 w-8 rounded-full" style={{ backgroundColor: '#333c6b' }} />
+    </View>
+  )
+  return (
+    <View class="h-12 w-full flex-row overflow-hidden rounded-md border border-border">
+      {props.kind === 'light' ? light : props.kind === 'dark' ? dark : (
+        <>
+          {light}
+          {dark}
+        </>
+      )}
     </View>
   )
 }

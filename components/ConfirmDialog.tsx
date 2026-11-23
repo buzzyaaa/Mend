@@ -30,11 +30,13 @@ export function ConfirmDialog() {
               <ActionButton
                 label={t('common.cancel')}
                 variant="ghost"
+                testID="confirm-cancel"
                 onPress={() => confirm.set(null)}
               />
               <ActionButton
                 label={state().confirmLabel}
                 variant={state().destructive ? 'danger' : 'primary'}
+                testID="confirm-ok"
                 onPress={() => {
                   const action = state().onConfirm
                   confirm.set(null)

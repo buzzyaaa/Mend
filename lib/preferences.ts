@@ -17,6 +17,7 @@ const DEFAULTS: Preferences = {
   updateCheckIntervalDays: 7,
   lastUpdateCheckTs: 0,
   siteIcons: true,
+  offline: false,
   recentVaults: [],
   columnSizes: [...DEFAULT_COLUMN_SIZES],
   visibleColumns: { credentials: true, contact: true, notes: true },
@@ -116,6 +117,7 @@ function sanitize(raw: unknown): Preferences {
       : DEFAULTS.updateCheckIntervalDays,
     lastUpdateCheckTs: Number.isFinite(lastCheck) && lastCheck >= 0 ? lastCheck : 0,
     siteIcons: typeof value.siteIcons === 'boolean' ? value.siteIcons : DEFAULTS.siteIcons,
+    offline: typeof value.offline === 'boolean' ? value.offline : DEFAULTS.offline,
     recentVaults: sanitizeRecentVaults(value.recentVaults),
     columnSizes: sanitizeColumns(value.columnSizes),
     visibleColumns: sanitizeVisibleColumns(value.visibleColumns),
@@ -197,6 +199,11 @@ export function setUpdateCheckIntervalDays(days: number): void {
 /** 网站图标开关：关掉之后不再有任何抓取请求，列表回退到内置图标。 */
 export function setSiteIcons(enabled: boolean): void {
   updatePreferences({ siteIcons: enabled })
+}
+
+/** 离线模式总开关：所有联网入口（图标抓取、更新检查与下载）都读这个偏好。 */
+export function setOffline(enabled: boolean): void {
+  updatePreferences({ offline: enabled })
 }
 
 export function markUpdateChecked(): void {

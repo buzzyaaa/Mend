@@ -5,7 +5,6 @@ import { t } from 'nsh/i18n'
 import { AppHeader } from '../components/AppHeader'
 import { CategoryEditor } from '../components/CategoryEditor'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { EntryDetail } from '../components/EntryDetail'
 import { EntryEditor } from '../components/EntryEditor'
 import { EntryList } from '../components/EntryList'
 import { NavRail } from '../components/NavRail'
@@ -24,10 +23,7 @@ import {
   activePage,
   categoriesSheetOpen,
   categoryEditor,
-  closeDetail,
-  detailOpen,
   entryEditor,
-  selected,
   startAutoLock,
 } from '../lib/state'
 
@@ -139,38 +135,6 @@ export function MainScreen() {
       <NotesDialog />
       <ConfirmDialog />
       <UpdateProgressHost />
-
-      {/* 列表里的「查看详情」按钮统一打开弹窗；右侧详情栏已移除。 */}
-      <Dialog
-        open={detailOpen() && selected() !== null}
-        class={MODAL_CLASS}
-        backdropClass={MODAL_BACKDROP_CLASS}
-        closeOnBackdropPress
-        onCancel={closeDetail}
-        onOpenChange={(event) => {
-          if (!event.open) closeDetail()
-        }}
-        accessibilityLabel={t('entry.details')}
-        style={{ width: 720, maxWidth: '94%' }}
-      >
-        <ModalFrame
-          class="overflow-hidden rounded-xl border border-border bg-card shadow-xl"
-          maxHeight={Math.max(360, windowSize().height - 72)}
-        >
-          <View class="flex-row items-center justify-between border-b border-border px-3 py-2">
-            <Text class="flex-1 text-sm font-semibold text-foreground" style={{ numberOfLines: 1 }}>
-              {selected()?.title ?? t('entry.details')}
-            </Text>
-            <IconButton
-              icon="close"
-              label={t('common.close')}
-              testID="detail-close"
-              onPress={closeDetail}
-            />
-          </View>
-          <EntryDetail compact />
-        </ModalFrame>
-      </Dialog>
 
       <Dialog
         open={categoriesSheetOpen()}

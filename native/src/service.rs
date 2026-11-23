@@ -1752,6 +1752,9 @@ async fn fetch_site_icons_async(limit: u32) -> Result<IconFetchReport, String> {
                 }
             }
         }
+        // 老版本曾把 `fa` 这类裸词当主机名，失败后留下带退避计数的缓存行。
+        // 抓取时顺手剔除；清理失败不影响本次结果，下次还会再试。
+        let _ = db::prune_site_icons(conn, |host| icons::parse_site(host).is_some());
         pending_icon_count(conn)?
     };
     Ok(IconFetchReport { fetched, remaining })

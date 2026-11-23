@@ -1279,6 +1279,33 @@ pub fn list_entry_urls(conn: &Connection) -> MendResult<Vec<String>> {
     Ok(urls)
 }
 
+/// 剔除历史遗留的非法缓存行：老版本把 `fa` 这类裸词当主机名，抓失败后
+/// 留下了带退避计数的行。判定规则由调用方给出（core 不依赖 native 的解析器）。
+pub fn prune_site_icons<F>(conn: &Connection, keep: F) -> MendResult<u64>
+where
+    F: Fn(&str) -> bool,
+{
+    let hosts: Vec<String> = {
+        let mut stmt = conn
+            .prepare("SELECT host FROM site_icons")
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(db_err)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(db_err)?
+    };
+    let mut stmt = conn
+        .prepare("DELETE FROM site_icons WHERE host = ?1")
+        .map_err(db_err)?;
+    let mut removed = 0u64;
+    for host in hosts {
+        if !keep(&host) {
+            removed += stmt.execute(params![host]).map_err(db_err)? as u64;
+        }
+    }
+    Ok(removed)
+}
+
 /// 清空图标缓存，返回删掉的行数。
 pub fn clear_site_icons(conn: &Connection) -> MendResult<u64> {
     let removed = conn
@@ -1894,6 +1921,16 @@ mod tests {
             .unwrap();
         assert!(state.has_icon);
         assert_eq!(state.fail_count, 0);
+
+        // 历史裸词（如 `fa`）由调用方判定为非法，清理只删它、不动正常行。
+        mark_site_icon_failed(&conn, "fa", 50).unwrap();
+        assert_eq!(
+            prune_site_icons(&conn, |host| host.contains('.')).unwrap(),
+            1
+        );
+        let states = site_icon_states(&conn).unwrap();
+        assert_eq!(states.len(), 1);
+        assert_eq!(states[0].host, "mail.example.com");
 
         assert_eq!(clear_site_icons(&conn).unwrap(), 1);
         assert!(site_icon_states(&conn).unwrap().is_empty());

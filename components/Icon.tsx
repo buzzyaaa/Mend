@@ -18,6 +18,7 @@ import clipboardList from '../assets/icons/clipboard-list.svg'
 import chevronLeft from '../assets/icons/chevron-left.svg'
 import chevronRight from '../assets/icons/chevron-right.svg'
 import close from '../assets/icons/close.svg'
+import cnb from '../assets/icons/cnb.svg'
 import copy from '../assets/icons/copy.svg'
 import database from '../assets/icons/database.svg'
 import download from '../assets/icons/download.svg'
@@ -26,6 +27,7 @@ import eye from '../assets/icons/eye.svg'
 import eyeOff from '../assets/icons/eye-off.svg'
 import filter from '../assets/icons/filter.svg'
 import folder from '../assets/icons/folder.svg'
+import github from '../assets/icons/github.svg'
 import globe from '../assets/icons/globe.svg'
 import grid from '../assets/icons/grid.svg'
 import info from '../assets/icons/info.svg'
@@ -54,6 +56,7 @@ import trash from '../assets/icons/trash.svg'
 import unlock from '../assets/icons/unlock.svg'
 import upload from '../assets/icons/upload.svg'
 import user from '../assets/icons/user.svg'
+import wifiOff from '../assets/icons/wifi-off.svg'
 
 /** Every icon in `assets/icons/`, named by its kebab-case file name. */
 export type IconName =
@@ -67,6 +70,7 @@ export type IconName =
   | 'chevron-right'
   | 'clipboard-list'
   | 'close'
+  | 'cnb'
   | 'copy'
   | 'database'
   | 'download'
@@ -75,6 +79,7 @@ export type IconName =
   | 'eye-off'
   | 'filter'
   | 'folder'
+  | 'github'
   | 'globe'
   | 'grid'
   | 'info'
@@ -103,6 +108,7 @@ export type IconName =
   | 'unlock'
   | 'upload'
   | 'user'
+  | 'wifi-off'
 
 /** The SVG asset behind each icon. */
 const ICON_ASSETS: Record<IconName, ImageAsset> = {
@@ -116,6 +122,7 @@ const ICON_ASSETS: Record<IconName, ImageAsset> = {
   'chevron-right': chevronRight,
   'clipboard-list': clipboardList,
   close,
+  cnb,
   copy,
   database,
   download,
@@ -124,6 +131,7 @@ const ICON_ASSETS: Record<IconName, ImageAsset> = {
   'eye-off': eyeOff,
   filter,
   folder,
+  github,
   globe,
   grid,
   info,
@@ -152,6 +160,7 @@ const ICON_ASSETS: Record<IconName, ImageAsset> = {
   unlock,
   upload,
   user,
+  'wifi-off': wifiOff,
 }
 
 export interface IconProps {

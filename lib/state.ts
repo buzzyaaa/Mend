@@ -4,8 +4,8 @@ import { t } from 'nsh/i18n'
 import { errorText, parseError } from './errors'
 import { normalizeUrl, sortEntries } from './format'
 import * as native from './native'
-import { loadPreferences, preferences, rememberVault } from './preferences'
-import { kickSiteIconFetch } from './site-icons-cache'
+import { loadPreferences, preferences, rememberVault, setOffline } from './preferences'
+import { kickSiteIconFetch, stopSiteIconFetch } from './site-icons-cache'
 import {
   isBuiltinBucket,
   type Category,
@@ -43,7 +43,6 @@ export const fatalDetail = signal<string | null>(null)
 /** boot / 重试流程进行中：Fatal 页用它禁用重试按钮并显示「重试中…」。 */
 export const bootRetrying = signal(false)
 export const authBusy = signal(false)
-export const detailBusy = signal(false)
 
 export const categories = signal<Category[]>([])
 export const entries = signal<EntrySummary[]>([])
@@ -57,10 +56,6 @@ export const keyword = signal('')
 export const tagFilters = signal<string[]>([])
 export const sortBy = signal<SortMode>('updated')
 
-export const selectedId = signal<string | null>(null)
-export const selected = signal<EntryView | null>(null)
-/** 条目详情弹窗：列表上的「查看详情」按钮打开，关闭时清空选中项。 */
-export const detailOpen = signal(false)
 /** 解锁后的主页面：左侧图标栏在密码列表与设置页之间切换。 */
 export const activePage = signal<'entries' | 'settings'>('entries')
 /** 列表直接展示的敏感字段。只在解锁期间驻留内存，锁定即清空。
@@ -114,7 +109,6 @@ export const deviceUnlockOn = signal(false)
  *  否则同一句提示会出现两次（一份被遮罩压暗、一份清晰）。 */
 export const modalOpen = computed<boolean>(
   () =>
-    detailOpen() ||
     presetsOpen() ||
     tagsOpen() ||
     confirm() !== null ||
@@ -295,6 +289,31 @@ export async function setDeviceUnlock(enabled: boolean): Promise<void> {
   }
 }
 
+/** 切换离线模式：开启会停掉所有外部请求（图标抓取、更新检查/下载），
+ *  属于「功能换隐私」的开关，必须显式确认。设置页开关与导航栏快捷按钮共用。 */
+export function toggleOfflineMode(next: boolean): void {
+  if (next === preferences().offline) return
+  if (next) {
+    confirm.set({
+      title: t('settings.offline'),
+      message: t('settings.offlineConfirm'),
+      confirmLabel: t('settings.offlineEnable'),
+      destructive: true,
+      onConfirm: async () => {
+        setOffline(true)
+        // 已经排队的图标抓取立即停下，不等它自然走到下一批。
+        stopSiteIconFetch()
+        toast(t('settings.offlineOn'), 'info', 4000)
+      },
+    })
+    return
+  }
+  setOffline(false)
+  toast(t('settings.offlineOff'))
+  // 关掉离线模式后恢复之前被暂停的图标抓取（内部有开关与重入保护）。
+  kickSiteIconFetch()
+}
+
 // ---------------------------------------------------------------------------
 // 库文件（用户自选）
 // ---------------------------------------------------------------------------
@@ -329,7 +348,6 @@ async function applyVaultFile(path: string | null): Promise<void> {
     categories.set([])
     presets.set([])
     tags.set([])
-    closeDetail()
     activePage.set('entries')
     // 弹窗是独立原生窗口层，不会随主界面重建而消失，这里显式关掉。
     presetsOpen.set(false)
@@ -430,9 +448,6 @@ function clearSensitiveState(): void {
   viewMode.set('list')
   presets.set([])
   tags.set([])
-  selectedId.set(null)
-  selected.set(null)
-  detailOpen.set(false)
   activePage.set('entries')
   entryEditor.set(null)
   presetsOpen.set(false)
@@ -641,7 +656,6 @@ export const canManualReorder = computed(
 export function selectBucket(next: string): void {
   bucket.set(next)
   tagFilters.set([])
-  closeDetail()
   sortBy.set(
     isBuiltinBucket(next) && (next === 'archive' || next === 'trash') ? 'updated' : sortBy(),
   )
@@ -800,29 +814,40 @@ export async function copySelectedEntries(): Promise<void> {
   }
 }
 
-export function closeDetail(): void {
-  selectedId.set(null)
-  selected.set(null)
-  detailOpen.set(false)
+/** 批量删除勾选条目：普通/归档视图移入回收站，回收站视图为不可恢复的彻底删除。
+ *  原生层只有单条删除接口，这里逐条执行；单条失败不影响其余条目。 */
+export function requestDeleteSelected(): void {
+  const ids = [...selectedIds()]
+  if (ids.length === 0) return
+  const purging = isTrashView()
+  confirm.set({
+    title: purging ? t('trash.purge') : t('entry.delete'),
+    message: t(purging ? 'entry.purgeSelectedConfirm' : 'entry.deleteSelectedConfirm', {
+      count: ids.length,
+    }),
+    confirmLabel: purging ? t('trash.purge') : t('common.delete'),
+    destructive: true,
+    onConfirm: () => void deleteSelectedEntries(ids, purging),
+  })
 }
 
-export async function selectEntry(id: string | null): Promise<void> {
+async function deleteSelectedEntries(ids: string[], purging: boolean): Promise<void> {
   touchActivity()
-  selectedId.set(id)
-  detailOpen.set(id !== null)
-  if (!id) {
-    selected.set(null)
-    return
+  let done = 0
+  for (const id of ids) {
+    try {
+      if (purging) native.purgeEntry(id)
+      else native.deleteEntry(id)
+      done += 1
+    } catch (error) {
+      showError(error)
+    }
   }
-  detailBusy.set(true)
-  try {
-    selected.set(await native.getEntry(id))
-  } catch (error) {
-    selected.set(null)
-    showError(error)
-  } finally {
-    detailBusy.set(false)
-  }
+  if (done === 0) return
+  await refreshCategories()
+  await refreshEntries()
+  toast(t(purging ? 'trash.purgedMany' : 'entry.deletedMany', { count: done }))
+  clearSelection()
 }
 
 export async function toggleFavorite(entry: EntrySummary): Promise<void> {
@@ -835,11 +860,6 @@ export async function toggleFavorite(entry: EntrySummary): Promise<void> {
           : item,
       ),
     )
-    selected.update((view) =>
-      view && view.id === next.id
-        ? { ...view, favorite: next.favorite, updatedAt: next.updatedAt }
-        : view,
-    )
     toast(t('toast.saved'))
   } catch (error) {
     showError(error)
@@ -848,8 +868,6 @@ export async function toggleFavorite(entry: EntrySummary): Promise<void> {
 
 export async function saveEntry(input: EntryInput, id: string | null): Promise<EntryView> {
   const view = id ? await native.updateEntry(id, input) : await native.createEntry(input)
-  selectedId.set(view.id)
-  selected.set(view)
   await refreshCategories()
   await refreshEntries()
   // 新站点：让后台队列把它排在前面，几秒后列表就换上真实图标。
@@ -890,9 +908,6 @@ export async function deleteEntry(id: string, archive = false): Promise<void> {
     archive ? t('entry.archived') : t('toast.deleted'),
   )
   if (result === null) return
-  if (selectedId() === id) {
-    closeDetail()
-  }
   await refreshCategories()
   await refreshEntries()
 }
@@ -904,9 +919,6 @@ export async function archiveEntry(id: string): Promise<void> {
 export async function unarchiveEntry(id: string): Promise<void> {
   const ok = await runAction(() => native.unarchiveEntry(id), t('entry.unarchived'))
   if (ok === null) return
-  if (selectedId() === id) {
-    closeDetail()
-  }
   await refreshCategories()
   await refreshEntries()
 }
@@ -914,9 +926,6 @@ export async function unarchiveEntry(id: string): Promise<void> {
 export async function restoreEntry(id: string): Promise<void> {
   const ok = await runAction(() => native.restoreEntry(id), t('trash.restored'))
   if (ok === null) return
-  if (selectedId() === id) {
-    closeDetail()
-  }
   await refreshCategories()
   await refreshEntries()
 }
@@ -985,7 +994,6 @@ export async function removeCategory(id: string): Promise<void> {
   if (bucket() === id) {
     bucket.set('all')
   }
-  closeDetail()
   await refreshCategories()
   await refreshEntries()
 }
@@ -1057,17 +1065,6 @@ export function tagColorOf(name: string): string | null {
   return tags().find((tag) => tag.name === name)?.color ?? null
 }
 
-/** 当前详情弹窗里的条目标签可能已被改名/删除：重读一次保持同步。 */
-function refreshDetailTags(): void {
-  const current = selected()
-  if (!current) return
-  try {
-    selected.set(native.getEntry(current.id))
-  } catch {
-    // 详情本身已在关闭流程里，读不到就保持现状。
-  }
-}
-
 /** 新建 / 编辑标签定义。改名时后端会改写所有条目上的标签名，
  *  这里同步迁移已生效的标签筛选并刷新列表与详情。 */
 export async function saveTag(input: TagInput, id: string | null): Promise<Tag | null> {
@@ -1079,7 +1076,6 @@ export async function saveTag(input: TagInput, id: string | null): Promise<Tag |
     if (previous !== null && previous !== tag.name) {
       tagFilters.update((list) => list.map((item) => (item === previous ? tag.name : item)))
       await refreshEntries()
-      refreshDetailTags()
     }
     return tag
   } catch (error) {
@@ -1098,7 +1094,6 @@ export async function removeTag(id: string): Promise<void> {
   }
   await refreshTags()
   await refreshEntries()
-  refreshDetailTags()
 }
 
 // ---------------------------------------------------------------------------

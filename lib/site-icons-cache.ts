@@ -45,7 +45,7 @@ export function resetSiteIcons(): void {
 export async function clearSiteIcons(): Promise<number> {
   const removed = native.clearSiteIcons()
   resetSiteIcons()
-  if (preferences().siteIcons) kickSiteIconFetch()
+  if (preferences().siteIcons && !preferences().offline) kickSiteIconFetch()
   return removed
 }
 /** 一批抓取的站点数：小批量让界面始终有喘息，进度也可见。 */
@@ -64,7 +64,7 @@ export function siteIconFetching(): boolean {
 }
 
 async function runBatch(): Promise<number> {
-  if (!preferences().siteIcons) return 0
+  if (!preferences().siteIcons || preferences().offline) return 0
   if (!native.status().unlocked) return 0
   const report = await native.fetchSiteIcons(BATCH_SIZE)
   if (report.fetched > 0) {
@@ -78,7 +78,7 @@ async function runBatch(): Promise<number> {
 /** 解锁后调用一次：等列表静下来，再一批一批把缺的图标补上。
  *  重复调用是安全的（内部有重入保护）。 */
 export function startSiteIconFetch(): void {
-  if (running) return
+  if (running || preferences().offline) return
   running = true
   schedule(START_DELAY_MS)
 }
@@ -107,13 +107,18 @@ function schedule(delay: number): void {
 }
 
 async function step(): Promise<void> {
-  if (!preferences().siteIcons || !native.status().unlocked) {
+  if (preferences().offline || !preferences().siteIcons || !native.status().unlocked) {
     running = false
     return
   }
   try {
     const remaining = await runBatch()
-    if (remaining > 0 && preferences().siteIcons && native.status().unlocked) {
+    if (
+      remaining > 0 &&
+      !preferences().offline &&
+      preferences().siteIcons &&
+      native.status().unlocked
+    ) {
       schedule(BATCH_GAP_MS)
     } else {
       running = false

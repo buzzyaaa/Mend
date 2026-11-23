@@ -1,5 +1,5 @@
 import { computed, effect, Scroll, signal, Text, token, View, windowSize } from 'nsh'
-import { Dialog, Button, Menu, MenuItem, MenuSeparator, Tab, Tabs, TextView } from 'nsh/base'
+import { Combobox, Dialog, Tab, Tabs, TextView } from 'nsh/base'
 import { t } from 'nsh/i18n'
 
 import { errorText } from '../lib/errors'
@@ -177,29 +177,6 @@ export function EntryEditor(props: { state: EntryEditorState }) {
     const extra = form().tags.filter((name) => !defined.includes(name))
     return [...defined, ...extra]
   })
-
-  /** 小的文字型触发按钮（无边框，靠 hover 底色提示可点），放在「星标」之后。 */
-  const tagButton = (disabled: boolean) => (
-    <Button
-      class={
-        'h-7 flex-row items-center gap-1.5 rounded-md px-2 ' +
-        (disabled
-          ? 'text-muted-foreground opacity-45'
-          : 'text-muted-foreground hover:bg-accent active:opacity-70')
-      }
-      disabled={disabled}
-      accessibilityLabel={t('entry.chooseTags')}
-      testID="entry-tags-trigger"
-    >
-      <Icon name="tag" size={13} color={token('muted-foreground')} />
-      <Text class="text-[11px] font-medium">
-        {form().tags.length > 0
-          ? `${t('entry.chooseTags')} (${form().tags.length})`
-          : t('entry.chooseTags')}
-      </Text>
-      <Icon name="chevron-down" size={11} color={token('muted-foreground')} />
-    </Button>
-  )
 
   const body = (
     <View class="gap-3">
@@ -409,89 +386,74 @@ export function EntryEditor(props: { state: EntryEditorState }) {
             onChange={(checked) => form.update((current) => ({ ...current, favorite: checked }))}
           />
 
-          {/* 标签整块放在星标之后：标题 + 已选胶囊 + 说明，选择入口在下面左对齐。
-              标签只能从标签维护弹窗里定义的集合中选，这里不提供新建/自由输入。 */}
+          {/* 标签多选：nsh 0.5.1 的 Combobox 弹层已能在 Dialog 内正常浮出，
+              取代旧的「已选胶囊 + 下方菜单」两段式布局。已选标签作为胶囊放进
+              prefix，输入框负责搜索，整行都是触发器；仍只能从维护好的标签里选。 */}
           <Field
             label={t('entry.tags')}
-            hint={tags().length > 0 ? t('entry.tagsSelectHint') : undefined}
+            hint={tags().length > 0 ? t('entry.tagsSelectHint') : t('tag.noneHint')}
           >
-            <View class="gap-1.5">
-              <If when={form().tags.length > 0}>
-                <View class="flex-row flex-wrap items-center gap-1.5">
-                  {form().tags.map((name) => (
-                    <TagPill
-                      label={name}
-                      color={tagColorOf(name)}
-                      accessibilityLabel={name}
-                      class="ring-1 ring-border"
-                      onPress={() => toggleTag(name)}
-                    />
-                  ))}
-                </View>
-              </If>
-              <If when={form().tags.length === 0 && tags().length > 0}>
-                <Text class="text-[11px] text-muted-foreground">{t('entry.noTagsSelected')}</Text>
-              </If>
-              <If when={tags().length === 0}>
-                <View class="rounded-md border border-dashed border-border bg-muted/50 px-2.5 py-2">
-                  <Text class="text-[11px] text-muted-foreground">{t('tag.noneHint')}</Text>
-                </View>
-              </If>
-            </View>
-          </Field>
-
-          {/* 标签多选入口：星标之后、左对齐的小按钮，和「标签筛选」同一套菜单；
-              菜单向上弹，避免贴到底部被裁掉。没有标签定义时按钮置灰。 */}
-          <View class="flex-row justify-start">
-            <If when={tags().length > 0} else={tagButton(true)}>
-              <Menu
-                placement="top"
-                align="end"
-                offset={6}
-                popupClass="min-w-[220px] rounded-lg border border-border bg-popover p-1.5 shadow-lg"
-                trigger={tagButton(false)}
-              >
-                <MenuItem
-                  closeOnSelect={false}
-                  disabled={form().tags.length === 0}
-                  class="h-8 flex-row items-center gap-2 rounded px-2 hover:bg-accent"
-                  accessibilityLabel={t('entry.clearTags')}
-                  onSelect={() => {
-                    touchActivity()
-                    form.update((current) => ({ ...current, tags: [] }))
-                  }}
-                >
-                  <View class="w-4 items-center justify-center">
-                    <Icon name="close" size={13} color={token('muted-foreground')} />
+            <Combobox
+              items={tagChoices().map((name) => ({ value: name, title: name }))}
+              multiple
+              value={form().tags}
+              onChange={({ value }) => {
+                touchActivity()
+                form.update((current) => ({ ...current, tags: value }))
+              }}
+              disabled={tags().length === 0}
+              placeholder={form().tags.length > 0 ? '' : t('entry.chooseTags')}
+              accessibilityLabel={t('entry.chooseTags')}
+              testID="entry-tags-combobox"
+              inputTestID="entry-tags-input"
+              class={
+                'min-h-9 w-full flex-row items-center gap-1.5 rounded-md border border-input ' +
+                'bg-background px-2.5 py-1'
+              }
+              inputClass="min-w-8 flex-1 border-0 bg-transparent px-0 py-0.5 text-xs text-foreground placeholder:text-muted-foreground"
+              inputStyle={{ fontSize: 12 }}
+              prefix={
+                form().tags.length > 0 ? (
+                  <View class="max-w-[75%] flex-row flex-wrap items-center gap-1">
+                    {form().tags.map((name) => (
+                      <TagPill
+                        label={name}
+                        color={tagColorOf(name)}
+                        accessibilityLabel={name}
+                        class="ring-1 ring-border"
+                        onPress={() => toggleTag(name)}
+                      />
+                    ))}
                   </View>
-                  <Text class="text-xs text-popover-foreground">{t('entry.clearTags')}</Text>
-                </MenuItem>
-
-                <MenuSeparator class="my-1 h-px bg-border" />
-
-                {tagChoices().map((name) => (
-                  <MenuItem
-                    checked={form().tags.includes(name)}
-                    closeOnSelect={false}
-                    class={
-                      'h-8 flex-row items-center gap-2 rounded px-2 ' +
-                      (form().tags.includes(name) ? 'bg-accent' : 'hover:bg-accent')
-                    }
-                    indicatorClass="w-4 items-center justify-center opacity-0 checked:opacity-100"
-                    indicator={<Icon name="check" size={12} color={token('primary')} />}
-                    accessibilityLabel={name}
-                    onSelect={() => toggleTag(name)}
-                  >
-                    <TagPill
-                      label={name}
-                      color={tagColorOf(name)}
-                      class={form().tags.includes(name) ? 'ring-2 ring-primary' : 'opacity-90'}
-                    />
-                  </MenuItem>
-                ))}
-              </Menu>
-            </If>
-          </View>
+                ) : undefined
+              }
+              cleanable
+              clearButton={<Icon name="close" size={12} color={token('muted-foreground')} />}
+              clearButtonAccessibilityLabel={t('entry.clearTags')}
+              clearButtonClass="h-4 w-4 items-center justify-center rounded hover:bg-accent"
+              triggerButton={
+                <View class="h-4 w-4 items-center justify-center">
+                  <Icon name="chevron-down" size={12} color={token('muted-foreground')} />
+                </View>
+              }
+              popupClass="rounded-md border border-border bg-popover p-1 shadow-lg"
+              backdropClass={MODAL_BACKDROP_CLASS}
+              itemClass="group h-8 flex-row items-center rounded px-2 text-popover-foreground focus:bg-accent selected:bg-accent disabled:opacity-50"
+              renderItem={(item) => (
+                <View class="flex-row items-center gap-2">
+                  <View class="w-3 items-center justify-center opacity-0 group-selected:opacity-100">
+                    <Icon name="check" size={11} color={token('primary')} />
+                  </View>
+                  <Text class="text-xs text-popover-foreground">{item.title}</Text>
+                </View>
+              )}
+              empty={
+                <View class="px-2 py-2">
+                  <Text class="text-xs text-muted-foreground">{t('entry.noTagMatches')}</Text>
+                </View>
+              }
+            />
+          </Field>
 
           <If when={error()}>
             <View class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2">

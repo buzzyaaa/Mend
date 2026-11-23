@@ -15,7 +15,6 @@ import {
   hasMoreEntries,
   loadedCount,
   loadMoreEntries,
-  selectEntry,
   toggleSelectAll,
   visibleEntries,
 } from '../lib/state'
@@ -123,11 +122,15 @@ export function EntryDataTable(props: { empty: NshNode }) {
       .join('|'),
   )
 
+  /** 表格有 1px 边框，可滚动区比 onLayout 拿到的外框窄 2px。
+   *  按外框算列宽会多出这 2px，触发一条拖不动的横向滚动条。 */
+  const innerWidth = computed(() => Math.max(0, tableWidth() - 2 * TABLE_BORDER_WIDTH))
+
   /** 列宽不持久化、不可拖：固定列吃掉恒定宽度，其余列平分剩余空间，
    *  窗口缩放时 onLayout 更新 tableWidth，整张表跟着重新平分。 */
   const columns = computed<DataTableColumn[]>(() => {
     const defs = columnDefs()
-    const total = tableWidth() > 0 ? tableWidth() : NOMINAL_TABLE_WIDTH
+    const total = tableWidth() > 0 ? innerWidth() : NOMINAL_TABLE_WIDTH
     const fixed = defs.reduce((sum, def) => sum + (def.flex ? 0 : fixedWidth(def.key)), 0)
     const flexDefs = defs.filter((def) => def.flex)
     const available = Math.max(total - fixed, flexDefs.length * FLEX_COLUMN_MIN)
@@ -166,13 +169,21 @@ export function EntryDataTable(props: { empty: NshNode }) {
     if (!columnDefs().some((def) => def.key === 'category')) return null
     const widths = columns()
     const total = widths.reduce((sum, column) => sum + (column.width ?? 0), 0)
-    if (tableWidth() <= 0 || total > tableWidth()) return null
+    if (tableWidth() <= 0 || total > innerWidth()) return null
     let x = 0
     for (const column of widths) {
       x += column.width ?? 0
       if (column.key === 'category') return x - 1
     }
     return null
+  })
+
+  /** 只有极窄窗口触发 40pt 列宽下限时才真需要横向滚动；正常宽度下隐藏
+   *  那条没有内容的滚动条（上游仍会在外框比内容宽 1~2px 时画出来）。 */
+  const hasHorizontalOverflow = computed(() => {
+    if (tableWidth() <= 0) return false
+    const total = columns().reduce((sum, column) => sum + (column.width ?? 0), 0)
+    return total > innerWidth() + 1
   })
 
   /** 均分后列宽可能很窄：字段格据此决定是否让「账号：」前缀让位给值。
@@ -275,6 +286,7 @@ export function EntryDataTable(props: { empty: NshNode }) {
             loading={fieldsLoading()}
             loadMoreThreshold={40}
             scrollbar
+            horizontalScrollbar={hasHorizontalOverflow()}
             accessibilityLabel={t('entry.listTitle')}
             empty={props.empty}
             classes={{
@@ -296,10 +308,6 @@ export function EntryDataTable(props: { empty: NshNode }) {
             }}
             renderCell={renderCell}
             renderHeaderCell={renderHeaderCell}
-            onRowPress={({ row }) => {
-              const entry = displayedEntries()[row]
-              if (entry) void selectEntry(entry.id)
-            }}
             onVisibleRowsChange={({ range }) => {
               // DataTable 的 rowCount 是全表，但 data 只持有已解密窗口；视野接近窗口末尾就提前补密。
               if (range.end + 80 >= loadedCount() && hasMoreEntries()) loadMoreEntries()
