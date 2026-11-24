@@ -7,6 +7,7 @@ import { errorText } from '../lib/errors'
 import type { ThemeMode } from '../lib/types'
 import {
   checkForUpdates,
+  isShellOutdated,
   openUpdatePrompt,
   updateApp,
   updateBusy,
@@ -206,8 +207,13 @@ export function SettingsPage() {
     }
   })
 
+  // OTA 代码包只换前端、不换外壳：老外壳没有开机自启的原生方法，开关禁用。
+  // 纯 typeof 探测、非 signal，在组件里求值一次即可。
+  const autoStartReady = native.autoStartAvailable()
+
   /** 开机自启：原生写系统登录项成功后才更新偏好；失败保留旧状态并提示。 */
   function toggleAutoStart(next: boolean) {
+    if (!autoStartReady) return
     try {
       const actual = native.setAutoStart(next)
       setAutoStart(actual)
@@ -433,7 +439,12 @@ export function SettingsPage() {
                       checked={preferences().autoStart}
                       onChange={(checked) => toggleAutoStart(checked)}
                       label={t('settings.autoStart')}
-                      hint={t('settings.autoStartHint')}
+                      hint={
+                        autoStartReady
+                          ? t('settings.autoStartHint')
+                          : t('settings.autoStartNeedsUpdate')
+                      }
+                      disabled={!autoStartReady}
                       testID="settings-auto-start"
                       leading
                     />
@@ -742,6 +753,19 @@ export function SettingsPage() {
                           version: appInfo().version ?? '',
                           build: appInfo().build ?? 0,
                         })}
+                      </Text>
+                    </If>
+                    {/* 外壳落后于代码包：OTA 只换了代码，原生层还是旧的。
+                        「检查更新」时优先推整包而不是 OTA 包，否则外壳永远追不上，
+                        依赖新原生方法的功能（开机自启）会一直不可用。 */}
+                    <If
+                      when={isShellOutdated(
+                        runningPackage()?.build,
+                        shellInfo().build ?? appInfo().build,
+                      )}
+                    >
+                      <Text class="text-[11px] text-amber-600 dark:text-amber-400">
+                        {t('update.shellOutdated')}
                       </Text>
                     </If>
                   </View>

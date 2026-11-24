@@ -330,6 +330,7 @@
     "closeMinimizeToTrayHint": "Minimize to the system tray instead of quitting when you click the close button. Right-click the tray icon to open the main panel, open Settings or quit. Asked once on first close; afterwards this switch is the only control.",
     "autoStart": "Start on login",
     "autoStartHint": "Launch Mend automatically when you sign in (desktop only; registers a login item for the current user)",
+    "autoStartNeedsUpdate": "The installed shell is too old to support start on login. Install the full package from Update first, then turn this on.",
     "autoStartOn": "Start on login is on",
     "autoStartOff": "Start on login is off",
     "clientKind": "Desktop app"
@@ -373,7 +374,8 @@
     "pendingResume": "The last update did not finish. Install it now to continue.",
     "installStuck": "The update did not finish installing. If an update is already downloaded, it will continue on the next launch; you can also retry later.",
     "shellLine": "Shell version %{version} (build %{build})",
-    "packageLine": "Running code package %{version} (build %{build})"
+    "packageLine": "Running code package %{version} (build %{build})",
+    "shellOutdated": "The code package is updated, but the app shell is still old: some new features (like start on login) are unavailable. Use Check for updates above to download and install the full package to update the shell."
   },
   "about": {
     "title": "About",

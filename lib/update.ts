@@ -7,6 +7,8 @@ import {
   downloadUpdate,
   installAndRestart,
   restartToPackage,
+  runningPackage,
+  shellInfo,
   type AppUpdate,
   type PackageUpdate,
 } from 'nsh/updater'
@@ -107,6 +109,25 @@ export function closeUpdatePrompt(): void {
   updateTarget.set(null)
 }
 
+/** 运行的是 OTA 代码包，但其构建号高于已安装外壳——说明外壳落后了。
+ *
+ *  OTA 只换代码不换外壳；此时若继续优先推 OTA 包，外壳永远追不上，依赖
+ *  新原生层的能力（如 0.6.3 的开机自启）会一直不可用。检查更新时应改推
+ *  整包，让用户一次性把外壳升上来。 */
+export function isShellOutdated(
+  runningBuild: number | null | undefined,
+  shellBuild: number | null | undefined,
+): boolean {
+  if (runningBuild == null) return false
+  return (shellBuild ?? 0) < runningBuild
+}
+
+export function shellOutdated(): boolean {
+  const running = runningPackage()
+  if (!running) return false
+  return isShellOutdated(running.build, shellInfo().build ?? appInfo().build)
+}
+
 /** Check for an OTA package first, then for a whole-app update. */
 export async function checkForUpdates(): Promise<void> {
   if (updateBusy()) return
@@ -123,7 +144,8 @@ export async function checkForUpdates(): Promise<void> {
   updateApp.set(null)
   updateUpToDate.set(false)
   try {
-    const packageUpdate = await checkForPackage()
+    // 外壳落后时跳过 OTA 包、直接查整包，否则原生层永远追不上代码包。
+    const packageUpdate = shellOutdated() ? null : await checkForPackage()
     if (packageUpdate) {
       updatePackage.set(packageUpdate)
     } else {
@@ -167,7 +189,8 @@ export async function checkForUpdatesOnStartup(): Promise<void> {
 
   let target: UpdateTarget | null = null
   try {
-    const pkg = await checkForPackage()
+    // 外壳落后时跳过 OTA 包、直接查整包，否则原生层永远追不上代码包。
+    const pkg = shellOutdated() ? null : await checkForPackage()
     if (pkg) {
       updatePackage.set(pkg)
       target = 'package'

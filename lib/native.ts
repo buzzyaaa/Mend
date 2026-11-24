@@ -217,6 +217,18 @@ export function savePreferences(json: string): void {
   Vault.savePreferences(json)
 }
 
+/** 当前外壳是否提供开机自启的原生方法。
+ *
+ *  OTA 代码包只替换前端代码，不换外壳；老外壳（如 0.6.2）里没有 0.6.3 新增的
+ *  `autoStartEnabled` / `setAutoStart`，直接调用会抛「不是函数」。UI 用它判断
+ *  要不要显示/禁用开关，boot 校准也据此跳过。 */
+export function autoStartAvailable(): boolean {
+  return (
+    typeof Vault.autoStartEnabled === 'function' &&
+    typeof Vault.setAutoStart === 'function'
+  )
+}
+
 /** 是否已在系统登录项里注册开机自启（桌面端之外恒为 false）。 */
 export function autoStartEnabled(): boolean {
   return Vault.autoStartEnabled()

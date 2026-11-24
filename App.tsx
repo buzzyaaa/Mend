@@ -2,6 +2,7 @@ import { appInfo, effect, mount, Text, token, View } from 'nsh'
 import { Scrollbar } from 'nsh/base'
 import { currentWindow, isAvailable } from 'nsh/desktop'
 import { t } from 'nsh/i18n'
+import { runningPackage } from 'nsh/updater'
 
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { Icon } from './components/Icon'
@@ -84,6 +85,8 @@ let bootRequested = false
 function App() {
   // nsh 使用系统标题栏，原生层会画出应用图标与默认的系统窗口按钮；
   // 这里只把标题文字从静态 nsh.json 值更新为带实际版本号的「Mend vX.Y.Z」。
+  // 版本取「正在运行的代码包」优先：OTA 包升级后 appInfo() 仍是外壳版本，
+  // 标题栏会停在旧号让人以为没更新成功；runningPackage() 才是用户真正跑的代码。
   // currentWindow() 必须在渲染期间取得，桌面 API 不可用时保持静态标题。
   // 读取 bootReady() 作为依赖：挂载时设一次，boot 完成后再设一次——
   // 个别环境（旧外壳 + OTA 包）下挂载时的第一次设置会被丢掉，补设兜底。
@@ -91,7 +94,9 @@ function App() {
   effect(() => {
     bootReady()
     mainWindow?.set({
-      title: `${appInfo().name ?? 'Mend'} v${appInfo().version ?? '0.4.6'}`,
+      title: `${appInfo().name ?? 'Mend'} v${
+        runningPackage()?.version ?? appInfo().version ?? '0.4.6'
+      }`,
     })
   })
 

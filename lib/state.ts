@@ -223,9 +223,10 @@ export async function boot(): Promise<void> {
         // 偏好不是启动必需品：读不出来就用模块里的默认值。
       }
       // 开机自启以系统登录项为准：用户可能绕开 UI 在系统设置里增删过，
-      // 偏好文件只是镜像。失败（如手机端无桌面 API）就保留偏好原值。
+      // 偏好文件只是镜像。老外壳（OTA 只换了代码包）没有这个原生方法，
+      // 先探测能力；失败（如手机端无桌面 API）就保留偏好原值。
       try {
-        setAutoStart(native.autoStartEnabled())
+        if (native.autoStartAvailable()) setAutoStart(native.autoStartEnabled())
       } catch {
         // 无桌面 API / 注册项读取失败：不影响启动。
       }

@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Platform: Windows / macOS / Linux](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
-[![Version](https://img.shields.io/badge/Version-0.6.3-green.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-0.6.4-green.svg)](./CHANGELOG.md)
 
 English | [简体中文](./README.zh-CN.md)
 
