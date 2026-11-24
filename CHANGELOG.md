@@ -5,6 +5,14 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.6.5] - 2026-11-24
+
+#### Fixed
+- **开关已打开但点关闭按钮直接退出、没缩到托盘**：关闭拦截原来只在渲染期把 `closeOnPress` 设为 `false`，这种一次性设置可能被丢弃（窗口标题在 0.6.2 踩过同款坑）。一旦退回 `true`，关闭按钮直接销毁窗口退出，`closePress` 回调根本没机会执行，托盘图标也随进程消失。现在 `nsh.json` 的窗口配置直接写死 `closeOnPress: false`（窗口创建期即生效），boot 完成后再重设一次兜底；托盘图标设置加 try/catch，关闭分支以设置开关为准，避免老偏好误弹询问。
+
+#### Added
+- **Windows .exe 安装器**：发布流水线现在会额外产出 `Mend-setup.exe`（当前用户级安装，双击可原地覆盖升级并保留应用数据目录），作为 GitHub Release 与 CNB 同步的额外下载项。自动更新不受影响，`latest.json` 仍指向平台压缩包。
+
 ## [0.6.4] - 2026-11-24
 
 #### Fixed

@@ -59,6 +59,31 @@ jobs:
           Add-Content -Path $env:GITHUB_PATH -Value $nshBin
           Write-Host "nsh bin: $nshBin"
 
+      # nsh package 会生成 Inno Setup 脚本并「在检测到 ISCC.exe 时」编译出
+      # Mend-setup.exe（当前用户级安装器，双击可原地覆盖升级）。runner 镜像
+      # 通常预装 Inno Setup 6，这里兜底探测并用 choco 安装，确保安装器一定产出。
+      - name: Ensure Inno Setup 6 (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ISCC.exe -ErrorAction SilentlyContinue)) {
+            $candidates = @(
+              "${env:ProgramFiles(x86)}\Inno Setup 6",
+              "$env:ProgramFiles\Inno Setup 6",
+              "$env:LOCALAPPDATA\Programs\Inno Setup 6"
+            )
+            $dir = $candidates | Where-Object { Test-Path (Join-Path $_ 'ISCC.exe') } | Select-Object -First 1
+            if (-not $dir) {
+              choco install innosetup -y --no-progress
+              $dir = "${env:ProgramFiles(x86)}\Inno Setup 6"
+            }
+            if (-not (Test-Path (Join-Path $dir 'ISCC.exe'))) {
+              throw "Inno Setup 6 (ISCC.exe) not available"
+            }
+            Add-Content -Path $env:GITHUB_PATH -Value $dir
+          }
+          (Get-Command ISCC.exe).Source
+
       - name: Install NSH (Linux / macOS)
         if: runner.os != 'Windows'
         shell: bash
@@ -101,6 +126,33 @@ jobs:
         with:
           name: app-${{ matrix.target }}
           path: dist/*-${{ matrix.target }}-*
+          if-no-files-found: error
+
+      # 安装器是额外的下载选项，不参与应用内自动更新（latest.json 的 windows
+      # 平台资产仍指向 zip，updater 只接受 zip/tar.gz）。单独上传为 artifact。
+      # nsh 把安装器与 .iss 放在 -o 目录（通常是 dist 根）；不同版本偶有落到
+      # 子目录的情况。这里递归找到后统一拷到 dist 根，后续步骤只认这个路径。
+      - name: Verify Windows installer
+        if: matrix.target == 'windows'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem -Path dist -Filter '*-setup.exe' -Recurse | Select-Object -First 1
+          if (-not $setup) {
+            throw 'nsh package did not produce a *-setup.exe (Inno Setup 6 missing?)'
+          }
+          if ($setup.FullName -ne (Join-Path $pwd 'dist/Mend-setup.exe')) {
+            Copy-Item $setup.FullName 'dist/Mend-setup.exe' -Force
+          }
+          Get-Item 'dist/Mend-setup.exe' | Select-Object FullName, Length
+
+      - name: Upload Windows installer
+        if: matrix.target == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            dist/Mend-setup.exe
+            dist/Mend.iss
           if-no-files-found: error
 
   ot-package:
@@ -233,12 +285,14 @@ jobs:
           body: |
             Mend ${{ github.ref_name }} — Native Shell build.
 
-            Download the platform archive (Windows zip / Linux tar.gz / macOS tar.gz)
-            or the signed OTA package. Existing vaults in the application data
-            directory open as-is.
+            Windows: download Mend-setup.exe for a per-user installer (double-click
+            to install or upgrade in place), or the zip for a portable copy.
+            Linux / macOS: download the platform archive.
+            Existing vaults in the application data directory open as-is.
           files: |
             dist/*.tar.gz
             dist/*.zip
+            dist/Mend-setup.exe
             dist/*.nshpkg
             dist/latest.json
             dist/latest.json.sig
@@ -268,4 +322,5 @@ jobs:
             exit 1
           fi
           node scripts/sync-cnb-release.mjs smybxg/Mend "${{ github.ref_name }}" \
-            dist/*.zip dist/*.tar.gz dist/*.nshpkg dist/latest.json dist/latest.json.sig
+            dist/*.zip dist/*.tar.gz dist/Mend-setup.exe dist/*.nshpkg \
+            dist/latest.json dist/latest.json.sig

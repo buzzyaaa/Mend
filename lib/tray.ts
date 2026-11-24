@@ -22,7 +22,7 @@ import { t } from 'nsh/i18n'
 
 import appIcon from '../assets/icon.png'
 
-import { activePage, confirm } from './state'
+import { activePage, bootReady, confirm } from './state'
 import { preferences, setCloseMinimizeToTray } from './preferences'
 
 let installed = false
@@ -96,9 +96,19 @@ export function installTrayHandlers(mainWindow: WindowRef | null): void {
   installed = true
 
   mainWindow.set({ closeOnPress: false })
+  // 关键兜底：渲染期的一次性 set 在「旧外壳 + OTA 包」环境会被丢弃（标题也
+  // 踩过同款坑，见 App.tsx），一旦 closeOnPress 退回 true，点关闭按钮会直接
+  // 销毁窗口退出，closePress 回调根本没机会执行。boot 完成后再设一次。
+  effect(() => {
+    bootReady()
+    mainWindow.set({ closeOnPress: false })
+  })
+
   mainWindow.on('closePress', () => {
     const prefs = preferences()
-    if (!prefs.trayChoiceMade) {
+    // 以开关为准：只有「没做过选择且开关没开」才弹首次询问。老偏好文件可能
+    // 出现 closeMinimizeToTray=true 但 trayChoiceMade=false，此时不该弹窗打断。
+    if (!prefs.trayChoiceMade && !prefs.closeMinimizeToTray) {
       askCloseOnce(mainWindow)
     } else if (prefs.closeMinimizeToTray) {
       minimizeToTray(mainWindow)
@@ -112,14 +122,20 @@ export function installTrayHandlers(mainWindow: WindowRef | null): void {
 export function installTrayEffect(): void {
   if (!isAvailable) return
   effect(() => {
-    // 读一次语言偏好作为依赖：切语言时菜单文案随之刷新。
+    // 语言偏好：切语言时菜单文案随之刷新。bootReady：挂载时设一次，boot
+    // 完成后再设一次——旧外壳/OTA 包或资源未就绪时首次设置可能被丢，补设兜底。
     preferences().language
-    Tray.set({
-      icon: appIcon,
-      tooltip: t('app.name'),
-      menu: trayMenu(),
-      onClick: () => openMainWindow(),
-    })
+    bootReady()
+    try {
+      Tray.set({
+        icon: appIcon,
+        tooltip: t('app.name'),
+        menu: trayMenu(),
+        onClick: () => openMainWindow(),
+      })
+    } catch {
+      // 旧外壳可能没有 Tray API，图标不显示但不能让 effect 抛错影响其它逻辑。
+    }
   })
 }
 

@@ -58,14 +58,16 @@ nsh certify --root keys/root.secret --key keys/release.pub \
 打 `v*` tag 或手动触发：
 
 1. **package**：矩阵构建 Windows / Linux / macOS 平台压缩包，上传 artifact。
-   - Windows：VS Build Tools + Rust（默认目标即可）。
+   - Windows：VS Build Tools + Rust（默认目标即可）。`nsh package --target windows` 除 zip 外还会生成 Inno Setup 脚本 `Mend.iss`，并在检测到 `ISCC.exe` 时编译出 **`Mend-setup.exe`**（当前用户级安装器，双击原地覆盖升级，保留 `%APPDATA%\com.mend.app` 的数据）。CI 里先探测 Inno Setup 6，缺失则用 `choco install innosetup` 兜底，再把 `Mend-setup.exe` 作独立 artifact 上传。
    - Linux：安装 `libgtk-4-dev clang libwebkitgtk-6.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev`。
    - macOS：`rustup target add aarch64-apple-darwin x86_64-apple-darwin`。
 2. **ot-package**：在 Windows 上运行 `nsh publish`，用 `NSH_RELEASE_KEY` / `NSH_RELEASE_CERT` 签名，产出 `dist/com.mend.app-<build>.nshpkg`。
-3. **manifest**：下载全部产物，用 `NSH_UPDATE_KEY` 运行 `nsh update-manifest`，生成带签名的 `dist/latest.json` 与 `latest.json.sig`。
-4. **publish**：用 `softprops/action-gh-release` 把平台包、OTA 包、`latest.json`、`latest.json.sig` 上传到该 tag 的 GitHub Release。
+3. **manifest**：下载全部产物，用 `NSH_UPDATE_KEY` 运行 `nsh update-manifest`，生成带签名的 `dist/latest.json` 与 `latest.json.sig`。归档 glob 只收 `*.zip` / `*.tar.gz`，`Mend-setup.exe` 不进清单——`latest.json` 的 Windows 平台资产仍指向 zip（nsh updater 只接受 zip/tar.gz）。
+4. **publish**：用 `softprops/action-gh-release` 把平台包、安装器（`Mend-setup.exe`）、OTA 包、`latest.json`、`latest.json.sig` 上传到该 tag 的 GitHub Release；`cnb-sync` 同步同一份列表到 CNB。
 
 版本与构建号：`nsh package` / `nsh publish` 使用 tag 版本（去掉前缀 `v`）和 `github.run_number` 作为构建号；同一发布的整包与 OTA 包使用相同构建号。
+
+**安装器与自动更新是两条独立通道**：zip/清单服务于应用内自动更新；`Mend-setup.exe` 只是给「想装成正式应用（开始菜单、已安装应用条目）」的用户一个额外下载选项，双击即可原地升级旧安装。安装器未做 Authenticode 签名，Windows SmartScreen 会提示「未知发布者」，属已知限制。
 
 ## 6. 手动发布（本地）
 
