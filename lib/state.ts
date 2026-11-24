@@ -4,7 +4,13 @@ import { t } from 'nsh/i18n'
 import { errorText, parseError } from './errors'
 import { normalizeUrl, sortEntries } from './format'
 import * as native from './native'
-import { loadPreferences, preferences, rememberVault, setOffline } from './preferences'
+import {
+  loadPreferences,
+  preferences,
+  rememberVault,
+  setAutoStart,
+  setOffline,
+} from './preferences'
 import { kickSiteIconFetch, stopSiteIconFetch } from './site-icons-cache'
 import {
   isBuiltinBucket,
@@ -215,6 +221,13 @@ export async function boot(): Promise<void> {
         await loadPreferences()
       } catch {
         // 偏好不是启动必需品：读不出来就用模块里的默认值。
+      }
+      // 开机自启以系统登录项为准：用户可能绕开 UI 在系统设置里增删过，
+      // 偏好文件只是镜像。失败（如手机端无桌面 API）就保留偏好原值。
+      try {
+        setAutoStart(native.autoStartEnabled())
+      } catch {
+        // 无桌面 API / 注册项读取失败：不影响启动。
       }
       status.set(await native.status())
       // 当前库计入「最近使用」：偏好在全局数据目录，切库/重开都留在列表里。

@@ -34,6 +34,8 @@ import {
   LANGUAGES,
   preferences,
   setAutoLockMinutes,
+  setAutoStart,
+  setCloseMinimizeToTray,
   setLanguage,
   setSiteIcons,
   setTheme,
@@ -203,6 +205,17 @@ export function SettingsPage() {
       deviceUnlockOn.set(false)
     }
   })
+
+  /** 开机自启：原生写系统登录项成功后才更新偏好；失败保留旧状态并提示。 */
+  function toggleAutoStart(next: boolean) {
+    try {
+      const actual = native.setAutoStart(next)
+      setAutoStart(actual)
+      toast(actual ? t('settings.autoStartOn') : t('settings.autoStartOff'))
+    } catch (error) {
+      showError(error)
+    }
+  }
 
   /** 免主密码解锁是「降低安全性换方便」的开关：开之前必须显式确认。 */
   function toggleDeviceUnlock(next: boolean) {
@@ -407,6 +420,24 @@ export function SettingsPage() {
                     hint={t('settings.siteIconsHint')}
                     leading
                   />
+                  <SwitchField
+                    checked={preferences().closeMinimizeToTray}
+                    onChange={(checked) => setCloseMinimizeToTray(checked)}
+                    label={t('settings.closeMinimizeToTray')}
+                    hint={t('settings.closeMinimizeToTrayHint')}
+                    testID="settings-close-minimize-to-tray"
+                    leading
+                  />
+                  <If when={platform.desktop}>
+                    <SwitchField
+                      checked={preferences().autoStart}
+                      onChange={(checked) => toggleAutoStart(checked)}
+                      label={t('settings.autoStart')}
+                      hint={t('settings.autoStartHint')}
+                      testID="settings-auto-start"
+                      leading
+                    />
+                  </If>
                   <Field
                     label={t('settings.iconsCache')}
                     hint={t('settings.clearIconsHint')}

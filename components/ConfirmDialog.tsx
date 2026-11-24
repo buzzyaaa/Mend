@@ -14,7 +14,11 @@ export function ConfirmDialog() {
           role={state().destructive ? 'alertdialog' : 'dialog'}
           animation="fade"
           closeOnBackdropPress={false}
-          onCancel={() => confirm.set(null)}
+          onCancel={() => {
+            const action = confirm()?.onCancel
+            confirm.set(null)
+            if (action) void action()
+          }}
           accessibilityLabel={state().title}
           accessibilityDescription={state().message}
           class={MODAL_CLASS}
@@ -28,10 +32,14 @@ export function ConfirmDialog() {
             </View>
             <View class="flex-row justify-end gap-2">
               <ActionButton
-                label={t('common.cancel')}
+                label={state().cancelLabel ?? t('common.cancel')}
                 variant="ghost"
                 testID="confirm-cancel"
-                onPress={() => confirm.set(null)}
+                onPress={() => {
+                  const action = state().onCancel
+                  confirm.set(null)
+                  if (action) void action()
+                }}
               />
               <ActionButton
                 label={state().confirmLabel}

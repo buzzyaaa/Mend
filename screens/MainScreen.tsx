@@ -4,7 +4,6 @@ import { t } from 'nsh/i18n'
 
 import { AppHeader } from '../components/AppHeader'
 import { CategoryEditor } from '../components/CategoryEditor'
-import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EntryEditor } from '../components/EntryEditor'
 import { EntryList } from '../components/EntryList'
 import { NavRail } from '../components/NavRail'
@@ -133,7 +132,6 @@ export function MainScreen() {
       <PresetsDialog />
       <TagsDialog />
       <NotesDialog />
-      <ConfirmDialog />
       <UpdateProgressHost />
 
       <Dialog

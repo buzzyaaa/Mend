@@ -217,6 +217,16 @@ export function savePreferences(json: string): void {
   Vault.savePreferences(json)
 }
 
+/** 是否已在系统登录项里注册开机自启（桌面端之外恒为 false）。 */
+export function autoStartEnabled(): boolean {
+  return Vault.autoStartEnabled()
+}
+
+/** 增删系统登录项；返回实际写入的状态，供偏好同步。 */
+export function setAutoStart(enabled: boolean): boolean {
+  return Vault.setAutoStart(enabled)
+}
+
 /** 数据目录里是否已有完整下载、校验通过的代码包（updates/next.nshpkg）
  *  在等下次启动应用；有则 UI 可以直接安装，不用重新下载。 */
 export function checkPackageReady(): boolean {

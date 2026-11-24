@@ -6,6 +6,7 @@
 //! the previous Tauri build, so an existing vault opens as-is.
 
 mod api;
+mod autostart;
 mod dto;
 mod error;
 mod icons;

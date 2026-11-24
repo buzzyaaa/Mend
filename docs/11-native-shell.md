@@ -114,6 +114,29 @@ SQLite 单文件（应用层字段加密）
 
 `preferences.json` 的 `offline` 字段是应用级总开关，默认 `false`；偏好读入时缺省或类型错误一律回落默认值（只需新增键，老偏好文件免迁移）。设置-安全的 Switch 与导航栏锁定按钮下方的快捷按钮共用 `lib/state.ts` 的 `toggleOfflineMode`，开启前必须二次确认并说明会停掉哪些请求。开启后两个网络出口都直接短路，**一次请求都不发**：站点图标批次（`site-icons-cache.ts` 的 `startSiteIconFetch`/`step`/`runBatch`，并清掉已排队批次）与更新检查/下载（`lib/update.ts` 的 `checkForUpdates`/`checkForUpdatesOnStartup`/`startUpdate`）。已缓存的 favicon 与内置品牌图标照常显示；关闭离线模式会恢复图标抓取，但仍受「网站图标」开关与解锁状态约束。
 
+### 5.3 系统托盘与关闭行为
+
+主窗口用系统标题栏，关闭按钮由应用自己接管（`lib/tray.ts`）：`installTrayHandlers` 在 `App.tsx` 渲染期把主窗口的 `closeOnPress` 设为 `false`，`closePress` 回调按偏好决定缩到托盘还是退出。
+
+- **首次询问**：偏好 `trayChoiceMade=false` 时弹一次确认（确定＝缩托盘 / 取消＝退出），两个分支都写入 `closeMinimizeToTray` 并把 `trayChoiceMade` 置 `true`；之后再关闭只读开关，不再询问。确认框挂在 `App` 顶层（不在 `MainScreen`），否则解锁页关闭时弹不出来。`ConfirmState` 因此新增 `cancelLabel` / `onCancel`——Esc 与点取消都要走同一分支。
+- **托盘图标**：应用启动即常驻（`installTrayEffect` 在渲染期 `Tray.set`，菜单文案随语言偏好刷新），只有退出应用才 `Tray.set(null)` 移除——窗口恢复或缩托盘都不影响图标。左键点击或菜单「打开主面板」＝ 先切 `activePage='entries'`（启动后的首页＝密码列表页，即使缩托盘前停在设置页也回到列表），再 `show + focus`；右键固定三项：`tray.open` / `tray.settings`（先切 `activePage='settings'` 再显示窗口）/ `tray.quit`（`Application.quit()`，先撤图标）。图标唯一源仍是 `assets/icon.png`（§8.1），不为托盘另存一张。
+- **偏好字段**：`closeMinimizeToTray`（默认 false）、`trayChoiceMade`（默认 false）、`autoStart`（默认 false）都走 preferences.json 的纯 JSON 透传，新增键老文件免迁移。
+- **手机 / headless**：无 `nsh/desktop` 时（`isAvailable=false`）全部降级——关闭按钮保持系统默认行为，托盘逻辑不安装，不引入桌面依赖。
+
+### 5.4 开机自启
+
+偏好 `autoStart` 只是 UI 镜像，**真正的状态是系统登录项**：`boot()` 里用 `native.autoStartEnabled()` 校准（用户可能绕开 UI 直接改了系统设置），切换开关走 `native.setAutoStart(enabled)`，原生写入成功后才更新偏好。退出时先 `Tray.set(null)` 再 `Application.quit()`，不留残留图标；`Application.quit()` 不受 `closeOnPress` 拦截。
+
+nsh 没有开机自启 API，由 `native/src/autostart.rs` 自己实现，只写**当前用户**级位置、不需要管理员权限：
+
+| 平台 | 位置 |
+| --- | --- |
+| Windows | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`，值名 `Mend`，数据为带引号的 exe 绝对路径（复用已有 `windows-sys` 依赖，未引入新 crate） |
+| macOS | `~/Library/LaunchAgents/com.mend.app.plist`（`RunAtLoad=true`），并顺带 `launchctl load/unload` 让本次会话立即生效 |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/autostart/com.mend.app.desktop` |
+
+读取注册项 / 写文件都是同步且不碰 nsh 的 ambient 服务，按 §5 的分界保持同步导出。设置页的开关只在 `platform.desktop` 时显示。
+
 ## 6. UI 与交互决策
 
 | 旧实现 | 新实现 | 说明 |
@@ -153,7 +176,7 @@ SQLite 单文件（应用层字段加密）
 
 ## 7. 功能对照
 
-已保留：建库/解锁/锁定/改主密码、条目 CRUD、分类 CRUD（名称/颜色/emoji 图标）、标签、搜索、排序（最近更新/名称/收藏/手动）、收藏、归档、回收站（恢复/彻底删除/清空）、预设值、强密码生成器、Markdown 备注、复制到剪贴板、打开网址、自动锁定、浅色/深色/跟随系统、中英文切换、库文件自选与「在文件夹中显示」。
+已保留：建库/解锁/锁定/改主密码、条目 CRUD、分类 CRUD（名称/颜色/emoji 图标）、标签、搜索、排序（最近更新/名称/收藏/手动）、收藏、归档、回收站（恢复/彻底删除/清空）、预设值、强密码生成器、Markdown 备注、复制到剪贴板、打开网址、自动锁定、浅色/深色/跟随系统、中英文切换、库文件自选与「在文件夹中显示」、关闭时缩到系统托盘（首次询问一次）/ 托盘右键菜单、开机自启（§5.3 / §5.4）。
 
 暂缓/简化：更新检查、弱密码/重复密码安全标记、移动端备份“另存为”、WebDAV、TOTP、CSV/KDBX 导入导出（仍是非目标）。
 

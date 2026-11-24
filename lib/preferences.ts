@@ -24,6 +24,9 @@ const DEFAULTS: Preferences = {
   recentVaults: [],
   columnSizes: [...DEFAULT_COLUMN_SIZES],
   visibleColumns: { credentials: true, contact: true, notes: true },
+  closeMinimizeToTray: false,
+  trayChoiceMade: false,
+  autoStart: false,
 }
 
 export const preferences = signal<Preferences>({ ...DEFAULTS })
@@ -132,6 +135,13 @@ function sanitize(raw: unknown): Preferences {
     recentVaults: sanitizeRecentVaults(value.recentVaults),
     columnSizes: sanitizeColumns(value.columnSizes),
     visibleColumns: sanitizeVisibleColumns(value.visibleColumns),
+    closeMinimizeToTray:
+      typeof value.closeMinimizeToTray === 'boolean'
+        ? value.closeMinimizeToTray
+        : DEFAULTS.closeMinimizeToTray,
+    trayChoiceMade:
+      typeof value.trayChoiceMade === 'boolean' ? value.trayChoiceMade : DEFAULTS.trayChoiceMade,
+    autoStart: typeof value.autoStart === 'boolean' ? value.autoStart : DEFAULTS.autoStart,
   }
 }
 
@@ -215,6 +225,17 @@ export function setSiteIcons(enabled: boolean): void {
 /** 离线模式总开关：所有联网入口（图标抓取、更新检查与下载）都读这个偏好。 */
 export function setOffline(enabled: boolean): void {
   updatePreferences({ offline: enabled })
+}
+
+/** 关闭按钮的行为：最小化到托盘 / 直接退出。调用即视为用户已明确做过选择，
+ *  之后关闭窗口不再询问，只能回到设置里手动改。 */
+export function setCloseMinimizeToTray(enabled: boolean): void {
+  updatePreferences({ closeMinimizeToTray: enabled, trayChoiceMade: true })
+}
+
+/** 开机自启偏好（实际注册项由原生侧读写，这里只同步 UI 状态）。 */
+export function setAutoStart(enabled: boolean): void {
+  updatePreferences({ autoStart: enabled })
 }
 
 export function markUpdateChecked(): void {

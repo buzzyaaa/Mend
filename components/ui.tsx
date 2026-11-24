@@ -462,6 +462,8 @@ export function SwitchField(props: {
   disabled?: boolean
   /** 开关紧贴文案左侧（默认开关在行尾右侧）。 */
   leading?: boolean
+  /** 可选测试标识：同时挂在 Switch 与外层可点 View 上，供回归定位。 */
+  testID?: string
 }) {
   const cursorClass = props.disabled ? 'cursor-not-allowed' : 'cursor-pointer'
   const control = (
@@ -472,6 +474,7 @@ export function SwitchField(props: {
         props.onChange(event.checked)
       }}
       disabled={props.disabled}
+      testID={props.testID}
       accessibilityLabel={props.label}
       trackClass={`h-5 w-9 flex-row items-center justify-start rounded-full bg-muted p-0.5 transition checked:bg-primary ${cursorClass}`}
       thumbClass="h-4 w-4 rounded-full bg-background checked:translate-x-4"
@@ -486,7 +489,11 @@ export function SwitchField(props: {
   if (props.leading) {
     // 开关 + 标题一行；说明另起一行，左缘与开关对齐。
     return (
-      <View class={`gap-1.5 py-1.5 ${props.disabled ? '' : 'cursor-pointer'}`} onPress={press}>
+      <View
+        class={`gap-1.5 py-1.5 ${props.disabled ? '' : 'cursor-pointer'}`}
+        onPress={press}
+        testID={props.testID ? `${props.testID}-row` : undefined}
+      >
         <View class="flex-row items-center gap-2.5">
           {control}
           <Text class="text-xs text-foreground">{props.label}</Text>
@@ -499,6 +506,7 @@ export function SwitchField(props: {
     <View
       class={`flex-row items-center justify-between gap-2 py-1.5 ${props.disabled ? '' : 'cursor-pointer'}`}
       onPress={press}
+      testID={props.testID ? `${props.testID}-row` : undefined}
     >
       <View class="flex-1 gap-0.5">
         <Text class="text-xs text-foreground">{props.label}</Text>

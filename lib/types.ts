@@ -54,6 +54,12 @@ export interface Preferences {
   columnSizes: number[]
   /** 列表各列是否显示。 */
   visibleColumns: Record<ColumnKey, boolean>
+  /** 关闭主窗口时是否缩到系统托盘而不是退出。首次关闭会询问一次，之后只读这个值。 */
+  closeMinimizeToTray: boolean
+  /** 是否已经就「关闭时最小化到托盘」做过选择（含首次询问的确定/取消与设置里手动改）。 */
+  trayChoiceMade: boolean
+  /** 是否随系统开机启动。仅桌面端生效，实际状态以原生注册项为准。 */
+  autoStart: boolean
 }
 
 export type SortMode = 'updated' | 'title' | 'favorite' | 'manual'
@@ -70,8 +76,12 @@ export interface ConfirmState {
   title: string
   message: string
   confirmLabel: string
+  /** 取消按钮文案；缺省用 common.cancel。关闭询问用它表达「直接退出」。 */
+  cancelLabel?: string
   destructive: boolean
   onConfirm: () => void | Promise<void>
+  /** 取消 / Esc / 点遮罩时执行；关闭询问靠它在取消时记下选择并退出。 */
+  onCancel?: () => void | Promise<void>
 }
 
 export interface EntryEditorState {

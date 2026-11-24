@@ -7,6 +7,14 @@
     "maximize": "最大化",
     "close": "关闭"
   },
+  "tray": {
+    "open": "打开主面板",
+    "settings": "设置",
+    "quit": "退出 Mend",
+    "closeTitle": "关闭 Mend",
+    "closeMessage": "关闭窗口时要缩小到系统托盘吗？此选择只询问一次，之后可在设置里更改。",
+    "minimize": "缩小到托盘"
+  },
   "header": {
     "language": "语言",
     "langZh": "简体中文",
@@ -318,6 +326,12 @@
     "offlineEnable": "仍然开启",
     "offlineOn": "已开启离线模式，不会发起任何外部请求",
     "offlineOff": "已关闭离线模式",
+    "closeMinimizeToTray": "关闭时最小化到托盘",
+    "closeMinimizeToTrayHint": "点关闭按钮时缩到系统托盘而不是退出；托盘图标右键可打开主面板、进设置或退出。首次关闭会询问一次，之后只按这里的开关执行。",
+    "autoStart": "开机启动",
+    "autoStartHint": "登录系统时自动启动 Mend（仅桌面端支持，写入当前用户的登录项）",
+    "autoStartOn": "已开启开机启动",
+    "autoStartOff": "已关闭开机启动",
     "clientKind": "桌面客户端"
   },
   "update": {

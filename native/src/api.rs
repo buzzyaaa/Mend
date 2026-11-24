@@ -5,6 +5,7 @@
 
 use nsh_core::prelude::*;
 
+use crate::autostart;
 use crate::dto::{
     Category, CategoryInput, EntryInput, EntrySummary, EntryView, GeneratorOptions,
     IconFetchReport, ListFilter, Preset, PresetInput, Settings, Tag, TagInput, VaultStatus,
@@ -80,6 +81,16 @@ impl Vault {
     /// Persist the UI preferences (non-sensitive).
     pub fn save_preferences(json: String) -> Result<(), String> {
         service::save_preferences(json)
+    }
+
+    /// Whether Mend is registered to launch at login (current user only).
+    pub fn auto_start_enabled() -> Result<bool, String> {
+        autostart::enabled()
+    }
+
+    /// Add or remove Mend from the current user's login items.
+    pub fn set_auto_start(enabled: bool) -> Result<bool, String> {
+        autostart::set(enabled)
     }
 
     /// Whether a fully downloaded, verified code package (`updates/next.nshpkg`

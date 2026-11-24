@@ -629,3 +629,43 @@ test('switch database menu lists recent vaults and quick actions', async () => {
   await app.wait(150)
   expect(app.texts()).toContain('Passwords')
 })
+
+// 关闭行为开关：设置里手动切换「关闭时缩到托盘」时，必须同时把 trayChoiceMade
+// 置 true（之后关闭不再询问），并把 closeMinimizeToTray 写进偏好。手机端无系统托盘，
+// 但偏好字段仍可切换（桌面托盘逻辑在 isAvailable=false 下不安装）。
+test('closing-to-tray switch persists choice and suppresses future prompts', async () => {
+  let saved = ''
+  const app = await open('./App.tsx', {
+    modules: {
+      'mend/native': {
+        'Vault.loadPreferences': () => '',
+        'Vault.savePreferences': (json: string) => {
+          saved = json
+        },
+        'Vault.autoStartEnabled': () => false,
+      },
+    },
+  })
+  // 全量运行与前面的用例共享进程级会话：可能已解锁直接进主界面；单跑时
+  // 是首次建库页。等任一种就绪再继续，避免 waitFor 单一页面超时。
+  await app.waitUntil(() => app.shows('text:Passwords') || app.shows('label:Master password'))
+  if (!app.shows('text:Passwords')) {
+    await app.type('label:Master password', 'test-password-1234')
+    if (app.shows('label:Confirm master password')) {
+      await app.type('label:Confirm master password', 'test-password-1234')
+      await app.press('Create and enter')
+    } else {
+      await app.press('text:Unlock')
+    }
+    await app.waitFor('text:Passwords')
+  }
+
+  await app.press('id:nav-settings')
+  await app.waitFor('text:Appearance & behavior')
+  expect(app.shows('id:settings-close-minimize-to-tray')).toBe(true)
+  await app.press('id:settings-close-minimize-to-tray')
+  await app.wait(120)
+  const prefs = JSON.parse(saved)
+  expect(prefs.closeMinimizeToTray).toBe(true)
+  expect(prefs.trayChoiceMade).toBe(true)
+})

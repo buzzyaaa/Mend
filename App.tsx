@@ -3,11 +3,13 @@ import { Scrollbar } from 'nsh/base'
 import { currentWindow, isAvailable } from 'nsh/desktop'
 import { t } from 'nsh/i18n'
 
+import { ConfirmDialog } from './components/ConfirmDialog'
 import { Icon } from './components/Icon'
 import { ToastHost } from './components/ToastHost'
 import { ActionButton, FadeIn, Spinner } from './components/ui'
 import { MainScreen } from './screens/MainScreen'
 import { UnlockScreen } from './screens/UnlockScreen'
+import { installTrayEffect, installTrayHandlers } from './lib/tray'
 import {
   boot,
   bootReady,
@@ -93,6 +95,11 @@ function App() {
     })
   })
 
+  // 关闭按钮交给应用自己处理（首次询问 / 之后按偏好缩托盘或退出），
+  // 托盘图标启动即常驻、退出才移除。两者都必须在这里（渲染期）安装。
+  installTrayHandlers(mainWindow)
+  installTrayEffect()
+
   effect(() => {
     if (bootRequested) return
     bootRequested = true
@@ -127,6 +134,9 @@ function App() {
           </If>
         </View>
       </If>
+
+      {/* 确认框放最外层：首次关闭询问在解锁页也会触发，不能只挂在主界面里。 */}
+      <ConfirmDialog />
 
       {/* 提示条放在最外层（解锁页也能提示）。弹窗打开时改由弹窗内的那份显示：
           nsh 的 Dialog 是独立原生窗口层，这里的 Overlay 盖不住它的遮罩。 */}

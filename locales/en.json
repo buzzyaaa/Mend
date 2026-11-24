@@ -7,6 +7,14 @@
     "maximize": "Maximize",
     "close": "Close"
   },
+  "tray": {
+    "open": "Open main panel",
+    "settings": "Settings",
+    "quit": "Quit Mend",
+    "closeTitle": "Close Mend",
+    "closeMessage": "Minimize Mend to the system tray when closing the window? Asked only once; you can change it later in Settings.",
+    "minimize": "Minimize to tray"
+  },
   "header": {
     "language": "Language",
     "langZh": "简体中文",
@@ -318,6 +326,12 @@
     "offlineEnable": "Turn on anyway",
     "offlineOn": "Offline mode is on — no external requests will be made",
     "offlineOff": "Offline mode is off",
+    "closeMinimizeToTray": "Minimize to tray on close",
+    "closeMinimizeToTrayHint": "Minimize to the system tray instead of quitting when you click the close button. Right-click the tray icon to open the main panel, open Settings or quit. Asked once on first close; afterwards this switch is the only control.",
+    "autoStart": "Start on login",
+    "autoStartHint": "Launch Mend automatically when you sign in (desktop only; registers a login item for the current user)",
+    "autoStartOn": "Start on login is on",
+    "autoStartOff": "Start on login is off",
     "clientKind": "Desktop app"
   },
   "update": {
