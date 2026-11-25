@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Platform: Windows / macOS / Linux](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
-[![Version](https://img.shields.io/badge/Version-0.6.5-green.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-0.6.6-green.svg)](./CHANGELOG.md)
 
 English | [简体中文](./README.zh-CN.md)
 
@@ -98,7 +98,7 @@ nsh build .                    # output: .nsh/out
 nsh package . --target windows # artifacts: Mend/Mend.exe, Mend.zip, Mend-<version>-windows-x86_64.zip, Mend.iss
 ```
 
-With Inno Setup 6 installed, `nsh package` also produces a `setup.exe` installer (otherwise it only writes `Mend.iss`, which is normal). Packaging needs no signing key. To publish an official release, push a `v*` tag and `.github/workflows/release.yml` builds and publishes a GitHub Release automatically.
+With Inno Setup 6 installed, `nsh package` also produces an installer (otherwise it only writes `Mend.iss`, which is normal). The release workflow patches the script and rebuilds it as `Mend-<version>-setup.exe`, whose first wizard page picks 简体中文 / English (default follows the system UI language); the uninstaller keeps the chosen language. Packaging needs no signing key. To publish an official release, push a `v*` tag and `.github/workflows/release.yml` builds and publishes a GitHub Release automatically.
 
 Equivalent npm scripts are available in `package.json`: `dev` / `build` / `package` / `test` / `check` / `typecheck`.
 

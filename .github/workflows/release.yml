@@ -61,7 +61,8 @@ jobs:
 
       # nsh package 会生成 Inno Setup 脚本并「在检测到 ISCC.exe 时」编译出
       # Mend-setup.exe（当前用户级安装器，双击可原地覆盖升级）。runner 镜像
-      # 通常预装 Inno Setup 6，这里兜底探测并用 choco 安装，确保安装器一定产出。
+      # 通常预装 Inno Setup 6，这里兜底探测并用 choco 安装。nsh 生成的脚本
+      # 固定为英文且文件名不带版本，后面会打补丁再编译一次。
       - name: Ensure Inno Setup 6 (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -118,6 +119,7 @@ jobs:
             exit 1
           fi
           echo "Packaging $VERSION (build $BUILD)"
+          echo "APP_SEMVER=$VERSION" >> "$GITHUB_ENV"
           nsh package . --target ${{ matrix.target }} \
             --app-version "$VERSION" --build "$BUILD" -o dist
 
@@ -130,20 +132,27 @@ jobs:
 
       # 安装器是额外的下载选项，不参与应用内自动更新（latest.json 的 windows
       # 平台资产仍指向 zip，updater 只接受 zip/tar.gz）。单独上传为 artifact。
-      # nsh 把安装器与 .iss 放在 -o 目录（通常是 dist 根）；不同版本偶有落到
-      # 子目录的情况。这里递归找到后统一拷到 dist 根，后续步骤只认这个路径。
-      - name: Verify Windows installer
+      # nsh 生成的 .iss 固定英文名且不写版本：先打补丁（版本号 + 中英文语言页），
+      # 再用 ISCC 重编译，最终只发布 dist/Mend-<version>-setup.exe。
+      - name: Build localized Windows installer
         if: matrix.target == 'windows'
         shell: pwsh
         run: |
-          $setup = Get-ChildItem -Path dist -Filter '*-setup.exe' -Recurse | Select-Object -First 1
-          if (-not $setup) {
-            throw 'nsh package did not produce a *-setup.exe (Inno Setup 6 missing?)'
-          }
-          if ($setup.FullName -ne (Join-Path $pwd 'dist/Mend-setup.exe')) {
-            Copy-Item $setup.FullName 'dist/Mend-setup.exe' -Force
-          }
-          Get-Item 'dist/Mend-setup.exe' | Select-Object FullName, Length
+          $ErrorActionPreference = 'Stop'
+          $version = $env:APP_SEMVER
+          if (-not $version) { throw 'APP_SEMVER is not set' }
+          $iss = Get-ChildItem -Path dist -Filter 'Mend.iss' -Recurse | Select-Object -First 1
+          if (-not $iss) { throw 'nsh package did not produce Mend.iss' }
+          node scripts/patch-installer.mjs "$($iss.FullName)" "$version"
+          $iscc = (Get-Command ISCC.exe -ErrorAction Stop).Source
+          & $iscc /Q "/O$((Resolve-Path dist).Path)" "$($iss.FullName)"
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
+          $setupName = "Mend-$version-setup.exe"
+          $setup = Join-Path (Resolve-Path dist).Path $setupName
+          if (-not (Test-Path $setup)) { throw "ISCC did not produce $setupName" }
+          # 丢掉 nsh 先编译的无版本/纯英文版本，避免误下载。
+          Get-ChildItem -Path dist -Filter 'Mend-setup.exe' -Recurse | Remove-Item -Force
+          Get-Item $setup | Select-Object FullName, Length
 
       - name: Upload Windows installer
         if: matrix.target == 'windows'
@@ -151,7 +160,7 @@ jobs:
         with:
           name: windows-installer
           path: |
-            dist/Mend-setup.exe
+            dist/Mend-*-setup.exe
             dist/Mend.iss
           if-no-files-found: error
 
@@ -285,14 +294,15 @@ jobs:
           body: |
             Mend ${{ github.ref_name }} — Native Shell build.
 
-            Windows: download Mend-setup.exe for a per-user installer (double-click
-            to install or upgrade in place), or the zip for a portable copy.
+            Windows: download Mend-<version>-setup.exe for a per-user installer
+            (first step picks English / 简体中文; double-click to install or
+            upgrade in place), or the zip for a portable copy.
             Linux / macOS: download the platform archive.
             Existing vaults in the application data directory open as-is.
           files: |
             dist/*.tar.gz
             dist/*.zip
-            dist/Mend-setup.exe
+            dist/Mend-*-setup.exe
             dist/*.nshpkg
             dist/latest.json
             dist/latest.json.sig
@@ -321,6 +331,7 @@ jobs:
             echo "::error::CNB_TOKEN secret is missing"
             exit 1
           fi
+          VERSION="${GITHUB_REF_NAME#v}"
           node scripts/sync-cnb-release.mjs smybxg/Mend "${{ github.ref_name }}" \
-            dist/*.zip dist/*.tar.gz dist/Mend-setup.exe dist/*.nshpkg \
+            dist/*.zip dist/*.tar.gz "dist/Mend-$VERSION-setup.exe" dist/*.nshpkg \
             dist/latest.json dist/latest.json.sig

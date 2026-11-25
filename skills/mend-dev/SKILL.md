@@ -53,7 +53,7 @@ npm run typecheck            # TypeScript 备用门禁
 
 - `nsh dev .` 会按端口自动接管旧会话，不需要杀进程或手动清理 dev-sessions 目录；`nsh run . --target web` 只用于 web / tui 等其他目标预览，不是主开发入口。
 - 测试前设置 `MEND_DATA_DIR=${workspaceFolder}\.tmp\test-data` 并清空，避免碰到真实库；`.vscode/tasks.json` 已内置该逻辑。
-- 构建 / 打包输出在 `.nsh/out`；`nsh package . --target windows` 产出 `Mend/`（含 `Mend.exe`）、`Mend.zip`、带版本的更新压缩包与 `Mend.iss`，装有 Inno Setup 6 时另有 `setup.exe`。
+- 构建 / 打包输出在 `.nsh/out`；`nsh package . --target windows` 产出 `Mend/`（含 `Mend.exe`）、`Mend.zip`、带版本的更新压缩包与 `Mend.iss`，装有 Inno Setup 6 时另有 `Mend-setup.exe`。发布 CI 用 `scripts/patch-installer.mjs` 打补丁后重编译为 `Mend-<版本>-setup.exe`（首步选语言，中英双语）。
 - 不要在主 crate 上跑 `cargo test`：当前没有 Tauri 主 crate，测试入口是 `core` 与 `native`。
 
 ## 5. 改动的工作流

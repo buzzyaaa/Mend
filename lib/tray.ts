@@ -10,14 +10,7 @@
  *  全部逻辑自动降级为直接退出。
  */
 import { effect } from 'nsh'
-import {
-  Application,
-  Tray,
-  Window,
-  isAvailable,
-  type MenuItem,
-  type WindowRef,
-} from 'nsh/desktop'
+import { Application, Tray, Window, isAvailable, type MenuItem, type WindowRef } from 'nsh/desktop'
 import { t } from 'nsh/i18n'
 
 import appIcon from '../assets/icon.png'
@@ -57,17 +50,44 @@ function openSettings(): void {
   win?.focus()
 }
 
-/** 彻底退出：先撤托盘图标，再走应用级退出（Application.quit 不受 closeOnPress 拦截）。 */
+/** 彻底退出：先撤托盘图标，再走应用级退出（Application.quit 不受 closeOnPress 拦截）。
+ *  任何一步失败都不能把退出吞掉——旧外壳 + OTA 包下可能没有 Tray API，
+ *  `Tray.set(null)` 一抛错，点关闭按钮就会变成毫无反应。 */
 export function quitApp(): void {
   if (quitting) return
   quitting = true
-  if (isAvailable) Tray.set(null)
-  Application.quit()
+  if (isAvailable) {
+    try {
+      Tray.set(null)
+    } catch {
+      // 图标清不掉也要继续退出。
+    }
+  }
+  try {
+    if (typeof Application.quit === 'function') {
+      Application.quit()
+      return
+    }
+  } catch {
+    // 落到下面的窗口关闭兜底。
+  }
+  if (isAvailable) {
+    try {
+      // closeOnPress 拦不住显式 close()。
+      Window.get('main')?.close()
+    } catch {
+      // 没有可关的窗口时，平台会随最后一个窗口关闭结束进程。
+    }
+  }
 }
 
-/** 缩到托盘：隐藏窗口，托盘图标保持常驻。 */
+/** 缩到托盘：隐藏窗口，托盘图标保持常驻。隐藏失败就按退化处理，绝不让关闭按钮失效。 */
 function minimizeToTray(win: WindowRef): void {
-  win.hide()
+  try {
+    win.hide()
+  } catch {
+    quitApp()
+  }
 }
 
 /** 首次关闭的询问。取消与 Esc 都走 onCancel（=记录「不缩托盘」并退出）。 */
@@ -105,14 +125,19 @@ export function installTrayHandlers(mainWindow: WindowRef | null): void {
   })
 
   mainWindow.on('closePress', () => {
-    const prefs = preferences()
-    // 以开关为准：只有「没做过选择且开关没开」才弹首次询问。老偏好文件可能
-    // 出现 closeMinimizeToTray=true 但 trayChoiceMade=false，此时不该弹窗打断。
-    if (!prefs.trayChoiceMade && !prefs.closeMinimizeToTray) {
-      askCloseOnce(mainWindow)
-    } else if (prefs.closeMinimizeToTray) {
-      minimizeToTray(mainWindow)
-    } else {
+    try {
+      const prefs = preferences()
+      // 以开关为准：只有「没做过选择且开关没开」才弹首次询问。老偏好文件可能
+      // 出现 closeMinimizeToTray=true 但 trayChoiceMade=false，此时不该弹窗打断。
+      if (!prefs.trayChoiceMade && !prefs.closeMinimizeToTray) {
+        askCloseOnce(mainWindow)
+      } else if (prefs.closeMinimizeToTray) {
+        minimizeToTray(mainWindow)
+      } else {
+        quitApp()
+      }
+    } catch {
+      // 偏好读取/托盘逻辑异常时也要关得掉，不能停在"点了没反应"。
       quitApp()
     }
   })

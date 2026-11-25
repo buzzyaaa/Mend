@@ -5,6 +5,17 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.6.6] - 2026-11-25
+
+#### Added
+- **安装器首步选择语言**：发布流水线给 Inno Setup 脚本加入 English / 简体中文，默认按 Windows 系统界面语言预选，升级安装沿用上次所选语言；卸载向导沿用安装时选择的语言。
+
+#### Changed
+- **安装器文件名带版本号**：发布资产从 `Mend-setup.exe` 改为 `Mend-<版本>-setup.exe`，GitHub Release 与 CNB 同步一并更新；便携 zip 内的 `Mend.exe` 名称不变，避免影响自动更新。
+
+#### Fixed
+- **点关闭按钮偶尔毫无反应**：退出时清理托盘图标或调用退出 API 失败会把关闭吞掉（旧外壳 + OTA 包场景）。现在异常被隔离，并逐级退到关闭主窗口，保证关闭按钮始终生效。
+
 ## [0.6.5] - 2026-11-24
 
 #### Fixed

@@ -94,7 +94,7 @@ nsh build .                    # 输出到 .nsh/out
 nsh package . --target windows # 产物：Mend/Mend.exe、Mend.zip、Mend-<版本>-windows-x86_64.zip、Mend.iss
 ```
 
-安装了 Inno Setup 6 时，`nsh package` 还会额外产出 `setup.exe` 安装包（未安装则只写 `Mend.iss`，属正常）。整个打包不需要签名密钥。发布正式版：打 `v*` tag 后由 `.github/workflows/release.yml` 自动构建并发布 GitHub Release。
+安装了 Inno Setup 6 时，`nsh package` 还会额外产出安装包（未安装则只写 `Mend.iss`，属正常）。发布流水线会给 `Mend.iss` 打补丁并重新编译，产出 `Mend-<版本>-setup.exe`：第一步选语言（简体中文 / English，默认跟随系统界面语言），卸载向导沿用安装时的语言。整个打包不需要签名密钥。发布正式版：打 `v*` tag 后由 `.github/workflows/release.yml` 自动构建并发布 GitHub Release。
 
 `package.json` 同时提供等价的 npm scripts：`dev` / `build` / `package` / `test` / `check` / `typecheck`。
 

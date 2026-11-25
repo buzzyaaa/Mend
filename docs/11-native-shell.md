@@ -120,6 +120,7 @@ SQLite 单文件（应用层字段加密）
 
 - **关闭拦截的关键：创建期就要 `closeOnPress:false`**。`nsh.json` 的 `window` 段直接写死 `"closeOnPress": false`，让窗口创建时就生效；**不能只靠运行时 `Window.set`**——渲染期的一次性 `set` 在「旧外壳 + OTA 包」环境会被丢弃（标题也踩过同款坑），一旦 `closeOnPress` 退回 `true`，点关闭按钮会直接销毁窗口退出，`closePress` 回调根本没机会跑，表现就是「开关开了却没缩托盘、图标也没了」。`installTrayHandlers` 里仍保留运行时 `set`，并用读取 `bootReady()` 的 effect 在 boot 后再设一次作兜底。
 - **首次询问**：偏好 `trayChoiceMade=false` **且** `closeMinimizeToTray=false` 时才弹一次确认（确定＝缩托盘 / 取消＝退出），两个分支都写入 `closeMinimizeToTray` 并把 `trayChoiceMade` 置 `true`；之后关闭只读开关，不再询问。以开关为准的分支顺序避免老偏好文件出现「开关开但没选过」时误弹窗。确认框挂在 `App` 顶层（不在 `MainScreen`），否则解锁页关闭时弹不出来。`ConfirmState` 因此新增 `cancelLabel` / `onCancel`——Esc 与点取消都要走同一分支。
+- **退出不能被托盘拖垮**：`quitApp()` 先 try/catch 清托盘图标，再无条件走 `Application.quit()`；旧外壳缺 `Tray`/`Application.quit` 时继续退到 `Window.get('main').close()`。`closePress` 与 `hide()` 也都有兜底——任何一步抛错都必须让关闭按钮生效，不能停在「点了没反应」。
 - **托盘图标**：应用启动即常驻（`installTrayEffect` 在渲染期 `Tray.set`，菜单文案随语言偏好刷新，effect 读 `bootReady()` 在 boot 后再设一次；`Tray.set` 用 try/catch 兜住旧外壳缺 API），只有退出应用才 `Tray.set(null)` 移除——窗口恢复或缩托盘都不影响图标。左键点击或菜单「打开主面板」＝ 先切 `activePage='entries'`（启动后的首页＝密码列表页，即使缩托盘前停在设置页也回到列表），再 `show + focus`；右键固定三项：`tray.open` / `tray.settings`（先切 `activePage='settings'` 再显示窗口）/ `tray.quit`（`Application.quit()`，先撤图标）。图标唯一源仍是 `assets/icon.png`（§8.1），不为托盘另存一张。
 - **偏好字段**：`closeMinimizeToTray`（默认 false）、`trayChoiceMade`（默认 false）、`autoStart`（默认 false）都走 preferences.json 的纯 JSON 透传，新增键老文件免迁移。
 - **手机 / headless**：无 `nsh/desktop` 时（`isAvailable=false`）全部降级——关闭按钮保持系统默认行为，托盘逻辑不安装，不引入桌面依赖。

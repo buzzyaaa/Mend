@@ -39,7 +39,7 @@
 - **测试碰到真实库**：`nsh test .` 前设置 `MEND_DATA_DIR` 指向 `.tmp/test-data` 并清空；VS Code 的测试任务已内置。真实库在 `%APPDATA%\com.mend.app`，不要手动删。
 - **不要在主 crate 上跑 `cargo test`**：当前没有 Tauri 主 crate；测试入口是 `core` 与 `native`。
 - **版本号同步**：`nsh.json`、`package.json`、`core/Cargo.toml` 三处要一致，否则产物版本信息不一致。
-- **打包不需要签名密钥**：`nsh package . --target windows` 只产未签名的 Windows 运行目录 / `Mend.exe` / `Mend.zip` / `Mend.iss`；装有 Inno Setup 6 时另有 `setup.exe`。签名 OTA 包是发布流程（`docs/10-release-update.md`）的事。
+- **打包不需要签名密钥**：`nsh package . --target windows` 只产未签名的 Windows 运行目录 / `Mend.exe` / `Mend.zip` / `Mend.iss`；装有 Inno Setup 6 时另有 `Mend-setup.exe`。发布 CI 会用 `scripts/patch-installer.mjs` 把输出名改成 `Mend-<版本>-setup.exe` 并加入中英双语语言页后重编译，详见 `docs/10-release-update.md`。签名 OTA 包也是发布流程的事。
 
 ## 数据位置
 
