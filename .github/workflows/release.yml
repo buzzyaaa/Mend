@@ -22,6 +22,12 @@ permissions:
 env:
   APP_VERSION: ${{ inputs.version || github.ref_name }}
   BUILD: ${{ github.run_number }}
+  # 锁定与本地开发、.nsh/types、docs 一致的外壳版本。install.ps1/install.sh
+  # 都读 NSH_VERSION。实测 0.7.0 外壳在打包（非 dev）环境下 Tray.set 不生效
+  # ——托盘图标从未被 Shell_NotifyIconW 添加（Windows 的 NotifyIconSettings
+  # 注册表无该 exe 记录），dev 模式正常；0.5.1 打包正常。升版前必须先在
+  # 打包产物上回归托盘与关闭行为。
+  NSH_VERSION: v0.5.1
 
 jobs:
   package:

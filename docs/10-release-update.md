@@ -67,6 +67,8 @@ nsh certify --root keys/root.secret --key keys/release.pub \
 
 版本与构建号：`nsh package` / `nsh publish` 使用 tag 版本（去掉前缀 `v`）和 `github.run_number` 作为构建号；同一发布的整包与 OTA 包使用相同构建号。
 
+**外壳版本锁定（`NSH_VERSION`）**：CI 通过 `NSH_VERSION=v0.5.1`（workflow 顶层 env，install.ps1 / install.sh 都读它）安装与本地开发、`.nsh/types`、docs 一致的 nsh。实测 nsh 0.7.0 外壳在**打包（非 dev）环境**下 `Tray.set` 不生效——托盘图标从未被添加（Windows `NotifyIconSettings` 注册表无该 exe 记录），dev 模式正常；0.5.1 打包正常。升外壳版本前，必须先在本地 `nsh package` 产物上回归：托盘出现（含隐藏图标溢出区）、关闭按钮行为、托盘菜单召回。
+
 **安装器与自动更新是两条独立通道**：zip/清单服务于应用内自动更新；`Mend-<version>-setup.exe` 只是给「想装成正式应用（开始菜单、已安装应用条目）」的用户一个额外下载选项，双击即可原地升级旧安装。安装器未做 Authenticode 签名，Windows SmartScreen 会提示「未知发布者」，属已知限制。
 
 **安装/卸载语言**：安装第一步是「选择安装语言 / Select Language」（English、简体中文），默认按 Windows 系统界面语言预选；升级安装沿用上次所选语言。卸载向导使用安装时记录的语言，与应用内语言偏好无关。便携 zip 里的 `Mend.exe` 保持固定文件名，避免自动更新与快捷方式失效；带版本号的是安装器文件名。

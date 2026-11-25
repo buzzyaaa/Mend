@@ -5,6 +5,12 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.6.7] - 2026-11-25
+
+#### Fixed
+- **打包版托盘图标不显示、关闭按钮「消失」**：CI 用 nsh 0.7.0 外壳打包，实测该外壳在打包（非 dev）环境下 `Tray.set` 不生效——托盘图标从未被添加，点关闭窗口隐藏后应用还活着却没有图标可召回，只能任务管理器杀进程。CI 现在用 `NSH_VERSION=v0.5.1` 锁定与本地开发一致的外壳版本（0.5.1 打包实测托盘正常）。
+- **启动检查更新触发引擎线程 panic**：`checkPackageReady` 是同步导出，却在 Rust 里调 ambient 服务 `data_dir()`，打包版（非 dev）在引擎线程上直接 panic（no reactive runtime），最坏情况整个进程退出。改为只读 `init` 时写入的 `Backend.data_dir` 字段，与其它同步导出同一模式。
+
 ## [0.6.6] - 2026-11-25
 
 #### Added

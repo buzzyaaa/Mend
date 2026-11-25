@@ -1009,13 +1009,22 @@ const NEXT_PACKAGE_FILE: &str = "next.nshpkg";
 ///
 /// 基准目录用 nsh 提供的应用数据目录（与运行时更新器写入的
 /// `sys.data_dir` 同源），而不是保险库的兜底目录链：更新器只认它自己
-/// 解析出的目录，这里若用别的目录就会漏报。文件不存在（还没下载完、
-/// 用户手动关闭时校验未完成、或启动器已应用并清理）一律返回 `false`。
+/// 解析出的目录，这里若用别的目录就会漏报。`init` 已把该目录写进
+/// `Backend.data_dir`（TSX 侧传的就是 `process.dataDir`），所以这里只读
+/// 字段、不调 ambient `data_dir()`——它是 ambient 服务，同步导出在引擎
+/// 线程上调用会 panic（no reactive runtime），实测打包版启动即炸。
+/// 文件不存在（还没下载完、用户手动关闭时校验未完成、或启动器已应用并
+/// 清理）一律返回 `false`。
 pub fn check_package_ready() -> Result<bool, String> {
-    let Some(dir) = data_dir() else {
+    let backend = backend()?;
+    if backend.data_dir.as_os_str().is_empty() {
         return Ok(false);
-    };
-    Ok(dir.join(UPDATES_DIR).join(NEXT_PACKAGE_FILE).is_file())
+    }
+    Ok(backend
+        .data_dir
+        .join(UPDATES_DIR)
+        .join(NEXT_PACKAGE_FILE)
+        .is_file())
 }
 
 // ---------------------------------------------------------------------------
