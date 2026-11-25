@@ -8,6 +8,8 @@
  *   2. [Languages] 加入英文 + 简体中文，ShowLanguageDialog=yes —— 第一步选语言；
  *      LanguageDetectionMethod=uilanguage 按系统 UI 语言预选；
  *      UsePreviousLanguage=yes 让升级安装沿用上次语言，卸载界面也用安装时选的语言。
+ *   3. 把仓库内的 installer/ChineseSimplified.isl 拷到 .iss 同目录，按相对路径引用。
+ *      GitHub runner 自带的 Inno Setup 没有这份非官方翻译，放在仓库里最稳。
  *
  * 用法：node scripts/patch-installer.mjs <Mend.iss> [version]
  * 版本省略时读仓库根 nsh.json 的 version。
@@ -31,8 +33,21 @@ if (!/^\d+\.\d+\.\d+/.test(version)) {
 }
 
 const issPath = path.resolve(issArg)
+const islSource = path.join(root, 'installer', 'ChineseSimplified.isl')
+if (!fs.existsSync(islSource)) {
+  console.error(`missing ${islSource}`)
+  process.exit(1)
+}
+// Inno Setup 从脚本所在目录解析相对路径，语言文件必须跟 .iss 放在一起。
+fs.copyFileSync(islSource, path.join(path.dirname(issPath), 'ChineseSimplified.isl'))
+
 const source = fs.readFileSync(issPath, 'utf8')
-const lines = source.replace(/\r\n?/g, '\n').split('\n')
+const lines = source
+  .replace(/\r\n?/g, '\n')
+  .split('\n')
+  .map((line) =>
+    line.replace(/compiler:Languages\\ChineseSimplified\.isl/g, 'ChineseSimplified.isl'),
+  )
 
 const setupAt = lines.findIndex((line) => /^\[Setup\]\s*$/i.test(line))
 if (setupAt < 0) {
@@ -68,7 +83,7 @@ if (!lines.some((line) => /^\[Languages\]/i.test(line))) {
       '',
       '[Languages]',
       'Name: "en"; MessagesFile: "compiler:Default.isl"',
-      'Name: "zh"; MessagesFile: "compiler:Languages\\ChineseSimplified.isl"',
+      'Name: "zh"; MessagesFile: "ChineseSimplified.isl"',
       '',
     ],
   )

@@ -58,7 +58,7 @@ nsh certify --root keys/root.secret --key keys/release.pub \
 打 `v*` tag 或手动触发：
 
 1. **package**：矩阵构建 Windows / Linux / macOS 平台压缩包，上传 artifact。
-   - Windows：VS Build Tools + Rust（默认目标即可）。`nsh package --target windows` 除 zip 外还会生成 Inno Setup 脚本 `Mend.iss`，并在检测到 `ISCC.exe` 时编译出 `Mend-setup.exe`。CI 先探测 Inno Setup 6，缺失则用 `choco install innosetup` 兜底；随后用 `scripts/patch-installer.mjs` 给 `Mend.iss` 打补丁（输出名改为 **`Mend-<version>-setup.exe`**，加入 `[Languages]` 的 `en` / `zh` 与 `ShowLanguageDialog=yes`、`LanguageDetectionMethod=uilanguage`、`UsePreviousLanguage=yes`），再用 ISCC 重编译。最终安装器为当前用户级、双击原地覆盖升级，保留 `%APPDATA%\com.mend.app` 的数据，并作为独立 artifact 上传。
+   - Windows：VS Build Tools + Rust（默认目标即可）。`nsh package --target windows` 除 zip 外还会生成 Inno Setup 脚本 `Mend.iss`，并在检测到 `ISCC.exe` 时编译出 `Mend-setup.exe`。CI 先探测 Inno Setup 6，缺失则用 `choco install innosetup` 兜底；随后用 `scripts/patch-installer.mjs` 给 `Mend.iss` 打补丁（输出名改为 **`Mend-<version>-setup.exe`**，加入 `[Languages]` 的 `en` / `zh` 与 `ShowLanguageDialog=yes`、`LanguageDetectionMethod=uilanguage`、`UsePreviousLanguage=yes`，并把仓库内的 `installer/ChineseSimplified.isl` 拷到脚本目录按相对路径引用——GitHub runner 自带的 Inno Setup 不含这份非官方翻译），再用 ISCC 重编译。最终安装器为当前用户级、双击原地覆盖升级，保留 `%APPDATA%\com.mend.app` 的数据，并作为独立 artifact 上传。
    - Linux：安装 `libgtk-4-dev clang libwebkitgtk-6.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev`。
    - macOS：`rustup target add aarch64-apple-darwin x86_64-apple-darwin`。
 2. **ot-package**：在 Windows 上运行 `nsh publish`，用 `NSH_RELEASE_KEY` / `NSH_RELEASE_CERT` 签名，产出 `dist/com.mend.app-<build>.nshpkg`。
