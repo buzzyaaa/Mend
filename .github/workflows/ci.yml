@@ -7,6 +7,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# 必须与 release.yml / 本地开发 / .nsh/types  locks 在同一外壳版本。
+# install.sh 读 NSH_VERSION；不锁会装到最新版（实测 0.7.1），
+# 与本机生成的 .nsh 类型/原生模块不兼容，nsh check 直接报
+# "these dependencies are built for another nsh"。
+env:
+  NSH_VERSION: v0.5.1
+
 jobs:
   core-test:
     name: Rust core tests

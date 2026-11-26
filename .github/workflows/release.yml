@@ -370,10 +370,14 @@ jobs:
             const fs = require("fs");
             const gh = JSON.parse(fs.readFileSync("dist/latest.json", "utf8"));
             const cnb = JSON.parse(fs.readFileSync("dist/latest-cnb.json", "utf8"));
+            // 原版清单里平台包是相对名 Mend-<ver>-<os>-<arch>.{zip,tar.gz}，
+            // OTA 包是相对名 com.mend.app-<build>.nshpkg；CNB 清单两种都是
+            // https://cnb.cool/... 绝对直链。两种形态都合法。
+            const isRelativeName = (u) => /^Mend/.test(u) || /^com\.mend\.app-.*\.nshpkg$/.test(u);
             for (const [name, m] of [["latest.json", gh], ["latest-cnb.json", cnb]]) {
               const urls = [...Object.values(m.platforms).map((p) => p.url), m.package.url];
-              if (urls.some((u) => !u || !u.startsWith("http") && !/^Mend/.test(u))) {
-                throw new Error(`${name}: bad url in manifest`);
+              if (urls.some((u) => !u || (!u.startsWith("http") && !isRelativeName(u)))) {
+                throw new Error(`${name}: bad url in manifest: ${JSON.stringify(urls)}`);
               }
             }
             const cnbUrls = [...Object.values(cnb.platforms).map((p) => p.url), cnb.package.url];
