@@ -152,12 +152,12 @@ jobs:
           cp nsh.json nsh.json.cnb-backup
           restore() { mv -f nsh.json.cnb-backup nsh.json; }
           trap restore EXIT
+          # nsh 的 .sig 文件名写死为「清单同目录/latest.json.sig」，与清单名无关：
+          # 清单必须叫 latest.json 签名才配套；latest-cnb.json 只是旧版兼容副本。
           node -e '
             const fs = require("fs");
             const c = JSON.parse(fs.readFileSync("nsh.json", "utf8"));
             c.updater = {
-              # nsh 的 .sig 文件名写死为「清单同目录/latest.json.sig」，与清单名无关。
-              # 所以清单必须叫 latest.json，签名才配套；latest-cnb.json 只作旧版兼容副本。
               url: "https://cnb.cool/smybxg/Mend/-/releases/latest/download/latest.json",
               publicKey: c.updater.publicKey,
               packages: c.updater.packages,
