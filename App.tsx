@@ -1,4 +1,4 @@
-import { appInfo, effect, mount, Text, token, View } from 'nsh'
+import { appInfo, effect, mount, Text, token, View, windowSize } from 'nsh'
 import { Scrollbar } from 'nsh/base'
 import { currentWindow, isAvailable } from 'nsh/desktop'
 import { t } from 'nsh/i18n'
@@ -11,6 +11,7 @@ import { ActionButton, FadeIn, Spinner } from './components/ui'
 import { MainScreen } from './screens/MainScreen'
 import { UnlockScreen } from './screens/UnlockScreen'
 import { installTrayEffect, installTrayHandlers } from './lib/tray'
+import { preferences } from './lib/preferences'
 import {
   boot,
   bootReady,
@@ -111,43 +112,58 @@ function App() {
     void boot()
   })
 
+  // 布局缩放：nsh 的 fontScale() 只读（跟随系统），应用无法设置。这里用「逻辑视口
+  // 反向放大 + 整体 scale」实现：外层按物理窗口铺满并裁剪，内层宽度 = 物理 / 缩放，
+  // 再整体放大相同倍数，视觉上正好填满窗口，而内部布局按更大的逻辑尺寸排布。
+  // transform 会一起缩放命中测试，拖动滑块时设置页自己也在缩放，效果即时可见。
+  // 写在 JSX 里（而非函数体）才能让 signal 读取成为绑定，拖动时下一帧就跟上。
   return (
-    <View class="flex-1 bg-background">
-      <If when={!bootReady()}>
-        <Splash />
-      </If>
-      <If when={bootReady() && fatalError()}>
-        <Fatal />
-      </If>
-      <If when={bootReady() && !fatalError()}>
-        <View class="flex-1">
-          {/* 三个页面各自淡入：解锁 → 主界面不再硬切。 */}
-          <If when={!status().initialized}>
-            <FadeIn>
-              <UnlockScreen mode="setup" />
-            </FadeIn>
-          </If>
-          <If when={status().initialized && !status().unlocked}>
-            <FadeIn>
-              <UnlockScreen mode="unlock" />
-            </FadeIn>
-          </If>
-          <If when={status().initialized && status().unlocked}>
-            <FadeIn>
-              <MainScreen />
-            </FadeIn>
-          </If>
-        </View>
-      </If>
+    <View class="flex-1 overflow-hidden bg-background">
+      <View
+        testID="ui-scale-root"
+        style={{
+          width: windowSize().width / preferences().layoutScale,
+          height: windowSize().height / preferences().layoutScale,
+          scale: preferences().layoutScale,
+          transformOrigin: 'top left',
+        }}
+      >
+        <If when={!bootReady()}>
+          <Splash />
+        </If>
+        <If when={bootReady() && fatalError()}>
+          <Fatal />
+        </If>
+        <If when={bootReady() && !fatalError()}>
+          <View class="flex-1">
+            {/* 三个页面各自淡入：解锁 → 主界面不再硬切。 */}
+            <If when={!status().initialized}>
+              <FadeIn>
+                <UnlockScreen mode="setup" />
+              </FadeIn>
+            </If>
+            <If when={status().initialized && !status().unlocked}>
+              <FadeIn>
+                <UnlockScreen mode="unlock" />
+              </FadeIn>
+            </If>
+            <If when={status().initialized && status().unlocked}>
+              <FadeIn>
+                <MainScreen />
+              </FadeIn>
+            </If>
+          </View>
+        </If>
 
-      {/* 确认框放最外层：首次关闭询问在解锁页也会触发，不能只挂在主界面里。 */}
-      <ConfirmDialog />
+        {/* 确认框放最外层：首次关闭询问在解锁页也会触发，不能只挂在主界面里。 */}
+        <ConfirmDialog />
 
-      {/* 提示条放在最外层（解锁页也能提示）。弹窗打开时改由弹窗内的那份显示：
-          nsh 的 Dialog 是独立原生窗口层，这里的 Overlay 盖不住它的遮罩。 */}
-      <If when={!modalOpen()}>
-        <ToastHost />
-      </If>
+        {/* 提示条放在最外层（解锁页也能提示）。弹窗打开时改由弹窗内的那份显示：
+            nsh 的 Dialog 是独立原生窗口层，这里的 Overlay 盖不住它的遮罩。 */}
+        <If when={!modalOpen()}>
+          <ToastHost />
+        </If>
+      </View>
     </View>
   )
 }

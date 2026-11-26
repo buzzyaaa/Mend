@@ -7,6 +7,12 @@ import type { ColumnKey, Preferences, ThemeMode } from './types'
 const DEFAULT_COLUMN_SIZES = [240, 360]
 const COLUMN_MIN = 160
 const COLUMN_MAX = 640
+/** 布局缩放范围与步长：滑块 75%~125%，默认 100%；超出即钳制。
+ *  以 100% 居中，滑块的「默认」刻度恰好在正中间。 */
+export const LAYOUT_SCALE_MIN = 0.75
+export const LAYOUT_SCALE_MAX = 1.25
+export const LAYOUT_SCALE_STEP = 0.05
+export const LAYOUT_SCALE_DEFAULT = 1
 /** 最近使用的数据库最多记这么多个，避免偏好文件无限增长。 */
 const MAX_RECENT_VAULTS = 8
 
@@ -27,6 +33,7 @@ const DEFAULTS: Preferences = {
   closeMinimizeToTray: false,
   trayChoiceMade: false,
   autoStart: false,
+  layoutScale: LAYOUT_SCALE_DEFAULT,
 }
 
 export const preferences = signal<Preferences>({ ...DEFAULTS })
@@ -40,6 +47,14 @@ export const LANGUAGES: ReadonlyArray<{ value: string; label: string }> = [
 
 function isTheme(value: unknown): value is ThemeMode {
   return value === 'system' || value === 'light' || value === 'dark'
+}
+
+/** 布局缩放：只接受有限数并钳制到 [0.75, 1.25]，避免损坏的偏好把界面缩到看不见
+ *  或撑爆窗口；保留两位小数以贴合滑块的 0.05 步长。 */
+function sanitizeLayoutScale(value: unknown): number {
+  const scale = Number(value)
+  if (!Number.isFinite(scale)) return LAYOUT_SCALE_DEFAULT
+  return Math.max(LAYOUT_SCALE_MIN, Math.min(LAYOUT_SCALE_MAX, Math.round(scale * 100) / 100))
 }
 
 /** Only known columns are persisted; each is clamped to its own range so a
@@ -142,6 +157,7 @@ function sanitize(raw: unknown): Preferences {
     trayChoiceMade:
       typeof value.trayChoiceMade === 'boolean' ? value.trayChoiceMade : DEFAULTS.trayChoiceMade,
     autoStart: typeof value.autoStart === 'boolean' ? value.autoStart : DEFAULTS.autoStart,
+    layoutScale: sanitizeLayoutScale(value.layoutScale),
   }
 }
 
@@ -236,6 +252,18 @@ export function setCloseMinimizeToTray(enabled: boolean): void {
 /** 开机自启偏好（实际注册项由原生侧读写，这里只同步 UI 状态）。 */
 export function setAutoStart(enabled: boolean): void {
   updatePreferences({ autoStart: enabled })
+}
+
+/** 界面缩放偏好：滑块每次变化即写入，App 根容器下一帧按新值重排。 */
+export function setLayoutScale(scale: number): void {
+  updatePreferences({ layoutScale: scale })
+}
+
+/** 逻辑视口宽度：缩放后界面实际按多大的逻辑宽度布局（物理宽度 / 缩放）。
+ *  响应式断点必须用它而非物理窗口宽度，否则放大后窗口看起来「变窄」、
+ *  顶端搜索/工具栏会按错误的宽度折叠。 */
+export function logicalWidth(physicalWidth: number, scale = preferences().layoutScale): number {
+  return physicalWidth / scale
 }
 
 export function markUpdateChecked(): void {

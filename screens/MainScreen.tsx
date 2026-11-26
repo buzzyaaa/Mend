@@ -8,6 +8,7 @@ import { EntryEditor } from '../components/EntryEditor'
 import { EntryList } from '../components/EntryList'
 import { NavRail } from '../components/NavRail'
 import { NotesDialog } from '../components/NotesDialog'
+import { PasteImportDialog } from '../components/PasteImportDialog'
 import { PresetsDialog } from '../components/PresetsDialog'
 import { SettingsPage } from '../components/SettingsDialog'
 import { Sidebar } from '../components/Sidebar'
@@ -130,6 +131,7 @@ export function MainScreen() {
 
       <UpdateDialog />
       <PresetsDialog />
+      <PasteImportDialog />
       <TagsDialog />
       <NotesDialog />
       <UpdateProgressHost />

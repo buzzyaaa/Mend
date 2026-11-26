@@ -98,6 +98,8 @@ export const entryEditor = signal<EntryEditorState | null>(null)
 export const presetsOpen = signal(false)
 /** 标签维护弹窗（右上角入口）。 */
 export const tagsOpen = signal(false)
+/** 本地粘贴导入弹窗：粘贴文本 → 本地解析 → 预览 → 加密入库，不接触任何外部服务。 */
+export const pasteImportOpen = signal(false)
 export const categoryEditor = signal<{ id: string | null } | null>(null)
 export const categoriesSheetOpen = signal(false)
 /** 更新确认弹窗：由设置页的「立即更新」打开，确认后交给 lib/update 下载安装。 */
@@ -117,6 +119,7 @@ export const modalOpen = computed<boolean>(
   () =>
     presetsOpen() ||
     tagsOpen() ||
+    pasteImportOpen() ||
     confirm() !== null ||
     entryEditor() !== null ||
     categoryEditor() !== null ||
@@ -366,6 +369,7 @@ async function applyVaultFile(path: string | null): Promise<void> {
     // 弹窗是独立原生窗口层，不会随主界面重建而消失，这里显式关掉。
     presetsOpen.set(false)
     tagsOpen.set(false)
+    pasteImportOpen.set(false)
     entryEditor.set(null)
     categoryEditor.set(null)
     categoriesSheetOpen.set(false)
@@ -466,6 +470,7 @@ function clearSensitiveState(): void {
   entryEditor.set(null)
   presetsOpen.set(false)
   tagsOpen.set(false)
+  pasteImportOpen.set(false)
   categoryEditor.set(null)
   categoriesSheetOpen.set(false)
   confirm.set(null)

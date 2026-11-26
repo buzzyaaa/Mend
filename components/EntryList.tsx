@@ -12,6 +12,7 @@ import {
   isArchiveView,
   isTrashView,
   keyword,
+  pasteImportOpen,
   presetsOpen,
   requestDeleteSelected,
   selectedIds,
@@ -94,6 +95,14 @@ function ColumnHeader() {
           onPress={() => setViewMode('card')}
         />
         <ActionButton
+          label={t('pasteImport.open')}
+          icon="upload"
+          variant="secondary"
+          class="h-9 rounded-xl px-3"
+          testID="paste-import"
+          onPress={() => pasteImportOpen.set(true)}
+        />
+        <ActionButton
           label={t('entry.add')}
           icon="plus"
           variant="primary"
@@ -137,7 +146,7 @@ function ColumnHeader() {
           />
         </View>
         {/* 预设值 / 标签入口只在宽屏工具栏展示图标+文字；窄屏由 AppHeader
-            统一提供同样的两个入口，避免一行挤到放不下。 */}
+            提供。粘贴导入在第一行「新增条目」旁，不占这行的空间。 */}
         <If when={!compactToolbar()}>
           <ActionButton
             icon="clipboard-list"

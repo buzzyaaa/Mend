@@ -1,7 +1,7 @@
 import { Text, View } from 'nsh'
 import { t } from 'nsh/i18n'
 
-import { bucketTitle, presetsOpen, tagsOpen } from '../lib/state'
+import { bucketTitle, pasteImportOpen, presetsOpen, tagsOpen } from '../lib/state'
 import { ActionButton, IconButton } from './ui'
 
 /** 顶部标题栏：当前分类标题 + 右上角维护入口。
@@ -30,6 +30,13 @@ export function AppHeader(props: { compact: () => boolean; onOpenCategories?: ()
           variant="ghost"
           class="h-7 px-2"
           onPress={() => presetsOpen.set(true)}
+        />
+        <ActionButton
+          icon="upload"
+          label={t('pasteImport.open')}
+          variant="ghost"
+          class="h-7 px-2"
+          onPress={() => pasteImportOpen.set(true)}
         />
         <ActionButton
           icon="tag"

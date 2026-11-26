@@ -60,6 +60,8 @@ export interface Preferences {
   trayChoiceMade: boolean
   /** 是否随系统开机启动。仅桌面端生效，实际状态以原生注册项为准。 */
   autoStart: boolean
+  /** 界面整体缩放（1 = 100%）：由设置-外观里的滑块控制，只影响布局不改变字号系统设置。 */
+  layoutScale: number
 }
 
 export type SortMode = 'updated' | 'title' | 'favorite' | 'manual'

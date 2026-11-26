@@ -106,6 +106,9 @@ test('sets up a vault, creates an entry, and locks', async () => {
   await app.press('Create and enter')
   await app.waitFor('text:Passwords')
 
+  // 粘贴导入入口在宽屏工具栏：它曾被误加进只在窄屏渲染的 AppHeader，桌面端完全看不到。
+  expect(app.shows('label:Paste import')).toBe(true)
+
   // 列表由 nsh DataTable 承载：列宽不可拖（固定列 + 其余平分）。
   // 把手的真实 testID 是 `resize:<key>`（冒号），写成连字符会永远查不到、假通过。
   expect(app.shows('id:resize:check')).toBe(false)
@@ -668,4 +671,68 @@ test('closing-to-tray switch persists choice and suppresses future prompts', asy
   const prefs = JSON.parse(saved)
   expect(prefs.closeMinimizeToTray).toBe(true)
   expect(prefs.trayChoiceMade).toBe(true)
+})
+
+// 界面缩放：偏好里的 layoutScale 必须在启动时就应用到根容器——内层的逻辑宽度
+// 是物理宽度 / 缩放，放大后仍铺满窗口。根容器撑满 1100 物理宽，1.25 倍时
+// 逻辑宽应为 880；这样内部布局按更小视口排布，整体再放大填满窗口。
+test('applies saved layout scale to the root viewport on boot', async () => {
+  const app = await open('./App.tsx', preferencesModule(JSON.stringify({ layoutScale: 1.25 })))
+  await app.setViewport(1100, 780)
+  // 缩放容器在解锁页/主界面都在，无需等某个页面；全量跑时进程会话可能已解锁。
+  await app.waitFor('id:ui-scale-root')
+  await app.wait(100)
+  const root = app.layout('id:ui-scale-root')
+  expect(root).not.toBe(null)
+  // 1100 物理宽 / 1.25 = 880 逻辑宽（headless 有 ±2 的取整误差）。
+  expect(root!.width > 870 && root!.width < 890).toBe(true)
+})
+
+// 设置-外观的界面大小滑块：小/默认/大刻度可见，拖动即时写回偏好并把根容器
+// 的逻辑宽度按新缩放重算（不重启、不确认）。
+test('appearance display-size slider applies and persists on drag', async () => {
+  let saved = ''
+  const app = await open('./App.tsx', {
+    platform: 'windows',
+    modules: {
+      'mend/native': {
+        'Vault.loadPreferences': () => '',
+        'Vault.savePreferences': (json: string) => {
+          saved = json
+        },
+        'Vault.autoStartEnabled': () => false,
+      },
+    },
+  })
+  await app.setViewport(1100, 780)
+  // 全量跑与前面的用例共享进程级会话，可能已解锁直接进主界面；等任一种就绪。
+  await app.waitUntil(() => app.shows('text:Passwords') || app.shows('label:Master password'))
+  if (!app.shows('text:Passwords')) {
+    if (app.shows('label:Confirm master password')) {
+      await app.type('label:Master password', 'test-password-1234')
+      await app.type('label:Confirm master password', 'test-password-1234')
+      await app.press('Create and enter')
+    } else {
+      await app.type('label:Master password', 'test-password-1234')
+      await app.press('text:Unlock')
+    }
+    await app.waitFor('text:Passwords')
+  }
+
+  await app.press('label:Settings')
+  await app.waitFor('text:Appearance & behavior')
+  expect(app.shows('id:settings-layout-scale')).toBe(true)
+  expect(app.texts()).toContain('Display size')
+  expect(app.texts()).toContain('Small')
+  expect(app.texts()).toContain('Default')
+  expect(app.texts()).toContain('Large')
+
+  const before = app.layout('id:ui-scale-root')!.width
+  // 滑块默认 1；向右拖动拇指应增大缩放，根容器逻辑宽度随之变小。
+  // Slider 的 testID 挂在不可交互的根 view，可拖的是带无障碍标签的拇指。
+  await app.drag('label:Display size', { x: 120 })
+  await app.wait(150)
+  const scale = JSON.parse(saved).layoutScale as number
+  expect(scale).toBeGreaterThan(1)
+  expect(app.layout('id:ui-scale-root')!.width).toBeLessThan(before)
 })

@@ -1,4 +1,17 @@
-import { appInfo, cleanup, computed, effect, platform, Scroll, signal, Text, token, View, windowSize } from 'nsh'
+import {
+  appInfo,
+  cleanup,
+  computed,
+  effect,
+  platform,
+  Scroll,
+  signal,
+  Text,
+  token,
+  View,
+  windowSize,
+} from 'nsh'
+import { Slider } from 'nsh/base'
 import type { Bounds, ScrollEvent, ScrollRef, ViewRef } from 'nsh'
 import { t } from 'nsh/i18n'
 import { runningPackage, shellInfo } from 'nsh/updater'
@@ -32,12 +45,17 @@ import {
   useDefaultVaultFile,
 } from '../lib/state'
 import {
+  LAYOUT_SCALE_MAX,
+  LAYOUT_SCALE_MIN,
+  LAYOUT_SCALE_STEP,
   LANGUAGES,
+  logicalWidth,
   preferences,
   setAutoLockMinutes,
   setAutoStart,
   setCloseMinimizeToTray,
   setLanguage,
+  setLayoutScale,
   setSiteIcons,
   setTheme,
   setUpdateCheckIntervalDays,
@@ -302,11 +320,7 @@ export function SettingsPage() {
   }
 
   return (
-    <View
-      class={
-        'min-h-0 flex-1 bg-background ' + (phone() ? 'flex-col' : 'flex-row')
-      }
-    >
+    <View class={'min-h-0 flex-1 bg-background ' + (phone() ? 'flex-col' : 'flex-row')}>
       {/* 设置子导航：只负责设置页内跳转，应用级跳转在最左 NavRail。 */}
       <If when={fullNav()}>
         <View
@@ -323,490 +337,528 @@ export function SettingsPage() {
       </If>
 
       {/* 内容区：全断点单页滚动；≥1000 时左侧子导航负责锚点跳转。 */}
-        <View class="min-w-0 flex-1 min-h-0">
-          <Scroll
-            ref={(ref) => {
-              scrollRef = ref
-            }}
-            class="flex-1"
-            contentClass={
-              'gap-4 w-full mx-auto pb-16 ' +
-              (phone() ? 'px-4 pt-4 ' : 'px-6 pt-6 ') +
-              (windowSize().width >= FOUR_K_MIN ? 'max-w-[1600px]' : 'max-w-[980px]')
-            }
-            // 手机窄视口下内容容器自动宽会溢出右缘：宽度显式取窗口宽，
-            // 内边距仍由 contentClass 负责。
-            contentStyle={phone() ? { width: windowSize().width } : undefined}
-            onScroll={onScroll}
+      <View class="min-w-0 flex-1 min-h-0">
+        <Scroll
+          ref={(ref) => {
+            scrollRef = ref
+          }}
+          class="flex-1"
+          contentClass={
+            'gap-4 w-full mx-auto pb-16 ' +
+            (phone() ? 'px-4 pt-4 ' : 'px-6 pt-6 ') +
+            (windowSize().width >= FOUR_K_MIN ? 'max-w-[1600px]' : 'max-w-[980px]')
+          }
+          // 手机窄视口下内容容器自动宽会溢出右缘：宽度显式取窗口宽，
+          // 内边距仍由 contentClass 负责。
+          contentStyle={phone() ? { width: logicalWidth(windowSize().width) } : undefined}
+          onScroll={onScroll}
+        >
+          {/* 外观与行为：标题进卡片，主题/语言纵向排列。 */}
+          <View
+            ref={anchorRef('appearance')}
+            onLayout={(e) => onAnchorLayout('appearance', e)}
+            class="gap-4"
           >
-            {/* 外观与行为：标题进卡片，主题/语言纵向排列。 */}
-            <View
-              ref={anchorRef('appearance')}
-              onLayout={(e) => onAnchorLayout('appearance', e)}
-              class="gap-4"
-            >
-              <SettingsCard class="relative overflow-hidden">
-                {/* 装饰画绝对定位作卡片背景，不参与布局，避免撑大标题与字段间距。 */}
-                <If when={showArt()}>
-                  <View class="pointer-events-none absolute right-5 top-5">
-                    <HeroArt />
-                  </View>
-                </If>
-                <CardHeader
-                  icon="palette"
-                  title={t('settings.appearance')}
-                  hint={t('settings.pageHint')}
-                />
-                <View class="gap-4">
-                  <Field
-                    label={t('settings.theme')}
-                    hint={t('settings.themeHint')}
-                    icon="sun"
-                    class="w-full"
-                  >
-                    <View class="flex-row flex-wrap gap-2">
-                      <Each of={THEME_CHOICES} key={(choice) => choice.value}>
-                        {(choice) => {
-                          const selected = () => preferences().theme === choice().value
-                          return (
-                            <View
-                              role="button"
-                              testID={`settings-theme-${choice().value}`}
-                              accessibilityLabel={t(choice().titleKey)}
-                              class={
-                                'min-w-[92px] max-w-[160px] flex-1 cursor-pointer gap-1.5 rounded-lg border p-1.5 transition ' +
-                                (selected()
-                                  ? 'border-primary ring-1 ring-primary '
-                                  : 'border-border hover:bg-accent ')
-                              }
-                              onPress={() => setTheme(choice().value)}
-                            >
-                              <ThemePreview kind={choice().preview} />
-                              <Text
-                                class={
-                                  'text-center text-[11px] ' +
-                                  (selected() ? 'font-medium text-primary' : 'text-muted-foreground')
-                                }
-                              >
-                                {t(choice().titleKey)}
-                              </Text>
-                            </View>
-                          )
-                        }}
-                      </Each>
-                    </View>
-                  </Field>
-                  <Field
-                    label={t('settings.language')}
-                    hint={t('settings.languageHint')}
-                    icon="globe"
-                    class={controlClass()}
-                  >
-                    <SelectField
-                      items={[
-                        { value: '', title: t('settings.languageSystem') },
-                        ...LANGUAGES.map((language) => ({
-                          value: language.value,
-                          title: language.label,
-                        })),
-                      ]}
-                      value={preferences().language ?? ''}
-                      onChange={(value) => setLanguage(value ? value : null)}
-                      class="w-full"
-                    />
-                  </Field>
-                  <SwitchField
-                    checked={preferences().siteIcons}
-                    onChange={(checked) => {
-                      setSiteIcons(checked)
-                      if (checked) startSiteIconFetch()
-                      else stopSiteIconFetch()
-                    }}
-                    label={t('settings.siteIcons')}
-                    hint={t('settings.siteIconsHint')}
-                    leading
-                  />
-                  <SwitchField
-                    checked={preferences().closeMinimizeToTray}
-                    onChange={(checked) => setCloseMinimizeToTray(checked)}
-                    label={t('settings.closeMinimizeToTray')}
-                    hint={t('settings.closeMinimizeToTrayHint')}
-                    testID="settings-close-minimize-to-tray"
-                    leading
-                  />
-                  <If when={platform.desktop}>
-                    <SwitchField
-                      checked={preferences().autoStart}
-                      onChange={(checked) => toggleAutoStart(checked)}
-                      label={t('settings.autoStart')}
-                      hint={
-                        autoStartReady
-                          ? t('settings.autoStartHint')
-                          : t('settings.autoStartNeedsUpdate')
-                      }
-                      disabled={!autoStartReady}
-                      testID="settings-auto-start"
-                      leading
-                    />
-                  </If>
-                  <Field
-                    label={t('settings.iconsCache')}
-                    hint={t('settings.clearIconsHint')}
-                    icon="database"
-                    class={controlClass()}
-                  >
-                    <ActionButton
-                      label={t('settings.clearIcons')}
-                      icon="trash"
-                      onPress={async () => {
-                        try {
-                          const removed = await clearSiteIcons()
-                          toast(t('settings.iconsCleared', { n: removed }))
-                        } catch (error) {
-                          showError(error)
-                        }
-                      }}
-                    />
-                  </Field>
+            <SettingsCard class="relative overflow-hidden">
+              {/* 装饰画绝对定位作卡片背景，不参与布局，避免撑大标题与字段间距。 */}
+              <If when={showArt()}>
+                <View class="pointer-events-none absolute right-5 top-5">
+                  <HeroArt />
                 </View>
-              </SettingsCard>
-            </View>
-
-            {/* 安全：自动锁定 → 免主密码解锁（完整风险提示）→ 修改主密码。 */}
-            <View
-              ref={anchorRef('security')}
-              onLayout={(e) => onAnchorLayout('security', e)}
-              class="gap-4"
-            >
-              <SettingsCard>
-                <CardHeader
-                  icon="shield"
-                  title={t('settings.security')}
-                  hint={t('settings.autoLockHint')}
-                />
-                <Field label={t('settings.autoLock')} class={controlClass()}>
-                  <SelectField
-                    items={AUTO_LOCK_OPTIONS.map((minutes) => ({
-                      value: String(minutes),
-                      title:
-                        minutes === 0 ? t('settings.off') : t('settings.minutes', { n: minutes }),
-                    }))}
-                    value={String(preferences().autoLockMinutes)}
-                    onChange={(value) => {
-                      if (value !== null) setAutoLockMinutes(Number(value))
-                    }}
-                    class="w-full"
-                  />
-                </Field>
-                <SwitchField
-                  checked={deviceUnlockOn()}
-                  onChange={toggleDeviceUnlock}
-                  label={t('settings.deviceUnlock')}
-                  hint={t('settings.deviceUnlockHint')}
-                  leading
-                />
-                <WarningBanner text={t('settings.deviceUnlockWarning')} />
-                <SwitchField
-                  checked={preferences().offline}
-                  onChange={(checked) => toggleOfflineMode(checked)}
-                  label={t('settings.offline')}
-                  hint={t('settings.offlineHint')}
-                  leading
-                />
-              </SettingsCard>
-
-              <SettingsCard>
-                <CardHeader
-                  icon="lock"
-                  title={t('settings.changePassword')}
-                  hint={t('settings.changePasswordHint')}
-                />
-                <View class="gap-3">
-                  <Field label={t('settings.oldPassword')} class={controlClass()}>
-                    <PasswordField
-                      value={oldPassword()}
-                      onChange={oldPassword.set}
-                      placeholder={t('settings.oldPassword')}
-                      reveal={false}
-                      autoComplete="current-password"
-                      accessibilityLabel={t('settings.oldPassword')}
-                    />
-                  </Field>
-                  <Field label={t('settings.newPassword')} class={controlClass()}>
-                    <PasswordField
-                      value={newPassword()}
-                      onChange={newPassword.set}
-                      placeholder={t('settings.newPassword')}
-                      reveal={false}
-                      autoComplete="new-password"
-                      accessibilityLabel={t('settings.newPassword')}
-                    />
-                  </Field>
-                  <Field label={t('settings.confirmPassword')} class={controlClass()}>
-                    <PasswordField
-                      value={confirmPassword()}
-                      onChange={confirmPassword.set}
-                      placeholder={t('settings.confirmPassword')}
-                      reveal={false}
-                      autoComplete="new-password"
-                      accessibilityLabel={t('settings.confirmPassword')}
-                    />
-                  </Field>
-                  <ActionButton
-                    label={passwordBusy() ? t('common.loading') : t('common.save')}
-                    icon="check"
-                    variant="primary"
-                    disabled={passwordBusy()}
-                    class={controlClass()}
-                    testID="settings-save-password"
-                    onPress={() => void changePassword()}
-                  />
-                </View>
-                <If when={passwordError()}>
-                  <Text class="text-xs text-destructive">{passwordError()}</Text>
-                </If>
-              </SettingsCard>
-            </View>
-
-            {/* 库文件自选：文件本身就是完整的保险库，切换后应用重新走启动流程。 */}
-            <View ref={anchorRef('vault')} onLayout={(e) => onAnchorLayout('vault', e)} class="gap-4">
-              <SettingsCard>
-                <CardHeader icon="database" title={t('vault.sectionTitle')} hint={t('vault.hint')} />
-                <View class="flex-row items-center gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2.5">
-                  <View class="h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <Icon name="database" size={15} color={token('primary')} />
-                  </View>
-                  <View class="flex-1 gap-0.5">
-                    <Text class="text-[10px] uppercase tracking-wide text-muted-foreground">
-                      {t('vault.current')}
-                    </Text>
-                    <Text class="text-xs text-foreground" style={{ numberOfLines: 2 }}>
-                      {status().dbPath || '…'}
-                    </Text>
-                  </View>
-                  <IconButton
-                    icon="copy"
-                    label={t('vault.copyPath')}
-                    testID="settings-copy-path"
-                    disabled={!status().dbPath}
-                    onPress={() => void copyText(status().dbPath)}
-                  />
-                </View>
-                <View class={phone() ? 'gap-2' : 'flex-row flex-wrap gap-2'}>
-                  <ActionButton
-                    label={t('vault.reveal')}
-                    icon="eye"
-                    class={phone() ? 'w-full' : ''}
-                    onPress={() => void reveal()}
-                  />
-                  <ActionButton
-                    label={t('vault.switch')}
-                    icon="folder"
-                    class={phone() ? 'w-full' : ''}
-                    disabled={authBusy()}
-                    onPress={() => void pickExistingVaultFile()}
-                  />
-                  <ActionButton
-                    label={t('vault.create')}
-                    icon="plus"
-                    class={phone() ? 'w-full' : ''}
-                    disabled={authBusy()}
-                    onPress={() => void pickNewVaultFile()}
-                  />
-                  <ActionButton
-                    label={t('vault.useDefault')}
-                    icon="restore"
-                    class={phone() ? 'w-full' : ''}
-                    disabled={authBusy()}
-                    onPress={() => void useDefaultVaultFile()}
-                  />
-                </View>
-              </SettingsCard>
-            </View>
-
-            {/* 更新：版本信息 + 检查频率 + 手动检查与结果状态。 */}
-            <View ref={anchorRef('update')} onLayout={(e) => onAnchorLayout('update', e)} class="gap-4">
-              <SettingsCard>
-                <CardHeader icon="refresh" title={t('update.title')} hint={t('update.hint')} />
-                {/* 检查频率居左，检查按钮在其正下方，宽度与全页控件统一。 */}
+              </If>
+              <CardHeader
+                icon="palette"
+                title={t('settings.appearance')}
+                hint={t('settings.pageHint')}
+              />
+              <View class="gap-4">
                 <Field
-                  label={t('update.checkInterval')}
-                  hint={t('update.checkIntervalHint')}
+                  label={t('settings.theme')}
+                  hint={t('settings.themeHint')}
+                  icon="sun"
+                  class="w-full"
+                >
+                  <View class="flex-row flex-wrap gap-2">
+                    <Each of={THEME_CHOICES} key={(choice) => choice.value}>
+                      {(choice) => {
+                        const selected = () => preferences().theme === choice().value
+                        return (
+                          <View
+                            role="button"
+                            testID={`settings-theme-${choice().value}`}
+                            accessibilityLabel={t(choice().titleKey)}
+                            class={
+                              'min-w-[92px] max-w-[160px] flex-1 cursor-pointer gap-1.5 rounded-lg border p-1.5 transition ' +
+                              (selected()
+                                ? 'border-primary ring-1 ring-primary '
+                                : 'border-border hover:bg-accent ')
+                            }
+                            onPress={() => setTheme(choice().value)}
+                          >
+                            <ThemePreview kind={choice().preview} />
+                            <Text
+                              class={
+                                'text-center text-[11px] ' +
+                                (selected() ? 'font-medium text-primary' : 'text-muted-foreground')
+                              }
+                            >
+                              {t(choice().titleKey)}
+                            </Text>
+                          </View>
+                        )
+                      }}
+                    </Each>
+                  </View>
+                </Field>
+                <Field
+                  label={t('settings.layoutScale')}
+                  hint={t('settings.layoutScaleHint')}
+                  icon="grid"
+                  class="w-full"
+                >
+                  <View class="w-full max-w-[420px] gap-1">
+                    <Slider
+                      testID="settings-layout-scale"
+                      accessibilityLabel={t('settings.layoutScale')}
+                      value={preferences().layoutScale}
+                      min={LAYOUT_SCALE_MIN}
+                      max={LAYOUT_SCALE_MAX}
+                      step={LAYOUT_SCALE_STEP}
+                      onChange={(event) => {
+                        const value = event.value
+                        if (typeof value === 'number') setLayoutScale(value)
+                      }}
+                      trackClass="h-6 justify-center"
+                      indicatorClass="h-1 rounded-full bg-border"
+                      rangeClass="rounded-full bg-primary"
+                      thumbClass="size-3.5 rounded-full border-2 border-primary bg-card shadow-sm"
+                    />
+                    <View class="flex-row justify-between px-0.5">
+                      <Text class="text-[11px] text-muted-foreground">
+                        {t('settings.layoutScaleSmall')}
+                      </Text>
+                      <Text class="text-[11px] text-muted-foreground">
+                        {t('settings.layoutScaleDefault')}
+                      </Text>
+                      <Text class="text-[11px] text-muted-foreground">
+                        {t('settings.layoutScaleLarge')}
+                      </Text>
+                    </View>
+                  </View>
+                </Field>
+                <Field
+                  label={t('settings.language')}
+                  hint={t('settings.languageHint')}
+                  icon="globe"
                   class={controlClass()}
                 >
                   <SelectField
-                    items={UPDATE_INTERVAL_OPTIONS.map((days) => ({
-                      value: String(days),
-                      title:
-                        days === 0
-                          ? t('update.intervalEveryLaunch')
-                          : days === 7
-                            ? t('update.intervalWeek')
-                            : days === 30
-                              ? t('update.intervalMonth')
-                              : t('update.intervalYear'),
-                    }))}
-                    value={String(preferences().updateCheckIntervalDays)}
-                    onChange={(value) => {
-                      if (value !== null) setUpdateCheckIntervalDays(Number(value))
-                    }}
+                    items={[
+                      { value: '', title: t('settings.languageSystem') },
+                      ...LANGUAGES.map((language) => ({
+                        value: language.value,
+                        title: language.label,
+                      })),
+                    ]}
+                    value={preferences().language ?? ''}
+                    onChange={(value) => setLanguage(value ? value : null)}
                     class="w-full"
                   />
                 </Field>
-                <ActionButton
-                  label={updateBusy() ? t('common.loading') : t('update.checkNow')}
-                  icon="refresh"
-                  class={controlClass()}
-                  testID="settings-check-update"
-                  disabled={updateBusy()}
-                  onPress={() => void checkForUpdates()}
+                <SwitchField
+                  checked={preferences().siteIcons}
+                  onChange={(checked) => {
+                    setSiteIcons(checked)
+                    if (checked) startSiteIconFetch()
+                    else stopSiteIconFetch()
+                  }}
+                  label={t('settings.siteIcons')}
+                  hint={t('settings.siteIconsHint')}
+                  leading
                 />
+                <SwitchField
+                  checked={preferences().closeMinimizeToTray}
+                  onChange={(checked) => setCloseMinimizeToTray(checked)}
+                  label={t('settings.closeMinimizeToTray')}
+                  hint={t('settings.closeMinimizeToTrayHint')}
+                  testID="settings-close-minimize-to-tray"
+                  leading
+                />
+                <If when={platform.desktop}>
+                  <SwitchField
+                    checked={preferences().autoStart}
+                    onChange={(checked) => toggleAutoStart(checked)}
+                    label={t('settings.autoStart')}
+                    hint={
+                      autoStartReady
+                        ? t('settings.autoStartHint')
+                        : t('settings.autoStartNeedsUpdate')
+                    }
+                    disabled={!autoStartReady}
+                    testID="settings-auto-start"
+                    leading
+                  />
+                </If>
+                <Field
+                  label={t('settings.iconsCache')}
+                  hint={t('settings.clearIconsHint')}
+                  icon="database"
+                  class={controlClass()}
+                >
+                  <ActionButton
+                    label={t('settings.clearIcons')}
+                    icon="trash"
+                    onPress={async () => {
+                      try {
+                        const removed = await clearSiteIcons()
+                        toast(t('settings.iconsCleared', { n: removed }))
+                      } catch (error) {
+                        showError(error)
+                      }
+                    }}
+                  />
+                </Field>
+              </View>
+            </SettingsCard>
+          </View>
 
-                <If when={updateUpToDate() && !updateBusy()}>
-                  <View class="flex-row items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2.5">
-                    <Icon name="check" size={14} color={token('success')} />
-                    <Text class="text-xs font-medium text-success">{t('update.upToDate')}</Text>
+          {/* 安全：自动锁定 → 免主密码解锁（完整风险提示）→ 修改主密码。 */}
+          <View
+            ref={anchorRef('security')}
+            onLayout={(e) => onAnchorLayout('security', e)}
+            class="gap-4"
+          >
+            <SettingsCard>
+              <CardHeader
+                icon="shield"
+                title={t('settings.security')}
+                hint={t('settings.autoLockHint')}
+              />
+              <Field label={t('settings.autoLock')} class={controlClass()}>
+                <SelectField
+                  items={AUTO_LOCK_OPTIONS.map((minutes) => ({
+                    value: String(minutes),
+                    title:
+                      minutes === 0 ? t('settings.off') : t('settings.minutes', { n: minutes }),
+                  }))}
+                  value={String(preferences().autoLockMinutes)}
+                  onChange={(value) => {
+                    if (value !== null) setAutoLockMinutes(Number(value))
+                  }}
+                  class="w-full"
+                />
+              </Field>
+              <SwitchField
+                checked={deviceUnlockOn()}
+                onChange={toggleDeviceUnlock}
+                label={t('settings.deviceUnlock')}
+                hint={t('settings.deviceUnlockHint')}
+                leading
+              />
+              <WarningBanner text={t('settings.deviceUnlockWarning')} />
+              <SwitchField
+                checked={preferences().offline}
+                onChange={(checked) => toggleOfflineMode(checked)}
+                label={t('settings.offline')}
+                hint={t('settings.offlineHint')}
+                leading
+              />
+            </SettingsCard>
+
+            <SettingsCard>
+              <CardHeader
+                icon="lock"
+                title={t('settings.changePassword')}
+                hint={t('settings.changePasswordHint')}
+              />
+              <View class="gap-3">
+                <Field label={t('settings.oldPassword')} class={controlClass()}>
+                  <PasswordField
+                    value={oldPassword()}
+                    onChange={oldPassword.set}
+                    placeholder={t('settings.oldPassword')}
+                    reveal={false}
+                    autoComplete="current-password"
+                    accessibilityLabel={t('settings.oldPassword')}
+                  />
+                </Field>
+                <Field label={t('settings.newPassword')} class={controlClass()}>
+                  <PasswordField
+                    value={newPassword()}
+                    onChange={newPassword.set}
+                    placeholder={t('settings.newPassword')}
+                    reveal={false}
+                    autoComplete="new-password"
+                    accessibilityLabel={t('settings.newPassword')}
+                  />
+                </Field>
+                <Field label={t('settings.confirmPassword')} class={controlClass()}>
+                  <PasswordField
+                    value={confirmPassword()}
+                    onChange={confirmPassword.set}
+                    placeholder={t('settings.confirmPassword')}
+                    reveal={false}
+                    autoComplete="new-password"
+                    accessibilityLabel={t('settings.confirmPassword')}
+                  />
+                </Field>
+                <ActionButton
+                  label={passwordBusy() ? t('common.loading') : t('common.save')}
+                  icon="check"
+                  variant="primary"
+                  disabled={passwordBusy()}
+                  class={controlClass()}
+                  testID="settings-save-password"
+                  onPress={() => void changePassword()}
+                />
+              </View>
+              <If when={passwordError()}>
+                <Text class="text-xs text-destructive">{passwordError()}</Text>
+              </If>
+            </SettingsCard>
+          </View>
+
+          {/* 库文件自选：文件本身就是完整的保险库，切换后应用重新走启动流程。 */}
+          <View ref={anchorRef('vault')} onLayout={(e) => onAnchorLayout('vault', e)} class="gap-4">
+            <SettingsCard>
+              <CardHeader icon="database" title={t('vault.sectionTitle')} hint={t('vault.hint')} />
+              <View class="flex-row items-center gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2.5">
+                <View class="h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                  <Icon name="database" size={15} color={token('primary')} />
+                </View>
+                <View class="flex-1 gap-0.5">
+                  <Text class="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {t('vault.current')}
+                  </Text>
+                  <Text class="text-xs text-foreground" style={{ numberOfLines: 2 }}>
+                    {status().dbPath || '…'}
+                  </Text>
+                </View>
+                <IconButton
+                  icon="copy"
+                  label={t('vault.copyPath')}
+                  testID="settings-copy-path"
+                  disabled={!status().dbPath}
+                  onPress={() => void copyText(status().dbPath)}
+                />
+              </View>
+              <View class={phone() ? 'gap-2' : 'flex-row flex-wrap gap-2'}>
+                <ActionButton
+                  label={t('vault.reveal')}
+                  icon="eye"
+                  class={phone() ? 'w-full' : ''}
+                  onPress={() => void reveal()}
+                />
+                <ActionButton
+                  label={t('vault.switch')}
+                  icon="folder"
+                  class={phone() ? 'w-full' : ''}
+                  disabled={authBusy()}
+                  onPress={() => void pickExistingVaultFile()}
+                />
+                <ActionButton
+                  label={t('vault.create')}
+                  icon="plus"
+                  class={phone() ? 'w-full' : ''}
+                  disabled={authBusy()}
+                  onPress={() => void pickNewVaultFile()}
+                />
+                <ActionButton
+                  label={t('vault.useDefault')}
+                  icon="restore"
+                  class={phone() ? 'w-full' : ''}
+                  disabled={authBusy()}
+                  onPress={() => void useDefaultVaultFile()}
+                />
+              </View>
+            </SettingsCard>
+          </View>
+
+          {/* 更新：版本信息 + 检查频率 + 手动检查与结果状态。 */}
+          <View
+            ref={anchorRef('update')}
+            onLayout={(e) => onAnchorLayout('update', e)}
+            class="gap-4"
+          >
+            <SettingsCard>
+              <CardHeader icon="refresh" title={t('update.title')} hint={t('update.hint')} />
+              {/* 检查频率居左，检查按钮在其正下方，宽度与全页控件统一。 */}
+              <Field
+                label={t('update.checkInterval')}
+                hint={t('update.checkIntervalHint')}
+                class={controlClass()}
+              >
+                <SelectField
+                  items={UPDATE_INTERVAL_OPTIONS.map((days) => ({
+                    value: String(days),
+                    title:
+                      days === 0
+                        ? t('update.intervalEveryLaunch')
+                        : days === 7
+                          ? t('update.intervalWeek')
+                          : days === 30
+                            ? t('update.intervalMonth')
+                            : t('update.intervalYear'),
+                  }))}
+                  value={String(preferences().updateCheckIntervalDays)}
+                  onChange={(value) => {
+                    if (value !== null) setUpdateCheckIntervalDays(Number(value))
+                  }}
+                  class="w-full"
+                />
+              </Field>
+              <ActionButton
+                label={updateBusy() ? t('common.loading') : t('update.checkNow')}
+                icon="refresh"
+                class={controlClass()}
+                testID="settings-check-update"
+                disabled={updateBusy()}
+                onPress={() => void checkForUpdates()}
+              />
+
+              <If when={updateUpToDate() && !updateBusy()}>
+                <View class="flex-row items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2.5">
+                  <Icon name="check" size={14} color={token('success')} />
+                  <Text class="text-xs font-medium text-success">{t('update.upToDate')}</Text>
+                </View>
+              </If>
+
+              <If when={updatePackage()}>
+                <View class="flex-row items-center gap-3 rounded-lg border border-success/30 bg-success/10 p-3">
+                  <Icon name="download" size={15} color={token('success')} />
+                  <View class="flex-1 gap-0.5">
+                    <Text class="text-xs font-medium text-success">{t('update.packageFound')}</Text>
+                    <Text class="text-[11px] text-muted-foreground">
+                      {t('update.packageVersion', {
+                        version: updatePackage()?.version ?? '',
+                        build: updatePackage()?.build ?? 0,
+                      })}
+                    </Text>
                   </View>
-                </If>
+                  <ActionButton
+                    label={t('update.updateNow')}
+                    icon="download"
+                    variant="primary"
+                    disabled={updateBusy()}
+                    onPress={() => openUpdatePrompt('package')}
+                  />
+                </View>
+              </If>
 
-                <If when={updatePackage()}>
-                  <View class="flex-row items-center gap-3 rounded-lg border border-success/30 bg-success/10 p-3">
-                    <Icon name="download" size={15} color={token('success')} />
-                    <View class="flex-1 gap-0.5">
-                      <Text class="text-xs font-medium text-success">{t('update.packageFound')}</Text>
-                      <Text class="text-[11px] text-muted-foreground">
-                        {t('update.packageVersion', {
-                          version: updatePackage()?.version ?? '',
-                          build: updatePackage()?.build ?? 0,
-                        })}
-                      </Text>
-                    </View>
-                    <ActionButton
-                      label={t('update.updateNow')}
-                      icon="download"
-                      variant="primary"
-                      disabled={updateBusy()}
-                      onPress={() => openUpdatePrompt('package')}
-                    />
+              <If when={!updatePackage() && updateApp()}>
+                <View class="flex-row items-center gap-3 rounded-lg border border-border bg-muted/40 p-3">
+                  <Icon name="download" size={15} color={token('foreground')} />
+                  <View class="flex-1 gap-0.5">
+                    <Text class="text-xs font-medium text-foreground">
+                      {t('update.appAvailable', { version: updateApp()?.version ?? '' })}
+                    </Text>
+                    <Text class="text-[11px] text-muted-foreground">{t('update.notesTitle')}</Text>
                   </View>
-                </If>
+                  <ActionButton
+                    label={t('update.updateNow')}
+                    icon="download"
+                    variant="primary"
+                    disabled={updateBusy() || !updateApp()?.canInstall}
+                    onPress={() => openUpdatePrompt('app')}
+                  />
+                </View>
+              </If>
 
-                <If when={!updatePackage() && updateApp()}>
-                  <View class="flex-row items-center gap-3 rounded-lg border border-border bg-muted/40 p-3">
-                    <Icon name="download" size={15} color={token('foreground')} />
-                    <View class="flex-1 gap-0.5">
-                      <Text class="text-xs font-medium text-foreground">
-                        {t('update.appAvailable', { version: updateApp()?.version ?? '' })}
-                      </Text>
-                      <Text class="text-[11px] text-muted-foreground">{t('update.notesTitle')}</Text>
-                    </View>
-                    <ActionButton
-                      label={t('update.updateNow')}
-                      icon="download"
-                      variant="primary"
-                      disabled={updateBusy() || !updateApp()?.canInstall}
-                      onPress={() => openUpdatePrompt('app')}
-                    />
-                  </View>
-                </If>
+              <If when={updateError()}>
+                <Text class="text-xs text-destructive">{updateError()}</Text>
+              </If>
 
-                <If when={updateError()}>
-                  <Text class="text-xs text-destructive">{updateError()}</Text>
-                </If>
+              {/* 控制区（频率/检查/结果）与身份区之间的浅灰分割线。 */}
+              <View class="h-px w-full bg-border" />
 
-                {/* 控制区（频率/检查/结果）与身份区之间的浅灰分割线。 */}
-                <View class="h-px w-full bg-border" />
-
-                {/* 应用标识 + 版本：无边框无底色，放在检查结果横幅下方；
+              {/* 应用标识 + 版本：无边框无底色，放在检查结果横幅下方；
                     Badge 紧随 Mend 名称，版本与构建合并成一行。
                     OTA 代码包运行时「外壳」与「代码」是两个版本（标题栏
                     显示的是外壳），分两行如实展示，避免看起来自相矛盾。 */}
-                <View class="flex-row flex-wrap items-center gap-3">
-                  <View class="h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary">
-                    <Icon name="shield" size={20} color={token('primary-foreground')} />
+              <View class="flex-row flex-wrap items-center gap-3">
+                <View class="h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary">
+                  <Icon name="shield" size={20} color={token('primary-foreground')} />
+                </View>
+                <View class="gap-0.5">
+                  <View class="flex-row items-center gap-2">
+                    <Text class="text-sm font-semibold text-foreground">
+                      {appInfo().name ?? 'Mend'}
+                    </Text>
+                    <Badge label={t('settings.clientKind')} />
                   </View>
-                  <View class="gap-0.5">
-                    <View class="flex-row items-center gap-2">
-                      <Text class="text-sm font-semibold text-foreground">
-                        {appInfo().name ?? 'Mend'}
-                      </Text>
-                      <Badge label={t('settings.clientKind')} />
-                    </View>
-                    <If when={runningPackage()}>
-                      {(running) => (
-                        <Text class="text-xs text-muted-foreground">
-                          {t('update.shellLine', {
-                            version: shellInfo().version ?? appInfo().version ?? '',
-                            build: shellInfo().build ?? appInfo().build ?? 0,
-                          })}
-                          {' · '}
-                          {t('update.packageLine', {
-                            version: running().version,
-                            build: running().build,
-                          })}
-                        </Text>
-                      )}
-                    </If>
-                    <If when={!runningPackage()}>
+                  <If when={runningPackage()}>
+                    {(running) => (
                       <Text class="text-xs text-muted-foreground">
-                        {t('update.shellInfo', {
-                          version: appInfo().version ?? '',
-                          build: appInfo().build ?? 0,
+                        {t('update.shellLine', {
+                          version: shellInfo().version ?? appInfo().version ?? '',
+                          build: shellInfo().build ?? appInfo().build ?? 0,
+                        })}
+                        {' · '}
+                        {t('update.packageLine', {
+                          version: running().version,
+                          build: running().build,
                         })}
                       </Text>
-                    </If>
-                    {/* 外壳落后于代码包：OTA 只换了代码，原生层还是旧的。
+                    )}
+                  </If>
+                  <If when={!runningPackage()}>
+                    <Text class="text-xs text-muted-foreground">
+                      {t('update.shellInfo', {
+                        version: appInfo().version ?? '',
+                        build: appInfo().build ?? 0,
+                      })}
+                    </Text>
+                  </If>
+                  {/* 外壳落后于代码包：OTA 只换了代码，原生层还是旧的。
                         「检查更新」时优先推整包而不是 OTA 包，否则外壳永远追不上，
                         依赖新原生方法的功能（开机自启）会一直不可用。 */}
-                    <If
-                      when={isShellOutdated(
-                        runningPackage()?.build,
-                        shellInfo().build ?? appInfo().build,
-                      )}
-                    >
-                      <Text class="text-[11px] text-amber-600 dark:text-amber-400">
-                        {t('update.shellOutdated')}
-                      </Text>
-                    </If>
-                  </View>
-                </View>
-              </SettingsCard>
-
-              {/* 关于：源码与镜像入口，整张卡都是跳转区（用户主动打开浏览器，不受离线模式拦截）。 */}
-              <SettingsCard>
-                <CardHeader icon="info" title={t('about.title')} hint={t('about.hint')} />
-                <View class="gap-2.5">
-                  <Each of={ABOUT_LINKS} key={(link) => link.key}>
-                    {(link) => (
-                      <View
-                        role="button"
-                        testID={`about-link-${link().key}`}
-                        accessibilityLabel={`${t('about.open')} ${link().url}`}
-                        class="flex-row items-center gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2.5 cursor-pointer transition hover:bg-accent active:opacity-70"
-                        onPress={() => void openExternal(link().url)}
-                      >
-                        <View class="h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                          <Icon name={link().icon} size={17} color={token('primary')} />
-                        </View>
-                        <View class="min-w-0 flex-1 gap-0.5">
-                          <Text class="text-xs font-medium text-foreground">
-                            {t('about.open')}
-                          </Text>
-                          <Text
-                            class="text-[11px] text-muted-foreground"
-                            style={{ numberOfLines: 1 }}
-                          >
-                            {link().url}
-                          </Text>
-                        </View>
-                      </View>
+                  <If
+                    when={isShellOutdated(
+                      runningPackage()?.build,
+                      shellInfo().build ?? appInfo().build,
                     )}
-                  </Each>
+                  >
+                    <Text class="text-[11px] text-amber-600 dark:text-amber-400">
+                      {t('update.shellOutdated')}
+                    </Text>
+                  </If>
                 </View>
-              </SettingsCard>
-            </View>
-          </Scroll>
-        </View>
+              </View>
+            </SettingsCard>
+
+            {/* 关于：源码与镜像入口，整张卡都是跳转区（用户主动打开浏览器，不受离线模式拦截）。 */}
+            <SettingsCard>
+              <CardHeader icon="info" title={t('about.title')} hint={t('about.hint')} />
+              <View class="gap-2.5">
+                <Each of={ABOUT_LINKS} key={(link) => link.key}>
+                  {(link) => (
+                    <View
+                      role="button"
+                      testID={`about-link-${link().key}`}
+                      accessibilityLabel={`${t('about.open')} ${link().url}`}
+                      class="flex-row items-center gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2.5 cursor-pointer transition hover:bg-accent active:opacity-70"
+                      onPress={() => void openExternal(link().url)}
+                    >
+                      <View class="h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                        <Icon name={link().icon} size={17} color={token('primary')} />
+                      </View>
+                      <View class="min-w-0 flex-1 gap-0.5">
+                        <Text class="text-xs font-medium text-foreground">{t('about.open')}</Text>
+                        <Text
+                          class="text-[11px] text-muted-foreground"
+                          style={{ numberOfLines: 1 }}
+                        >
+                          {link().url}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                </Each>
+              </View>
+            </SettingsCard>
+          </View>
+        </Scroll>
+      </View>
     </View>
   )
 }
@@ -838,7 +890,11 @@ function ThemePreview(props: { kind: 'light' | 'dark' | 'system' }) {
   )
   return (
     <View class="h-12 w-full flex-row overflow-hidden rounded-md border border-border">
-      {props.kind === 'light' ? light : props.kind === 'dark' ? dark : (
+      {props.kind === 'light' ? (
+        light
+      ) : props.kind === 'dark' ? (
+        dark
+      ) : (
         <>
           {light}
           {dark}
