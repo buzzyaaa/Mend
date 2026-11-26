@@ -7,6 +7,11 @@
 
 ## [Unreleased]
 
+## [0.6.10] - 2026-11-26
+
+#### Fixed
+- **CNB 版检查更新报签名不匹配**：nsh 把签名地址写死为「清单所在目录/`latest.json.sig`」，与清单文件名无关；CNB 清单原先用 `latest-cnb.json`，导致 app 取到同目录的原版签名而验签失败。CNB 清单改为以 `latest.json` + `latest.json.sig` 发布在 CNB Release（原版清单只走 GitHub），并在 CNB 保留 `latest-cnb.json` 同内容副本兼容已装的 0.6.9 版——旧版无需重装即可恢复更新。
+
 ## [0.6.9] - 2026-11-26
 
 #### Added

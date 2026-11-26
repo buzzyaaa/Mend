@@ -62,12 +62,12 @@ nsh certify --root keys/root.secret --key keys/release.pub \
    - Linux：安装 `libgtk-4-dev clang libwebkitgtk-6.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev`。
    - macOS：`rustup target add aarch64-apple-darwin x86_64-apple-darwin`。
 2. **ot-package**：在 Windows 上运行 `nsh publish`，用 `NSH_RELEASE_KEY` / `NSH_RELEASE_CERT` 签名，产出 `dist/com.mend.app-<build>.nshpkg`。两个版本共用这一份 OTA 包——更新源不在 OTA 包里，而在各 app 外壳的 `.nsh-updater.json`（见下文）。
-3. **package（CNB 变体）**：每个平台除原版外再打一份——临时把 `nsh.json` 的 `updater` 从 `github` 改成 `url`（指向 CNB 的 `latest-cnb.json`），用 `--name Mend.cnb` 打包（nsh 归一化为 `Mend-cnb-<version>-<os>-<arch>`，平台标识仍在末尾，`update-manifest` 能识别），输出到 `dist-cnb` 后恢复 `nsh.json`。**更新源会固化进 bundle 的 `nsh-updater.json`**，所以 CNB 版用户从 CNB 取更新与 OTA。Windows 安装器同样编译两份：`Mend-<version>-setup.exe`（原版）与 `Mend-cnb-<version>-setup.exe`（CNB 版，`patch-installer.mjs` 第三参 `cnb`）。
+3. **package（CNB 变体）**：每个平台除原版外再打一份——临时把 `nsh.json` 的 `updater` 从 `github` 改成 `url`（指向 CNB 的 **`latest.json`**，见下方签名约束），用 `--name Mend.cnb` 打包（nsh 归一化为 `Mend-cnb-<version>-<os>-<arch>`，平台标识仍在末尾，`update-manifest` 能识别），输出到 `dist-cnb` 后恢复 `nsh.json`。**更新源会固化进 bundle 的 `nsh-updater.json`**，所以 CNB 版用户从 CNB 取更新与 OTA。Windows 安装器同样编译两份：`Mend-<version>-setup.exe`（原版）与 `Mend-cnb-<version>-setup.exe`（CNB 版，`patch-installer.mjs` 第三参 `cnb`）。
 4. **manifest**：下载全部产物，用 `NSH_UPDATE_KEY` 运行两次 `nsh update-manifest`，生成**两份带签名的清单**：
-   - `latest.json`（+ `.sig`）：原版归档 `Mend-<version>-*`，下载 URL 相对清单位置（GitHub updater 从该 tag 的 Release 取包）。
-   - `latest-cnb.json`（+ `.sig`）：CNB 归档 `Mend-cnb-*`，加 `--base-url https://cnb.cool/smybxg/Mend/-/releases/latest/download`，所有平台包与 OTA 包地址都是 CNB 直链。
+   - `latest.json`（+ `.sig`）：原版归档 `Mend-<version>-*`，下载 URL 相对清单位置（GitHub updater 从该 tag 的 Release 取包）。**只发 GitHub Release，不同步到 CNB。**
+   - CNB 清单：CNB 归档 `Mend-cnb-*`，加 `--base-url https://cnb.cool/smybxg/Mend/-/releases/latest/download`，所有平台包与 OTA 包地址都是 CNB 直链。生成到独立目录后复制三份：`dist/cnb/latest.json(.sig)`（发 CNB Release，**文件名必须是 `latest.json`**）、`dist/latest-cnb.json(.sig)`（发 GitHub 存档 + 兼容已装的 0.6.9 CNB 版固化地址）。三份清单字节相同，`cmp` 断言兜底。
    归档 glob 只收 `*.zip` / `*.tar.gz`，安装器不进清单（updater 只接受 zip/tar.gz）。密钥与 `publicKey` 不匹配时 nsh 只写 json 不写 `.sig` 却退出 0，job 里有四份文件的存在性断言兜底。
-5. **publish**：用 `softprops/action-gh-release` 把两个版本的平台包、安装器、OTA 包、两份清单及其签名都上传到该 tag 的 GitHub Release；`cnb-sync` 把同一份列表同步到 CNB。
+5. **publish**：用 `softprops/action-gh-release` 把两个版本的平台包、安装器、OTA 包、两份清单及其签名都上传到该 tag 的 GitHub Release；`cnb-sync` 把产物 + **CNB 清单**同步到 CNB Release（CNB 上的 `latest.json` 是 CNB 清单，不是原版清单）。
 
 版本与构建号：`nsh package` / `nsh publish` 使用 tag 版本（去掉前缀 `v`）和 `github.run_number` 作为构建号；同一发布的整包与 OTA 包使用相同构建号。
 
@@ -105,14 +105,16 @@ OTA 代码包运行时，版本卡如实分两行显示「外壳版本」与「�
 
 ## 9. CNB 下载镜像
 
+**签名文件名是 nsh 的硬约束（踩过坑）**：运行时把签名地址写死为「**清单 URL 所在目录 / latest.json.sig**」，与清单自定义文件名无关；签名只覆盖清单原始字节（前缀 `nsh-updater-manifest\0`），与文件名、host 都无关。所以：① 每个更新源目录里清单必须叫 `latest.json`，否则 app 取到的是同目录另一份清单的签名，报 `the signature does not match the app's publicKey`；② 同一目录只能有一份清单，原版与 CNB 版必须分放 GitHub / CNB 两个 host；③ 已装旧版若固化了非标准清单名（`latest-cnb.json`），修法是让该名字的内容与同目录 `latest.json` **字节一致**，共用 `latest.json.sig` 即可，无需用户重装。
+
 GitHub 是唯一构建源；CNB（`cnb.cool/smybxg/Mend`）既是 Release 产物镜像，也为 **CNB 版安装包**提供更新源。nsh updater 是单源配置（`github` 或 `url`），没有双源竞速，不做「哪个快用哪个」。产品内提供两种下载，互不混用：
 
 - **原版**（`Mend-*`）：`updater.github = buzzyaaa/Mend`，从 GitHub Release 的 `latest.json` 取更新与 OTA。CNB 上镜像的原版包也保留这一配置（国内下载加速，但更新仍走 GitHub）。
-- **CNB 版**（`Mend-cnb-*`）：打包时把 `updater` 改成 `url = https://cnb.cool/smybxg/Mend/-/releases/latest/download/latest-cnb.json`，固化进 bundle。从 CNB Release 的 `latest-cnb.json` 取更新，清单里平台包与 OTA 包地址全为 CNB 直链，全流程不出 CNB。GitHub Release 与 CNB Release 都提供这份包。
+- **CNB 版**（`Mend-cnb-*`）：打包时把 `updater` 改成 `url = https://cnb.cool/smybxg/Mend/-/releases/latest/download/latest.json`，固化进 bundle。从 CNB Release 的 `latest.json` 取更新（签名 `latest.json.sig` 配套），清单里平台包与 OTA 包地址全为 CNB 直链，全流程不出 CNB。GitHub Release 与 CNB Release 都提供这份包。已装的 0.6.9 CNB 版固化的是旧地址 `latest-cnb.json`，CNB Release 上保留同名副本（内容与 `latest.json` 字节一致），因此也能继续收到更新，无需重装。
 
 - **代码同步**：本地 `origin` 配双 pushurl（GitHub SSH + CNB HTTPS），`git push origin` 一次推两边。部分网络下 CNB SSH 22 端口不可达，统一走 HTTPS + 访问令牌。
 - **产物同步**：`release.yml` 的 `cnb-sync` job 在 GitHub Release 发布后运行 `scripts/sync-cnb-release.mjs`，用 `CNB_TOKEN` secret 调 CNB Open API（`api.cnb.cool`）：按 tag 复用或创建 Release → 逐文件取上传地址 → PUT → 确认（`ttl=0` 永久、同名覆盖）。
-- **附件直链**：`https://cnb.cool/smybxg/Mend/-/releases/download/<tag>/<filename>`；指向最新版本的固定直链是 `https://cnb.cool/smybxg/Mend/-/releases/latest/download/<filename>`（实测 302 到资产，CNB 版 updater 用的就是它）。CNB 版清单 `latest-cnb.json` 用 `nsh update-manifest --base-url` 生成，里面所有下载地址都是上述固定直链。
+- **附件直链**：`https://cnb.cool/smybxg/Mend/-/releases/download/<tag>/<filename>`；指向最新版本的固定直链是 `https://cnb.cool/smybxg/Mend/-/releases/latest/download/<filename>`（实测 302 到资产，CNB 版 updater 用的就是它）。CNB 清单用 `nsh update-manifest --base-url` 生成，里面所有下载地址都是上述固定直链；在 CNB Release 上以 `latest.json` 发布（配套 `latest.json.sig`），`latest-cnb.json` 是给旧版 app 的同内容副本。
 - **不在 CNB 重复构建**：CNB 官方构建节点只有 Linux Docker；Windows/macOS 需根组织自托管 Runner。三平台构建与签名全部留在 GitHub Actions。
 
 ## 10. 更新网络与代理

@@ -156,7 +156,9 @@ jobs:
             const fs = require("fs");
             const c = JSON.parse(fs.readFileSync("nsh.json", "utf8"));
             c.updater = {
-              url: "https://cnb.cool/smybxg/Mend/-/releases/latest/download/latest-cnb.json",
+              # nsh 的 .sig 文件名写死为「清单同目录/latest.json.sig」，与清单名无关。
+              # 所以清单必须叫 latest.json，签名才配套；latest-cnb.json 只作旧版兼容副本。
+              url: "https://cnb.cool/smybxg/Mend/-/releases/latest/download/latest.json",
               publicKey: c.updater.publicKey,
               packages: c.updater.packages,
             };
@@ -349,8 +351,14 @@ jobs:
             --key keys/update.secret \
             -o dist
           # CNB 清单：--base-url 把所有平台包和 OTA 包地址改写成 CNB Release 直链；
-          # 装了 CNB 版的用户读 latest-cnb.json，全流程不出 CNB。
-          # 先写临时目录再重命名，避免覆盖原版 latest.json（签名针对内容，改名安全）。
+          # 装了 CNB 版的用户全流程不出 CNB。
+          # 关键：nsh 运行时把 .sig 地址写死为「清单所在目录/latest.json.sig」，
+          # 与清单文件名无关。所以 CNB Release 上的清单必须叫 latest.json，
+          # 签名才配套。原版 latest.json 只发 GitHub Release，不同步到 CNB，
+          # 两者各在一个 host 的同名路径，互不干扰。
+          # 生成到独立目录，再复制成多份（签名只认内容，不认文件名）：
+          #   dist/cnb/latest.json(.sig)      → CNB Release 的 latest.json(.sig)，新版 app 读
+          #   dist/latest-cnb.json(.sig)      → 旧版 0.6.9 CNB app 固化地址 + GitHub 存档
           mkdir -p dist-cnb-manifest
           nsh update-manifest "${cnb_archives[@]}" \
             --package "${packages[0]}" \
@@ -364,8 +372,16 @@ jobs:
                    dist-cnb-manifest/latest.json dist-cnb-manifest/latest.json.sig; do
             [ -s "$f" ] || { echo "::error::missing manifest file: $f"; exit 1; }
           done
-          mv dist-cnb-manifest/latest.json dist/latest-cnb.json
-          mv dist-cnb-manifest/latest.json.sig dist/latest-cnb.json.sig
+          mkdir -p dist/cnb
+          cp dist-cnb-manifest/latest.json dist/cnb/latest.json
+          cp dist-cnb-manifest/latest.json.sig dist/cnb/latest.json.sig
+          cp dist-cnb-manifest/latest.json dist/latest-cnb.json
+          cp dist-cnb-manifest/latest.json.sig dist/latest-cnb.json.sig
+          # 两份 CNB 清单必须字节一致：旧版 app 读 latest-cnb.json 的内容，
+          # 却读同目录固定名 latest.json.sig 的签名，内容不同就会验签失败。
+          cmp -s dist/cnb/latest.json dist/latest-cnb.json || {
+            echo "::error::CNB manifest copies differ"; exit 1;
+          }
           node -e '
             const fs = require("fs");
             const gh = JSON.parse(fs.readFileSync("dist/latest.json", "utf8"));
@@ -397,6 +413,8 @@ jobs:
             dist/latest.json.sig
             dist/latest-cnb.json
             dist/latest-cnb.json.sig
+            dist/cnb/latest.json
+            dist/cnb/latest.json.sig
           if-no-files-found: error
 
       # 只在 tag 推送时发 Release；手动触发不会把产物挂到分支名上。
@@ -452,11 +470,17 @@ jobs:
             exit 1
           fi
           VERSION="${GITHUB_REF_NAME#v}"
-          # 原版与 CNB 版产物都同步：CNB 版用户下载 Mend-cnb-* 包后会读
-          # latest-cnb.json，其中的平台包与 OTA 地址都是 CNB 直链（见 manifest job）。
+          # 原版与 CNB 版产物都同步到 CNB Release（国内下载加速）。
+          # 更新清单只放 CNB 版那一份：nsh 把 .sig 地址写死为清单同目录的
+          # latest.json.sig，所以 CNB Release 上的 latest.json(.sig) 必须是
+          # CNB 清单（平台包与 OTA 都是 CNB 直链），新版 CNB app 才能验签。
+          # 原版清单不同步到 CNB——原版 app 从 GitHub 取，CNB 上的原版包
+          # 只是下载加速，更新仍走 GitHub。
+          # dist/cnb/latest.json 上传后 basename 即 latest.json，与签名配套。
+          # dist/latest-cnb.* 保留为旧版 0.6.9 CNB app 的固化地址（内容相同）。
           node scripts/sync-cnb-release.mjs smybxg/Mend "${{ github.ref_name }}" \
             dist/*.zip dist/*.tar.gz \
             "dist/Mend-$VERSION-setup.exe" "dist/Mend-cnb-$VERSION-setup.exe" \
             dist/*.nshpkg \
-            dist/latest.json dist/latest.json.sig \
+            dist/cnb/latest.json dist/cnb/latest.json.sig \
             dist/latest-cnb.json dist/latest-cnb.json.sig
