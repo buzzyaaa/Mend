@@ -5,20 +5,25 @@
  * nsh 只会写一份固定脚本：输出名是 `Mend-setup.exe`，且没有 [Languages] 段，
  * 于是安装/卸载界面永远只有英文。这里在重新编译前改两处：
  *   1. OutputBaseFilename=Mend-<version>-setup —— 发布资产带版本号；
+ *      CNB 变体（第三参 cnb）输出 Mend-cnb-<version>-setup，两种安装器并存；
  *   2. [Languages] 加入英文 + 简体中文，ShowLanguageDialog=yes —— 第一步选语言；
  *      LanguageDetectionMethod=uilanguage 按系统 UI 语言预选；
  *      UsePreviousLanguage=yes 让升级安装沿用上次语言，卸载界面也用安装时选的语言。
  *   3. 把仓库内的 installer/ChineseSimplified.isl 拷到 .iss 同目录，按相对路径引用。
  *      GitHub runner 自带的 Inno Setup 没有这份非官方翻译，放在仓库里最稳。
  *
- * 用法：node scripts/patch-installer.mjs <Mend.iss> [version]
+ * 用法：node scripts/patch-installer.mjs <Mend.iss> [version] [cnb]
  * 版本省略时读仓库根 nsh.json 的 version。
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const [, , issArg, versionArg] = process.argv
+const [, , issArg, versionArg, variantArg] = process.argv
+if (variantArg && variantArg !== 'cnb') {
+  console.error('variant must be "cnb" when provided')
+  process.exit(2)
+}
 if (!issArg) {
   console.error('usage: node scripts/patch-installer.mjs <Mend.iss> [version]')
   process.exit(2)
@@ -55,7 +60,7 @@ if (setupAt < 0) {
   process.exit(1)
 }
 
-const outputName = `Mend-${version}-setup`
+const outputName = variantArg === 'cnb' ? `Mend-cnb-${version}-setup` : `Mend-${version}-setup`
 const outputAt = lines.findIndex((line) => /^OutputBaseFilename=/i.test(line))
 if (outputAt >= 0) {
   lines[outputAt] = `OutputBaseFilename=${outputName}`

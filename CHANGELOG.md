@@ -7,6 +7,11 @@
 
 ## [Unreleased]
 
+## [0.6.9] - 2026-11-26
+
+#### Added
+- **CNB 版安装包与国内更新源**：发布流水线每个平台额外打一版 `Mend-cnb-*` 包（含 Windows `Mend-cnb-<版本>-setup.exe`），其更新源固化指向 CNB 的专用清单 `latest-cnb.json`——软件更新与 OTA 下载全程走 CNB 直链，不出国内。原版（`Mend-*`）更新源不变，仍走 GitHub；两个版本的包与两份清单在 GitHub Release 与 CNB Release 都提供，按需选择。
+
 ## [0.6.8] - 2026-11-26
 
 #### Added

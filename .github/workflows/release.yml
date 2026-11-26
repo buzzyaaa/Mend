@@ -136,10 +136,54 @@ jobs:
           path: dist/*-${{ matrix.target }}-*
           if-no-files-found: error
 
+      # CNB 变体：包名前缀 Mend-cnb（nsh 把 `--name Mend.cnb` 归一化成 Mend-cnb，
+      # 平台标识仍在末尾，update-manifest 能正确识别）。关键差异是 nsh.json 的
+      # updater 从 github 改成 url，nsh package 会把它固化进 bundle 的
+      # nsh-updater.json —— 装了 CNB 版的用户因此从 CNB 的专用清单取更新与 OTA。
+      # 输出到独立目录 dist-cnb，避免与原版归档混淆；打包后恢复 nsh.json。
+      - name: Package CNB variant
+        shell: bash
+        run: |
+          VERSION="$APP_SEMVER"
+          if [ -z "$VERSION" ]; then
+            echo "::error::APP_SEMVER is not set"
+            exit 1
+          fi
+          cp nsh.json nsh.json.cnb-backup
+          restore() { mv -f nsh.json.cnb-backup nsh.json; }
+          trap restore EXIT
+          node -e '
+            const fs = require("fs");
+            const c = JSON.parse(fs.readFileSync("nsh.json", "utf8"));
+            c.updater = {
+              url: "https://cnb.cool/smybxg/Mend/-/releases/latest/download/latest-cnb.json",
+              publicKey: c.updater.publicKey,
+              packages: c.updater.packages,
+            };
+            fs.writeFileSync("nsh.json", JSON.stringify(c, null, 2) + "\n");
+          '
+          nsh package . --target ${{ matrix.target }} --name Mend.cnb \
+            --app-version "$VERSION" --build "$BUILD" -o dist-cnb
+          restore
+          trap - EXIT
+          # 核对 CNB 源确实固化进包（在 CNB 包的 nsh-updater.json 里）。
+          grep -rq "cnb.cool" dist-cnb || {
+            echo "::error::CNB updater not baked into package"
+            exit 1
+          }
+
+      - name: Upload ${{ matrix.target }} CNB update archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-cnb-${{ matrix.target }}
+          path: dist-cnb/*-${{ matrix.target }}-*
+          if-no-files-found: error
+
       # 安装器是额外的下载选项，不参与应用内自动更新（latest.json 的 windows
       # 平台资产仍指向 zip，updater 只接受 zip/tar.gz）。单独上传为 artifact。
       # nsh 生成的 .iss 固定英文名且不写版本：先打补丁（版本号 + 中英文语言页），
-      # 再用 ISCC 重编译，最终只发布 dist/Mend-<version>-setup.exe。
+      # 再用 ISCC 重编译。原版与 CNB 版各编译一份：CNB 安装器内的 bundle 来自
+      # dist-cnb（updater 已指向 CNB），文件名 Mend-cnb-<version>-setup.exe。
       - name: Build localized Windows installer
         if: matrix.target == 'windows'
         shell: pwsh
@@ -147,18 +191,29 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $version = $env:APP_SEMVER
           if (-not $version) { throw 'APP_SEMVER is not set' }
-          $iss = Get-ChildItem -Path dist -Filter 'Mend.iss' -Recurse | Select-Object -First 1
-          if (-not $iss) { throw 'nsh package did not produce Mend.iss' }
-          node scripts/patch-installer.mjs "$($iss.FullName)" "$version"
           $iscc = (Get-Command ISCC.exe -ErrorAction Stop).Source
-          & $iscc /Q "/O$((Resolve-Path dist).Path)" "$($iss.FullName)"
-          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
-          $setupName = "Mend-$version-setup.exe"
-          $setup = Join-Path (Resolve-Path dist).Path $setupName
-          if (-not (Test-Path $setup)) { throw "ISCC did not produce $setupName" }
+          function Build-Installer($issFile, $outDir, $variant) {
+            if (-not $issFile) { throw 'nsh package did not produce the installer script' }
+            if ($variant -eq 'cnb') {
+              node scripts/patch-installer.mjs "$($issFile.FullName)" "$version" cnb
+            } else {
+              node scripts/patch-installer.mjs "$($issFile.FullName)" "$version"
+            }
+            & $iscc /Q "/O$((Resolve-Path $outDir).Path)" "$($issFile.FullName)"
+            if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
+            $prefix = if ($variant -eq 'cnb') { 'Mend-cnb' } else { 'Mend' }
+            $setupName = "$prefix-$version-setup.exe"
+            $setup = Join-Path (Resolve-Path $outDir).Path $setupName
+            if (-not (Test-Path $setup)) { throw "ISCC did not produce $setupName" }
+            Get-Item $setup | Select-Object FullName, Length
+          }
+          $ghIss = Get-ChildItem -Path dist -Filter 'Mend.iss' -Recurse | Select-Object -First 1
+          Build-Installer $ghIss 'dist' ''
           # 丢掉 nsh 先编译的无版本/纯英文版本，避免误下载。
           Get-ChildItem -Path dist -Filter 'Mend-setup.exe' -Recurse | Remove-Item -Force
-          Get-Item $setup | Select-Object FullName, Length
+          $cnbIss = Get-ChildItem -Path dist-cnb -Filter 'Mend.cnb.iss' -Recurse | Select-Object -First 1
+          Build-Installer $cnbIss 'dist-cnb' 'cnb'
+          Get-ChildItem -Path dist-cnb -Filter 'Mend.cnb-setup.exe' -Recurse | Remove-Item -Force
 
       - name: Upload Windows installer
         if: matrix.target == 'windows'
@@ -168,6 +223,16 @@ jobs:
           path: |
             dist/Mend-*-setup.exe
             dist/Mend.iss
+          if-no-files-found: error
+
+      - name: Upload CNB Windows installer
+        if: matrix.target == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-cnb
+          path: |
+            dist-cnb/Mend-cnb-*-setup.exe
+            dist-cnb/Mend.cnb.iss
           if-no-files-found: error
 
   ot-package:
@@ -260,34 +325,74 @@ jobs:
           mkdir -p keys
           printf '%s' "$NSH_UPDATE_KEY" > keys/update.secret
 
-      - name: Generate signed manifest
+      - name: Generate signed manifests
         shell: bash
         run: |
           shopt -s nullglob
-          archives=(dist/*-*.tar.gz dist/*-*.zip)
+          # 原版归档名是 Mend-<version>-<os>-<arch>，CNB 版是 Mend-cnb-<version>-*。
+          # 用版本号位（[0-9]*）区分，避免 CNB 包混进原版清单。
+          gh_archives=(dist/Mend-[0-9]*.tar.gz dist/Mend-[0-9]*.zip)
+          cnb_archives=(dist/Mend-cnb-*.tar.gz dist/Mend-cnb-*.zip)
           packages=(dist/*.nshpkg)
-          if [ ${#archives[@]} -eq 0 ]; then
-            echo "::error::No platform archives found in dist"
+          if [ ${#gh_archives[@]} -eq 0 ] || [ ${#cnb_archives[@]} -eq 0 ]; then
+            echo "::error::Missing platform archives (gh=${#gh_archives[@]}, cnb=${#cnb_archives[@]})"
             exit 1
           fi
           if [ ${#packages[@]} -ne 1 ]; then
             echo "::error::Expected exactly one OTA package, found ${#packages[@]}"
             exit 1
           fi
-          nsh update-manifest "${archives[@]}" \
+          # 原版清单：URL 相对清单存放位置（GitHub updater 从该 release 取包）。
+          nsh update-manifest "${gh_archives[@]}" \
             --package "${packages[0]}" \
             --notes CHANGELOG.md \
             --key keys/update.secret \
             -o dist
+          # CNB 清单：--base-url 把所有平台包和 OTA 包地址改写成 CNB Release 直链；
+          # 装了 CNB 版的用户读 latest-cnb.json，全流程不出 CNB。
+          # 先写临时目录再重命名，避免覆盖原版 latest.json（签名针对内容，改名安全）。
+          mkdir -p dist-cnb-manifest
+          nsh update-manifest "${cnb_archives[@]}" \
+            --package "${packages[0]}" \
+            --notes CHANGELOG.md \
+            --key keys/update.secret \
+            --base-url "https://cnb.cool/smybxg/Mend/-/releases/latest/download" \
+            -o dist-cnb-manifest
+          # 密钥与 publicKey 不匹配时 nsh 会退出 0 却只写 json 不写 .sig，
+          # 这里显式断言四份文件齐全，避免带着坏清单发版。
+          for f in dist/latest.json dist/latest.json.sig \
+                   dist-cnb-manifest/latest.json dist-cnb-manifest/latest.json.sig; do
+            [ -s "$f" ] || { echo "::error::missing manifest file: $f"; exit 1; }
+          done
+          mv dist-cnb-manifest/latest.json dist/latest-cnb.json
+          mv dist-cnb-manifest/latest.json.sig dist/latest-cnb.json.sig
+          node -e '
+            const fs = require("fs");
+            const gh = JSON.parse(fs.readFileSync("dist/latest.json", "utf8"));
+            const cnb = JSON.parse(fs.readFileSync("dist/latest-cnb.json", "utf8"));
+            for (const [name, m] of [["latest.json", gh], ["latest-cnb.json", cnb]]) {
+              const urls = [...Object.values(m.platforms).map((p) => p.url), m.package.url];
+              if (urls.some((u) => !u || !u.startsWith("http") && !/^Mend/.test(u))) {
+                throw new Error(`${name}: bad url in manifest`);
+              }
+            }
+            const cnbUrls = [...Object.values(cnb.platforms).map((p) => p.url), cnb.package.url];
+            if (!cnbUrls.every((u) => u.startsWith("https://cnb.cool/smybxg/Mend/-/releases/"))) {
+              throw new Error("CNB manifest contains non-CNB download urls");
+            }
+            console.log("manifests ok: github", Object.keys(gh.platforms).join(","), "| cnb", Object.keys(cnb.platforms).join(","));
+          '
 
-      # cnb-sync 只下载 workflow artifacts；manifest 不上传的话镜像会缺 latest.json。
-      - name: Upload update manifest
+      # cnb-sync 只下载 workflow artifacts；manifest 不上传的话镜像会缺清单。
+      - name: Upload update manifests
         uses: actions/upload-artifact@v4
         with:
           name: update-manifest
           path: |
             dist/latest.json
             dist/latest.json.sig
+            dist/latest-cnb.json
+            dist/latest-cnb.json.sig
           if-no-files-found: error
 
       # 只在 tag 推送时发 Release；手动触发不会把产物挂到分支名上。
@@ -305,6 +410,9 @@ jobs:
             upgrade in place), or the zip for a portable copy.
             Linux / macOS: download the platform archive.
             Existing vaults in the application data directory open as-is.
+
+            Packages prefixed Mend-cnb- use CNB as their update source
+            (including OTA); all other packages use GitHub.
           files: |
             dist/*.tar.gz
             dist/*.zip
@@ -312,6 +420,8 @@ jobs:
             dist/*.nshpkg
             dist/latest.json
             dist/latest.json.sig
+            dist/latest-cnb.json
+            dist/latest-cnb.json.sig
 
   # 把同一份产物镜像到 CNB Release，供国内下载。更新源仍是 GitHub（nsh updater 单源）。
   cnb-sync:
@@ -338,6 +448,11 @@ jobs:
             exit 1
           fi
           VERSION="${GITHUB_REF_NAME#v}"
+          # 原版与 CNB 版产物都同步：CNB 版用户下载 Mend-cnb-* 包后会读
+          # latest-cnb.json，其中的平台包与 OTA 地址都是 CNB 直链（见 manifest job）。
           node scripts/sync-cnb-release.mjs smybxg/Mend "${{ github.ref_name }}" \
-            dist/*.zip dist/*.tar.gz "dist/Mend-$VERSION-setup.exe" dist/*.nshpkg \
-            dist/latest.json dist/latest.json.sig
+            dist/*.zip dist/*.tar.gz \
+            "dist/Mend-$VERSION-setup.exe" "dist/Mend-cnb-$VERSION-setup.exe" \
+            dist/*.nshpkg \
+            dist/latest.json dist/latest.json.sig \
+            dist/latest-cnb.json dist/latest-cnb.json.sig

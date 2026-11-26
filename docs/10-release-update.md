@@ -61,9 +61,13 @@ nsh certify --root keys/root.secret --key keys/release.pub \
    - Windows：VS Build Tools + Rust（默认目标即可）。`nsh package --target windows` 除 zip 外还会生成 Inno Setup 脚本 `Mend.iss`，并在检测到 `ISCC.exe` 时编译出 `Mend-setup.exe`。CI 先探测 Inno Setup 6，缺失则用 `choco install innosetup` 兜底；随后用 `scripts/patch-installer.mjs` 给 `Mend.iss` 打补丁（输出名改为 **`Mend-<version>-setup.exe`**，加入 `[Languages]` 的 `en` / `zh` 与 `ShowLanguageDialog=yes`、`LanguageDetectionMethod=uilanguage`、`UsePreviousLanguage=yes`，并把仓库内的 `installer/ChineseSimplified.isl` 拷到脚本目录按相对路径引用——GitHub runner 自带的 Inno Setup 不含这份非官方翻译），再用 ISCC 重编译。最终安装器为当前用户级、双击原地覆盖升级，保留 `%APPDATA%\com.mend.app` 的数据，并作为独立 artifact 上传。
    - Linux：安装 `libgtk-4-dev clang libwebkitgtk-6.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev`。
    - macOS：`rustup target add aarch64-apple-darwin x86_64-apple-darwin`。
-2. **ot-package**：在 Windows 上运行 `nsh publish`，用 `NSH_RELEASE_KEY` / `NSH_RELEASE_CERT` 签名，产出 `dist/com.mend.app-<build>.nshpkg`。
-3. **manifest**：下载全部产物，用 `NSH_UPDATE_KEY` 运行 `nsh update-manifest`，生成带签名的 `dist/latest.json` 与 `latest.json.sig`。归档 glob 只收 `*.zip` / `*.tar.gz`，`Mend-<version>-setup.exe` 不进清单——`latest.json` 的 Windows 平台资产仍指向 zip（nsh updater 只接受 zip/tar.gz）。
-4. **publish**：用 `softprops/action-gh-release` 把平台包、安装器（`Mend-<version>-setup.exe`）、OTA 包、`latest.json`、`latest.json.sig` 上传到该 tag 的 GitHub Release；`cnb-sync` 同步同一份列表到 CNB。
+2. **ot-package**：在 Windows 上运行 `nsh publish`，用 `NSH_RELEASE_KEY` / `NSH_RELEASE_CERT` 签名，产出 `dist/com.mend.app-<build>.nshpkg`。两个版本共用这一份 OTA 包——更新源不在 OTA 包里，而在各 app 外壳的 `.nsh-updater.json`（见下文）。
+3. **package（CNB 变体）**：每个平台除原版外再打一份——临时把 `nsh.json` 的 `updater` 从 `github` 改成 `url`（指向 CNB 的 `latest-cnb.json`），用 `--name Mend.cnb` 打包（nsh 归一化为 `Mend-cnb-<version>-<os>-<arch>`，平台标识仍在末尾，`update-manifest` 能识别），输出到 `dist-cnb` 后恢复 `nsh.json`。**更新源会固化进 bundle 的 `nsh-updater.json`**，所以 CNB 版用户从 CNB 取更新与 OTA。Windows 安装器同样编译两份：`Mend-<version>-setup.exe`（原版）与 `Mend-cnb-<version>-setup.exe`（CNB 版，`patch-installer.mjs` 第三参 `cnb`）。
+4. **manifest**：下载全部产物，用 `NSH_UPDATE_KEY` 运行两次 `nsh update-manifest`，生成**两份带签名的清单**：
+   - `latest.json`（+ `.sig`）：原版归档 `Mend-<version>-*`，下载 URL 相对清单位置（GitHub updater 从该 tag 的 Release 取包）。
+   - `latest-cnb.json`（+ `.sig`）：CNB 归档 `Mend-cnb-*`，加 `--base-url https://cnb.cool/smybxg/Mend/-/releases/latest/download`，所有平台包与 OTA 包地址都是 CNB 直链。
+   归档 glob 只收 `*.zip` / `*.tar.gz`，安装器不进清单（updater 只接受 zip/tar.gz）。密钥与 `publicKey` 不匹配时 nsh 只写 json 不写 `.sig` 却退出 0，job 里有四份文件的存在性断言兜底。
+5. **publish**：用 `softprops/action-gh-release` 把两个版本的平台包、安装器、OTA 包、两份清单及其签名都上传到该 tag 的 GitHub Release；`cnb-sync` 把同一份列表同步到 CNB。
 
 版本与构建号：`nsh package` / `nsh publish` 使用 tag 版本（去掉前缀 `v`）和 `github.run_number` 作为构建号；同一发布的整包与 OTA 包使用相同构建号。
 
@@ -101,11 +105,14 @@ OTA 代码包运行时，版本卡如实分两行显示「外壳版本」与「�
 
 ## 9. CNB 下载镜像
 
-GitHub 是唯一构建源与更新源；CNB（`cnb.cool/smybxg/Mend`）只做代码与 Release 产物镜像，供国内下载。nsh updater 是单源配置（`github` 或 `url`），没有双源竞速，不做「哪个快用哪个」。
+GitHub 是唯一构建源；CNB（`cnb.cool/smybxg/Mend`）既是 Release 产物镜像，也为 **CNB 版安装包**提供更新源。nsh updater 是单源配置（`github` 或 `url`），没有双源竞速，不做「哪个快用哪个」。产品内提供两种下载，互不混用：
+
+- **原版**（`Mend-*`）：`updater.github = buzzyaaa/Mend`，从 GitHub Release 的 `latest.json` 取更新与 OTA。CNB 上镜像的原版包也保留这一配置（国内下载加速，但更新仍走 GitHub）。
+- **CNB 版**（`Mend-cnb-*`）：打包时把 `updater` 改成 `url = https://cnb.cool/smybxg/Mend/-/releases/latest/download/latest-cnb.json`，固化进 bundle。从 CNB Release 的 `latest-cnb.json` 取更新，清单里平台包与 OTA 包地址全为 CNB 直链，全流程不出 CNB。GitHub Release 与 CNB Release 都提供这份包。
 
 - **代码同步**：本地 `origin` 配双 pushurl（GitHub SSH + CNB HTTPS），`git push origin` 一次推两边。部分网络下 CNB SSH 22 端口不可达，统一走 HTTPS + 访问令牌。
 - **产物同步**：`release.yml` 的 `cnb-sync` job 在 GitHub Release 发布后运行 `scripts/sync-cnb-release.mjs`，用 `CNB_TOKEN` secret 调 CNB Open API（`api.cnb.cool`）：按 tag 复用或创建 Release → 逐文件取上传地址 → PUT → 确认（`ttl=0` 永久、同名覆盖）。
-- **附件直链**：`https://cnb.cool/smybxg/Mend/-/releases/download/<tag>/<filename>`。将来若要把 OTA/更新源切到国内，可改 `updater` 为 `"url"` 模式指向 CNB 上的 `latest.json`，并用 `nsh update-manifest --base-url` 生成指向 CNB 直链的清单（当前未启用）。
+- **附件直链**：`https://cnb.cool/smybxg/Mend/-/releases/download/<tag>/<filename>`；指向最新版本的固定直链是 `https://cnb.cool/smybxg/Mend/-/releases/latest/download/<filename>`（实测 302 到资产，CNB 版 updater 用的就是它）。CNB 版清单 `latest-cnb.json` 用 `nsh update-manifest --base-url` 生成，里面所有下载地址都是上述固定直链。
 - **不在 CNB 重复构建**：CNB 官方构建节点只有 Linux Docker；Windows/macOS 需根组织自托管 Runner。三平台构建与签名全部留在 GitHub Actions。
 
 ## 10. 更新网络与代理
