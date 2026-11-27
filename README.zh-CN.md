@@ -17,6 +17,15 @@ Mend 是一款本地离线、存盘加密的个人密码管理器，基于 **Nat
 - **更新**：应用内更新与签名 OTA 包（正式发布走 GitHub Releases）。
 - **自适应布局**：同一份代码同时支持桌面 master-detail（侧栏 + 列表 + 详情）与手机单栏。
 
+## 🖼️ 界面预览
+
+<table>
+  <tr>
+    <td align="center"><img src="./docs/screen/home.png" width="440" alt="Mend 主界面"><br>密码库主界面</td>
+    <td align="center"><img src="./docs/screen/setting.png" width="440" alt="Mend 设置页"><br>设置页</td>
+  </tr>
+</table>
+
 ## 📥 下载
 
 - [GitHub Releases](https://github.com/buzzyaaa/Mend/releases/latest)：主发布源；应用内更新与 OTA 也走 GitHub。
@@ -30,7 +39,7 @@ Mend 是一款本地离线、存盘加密的个人密码管理器，基于 **Nat
 
 <img src="./docs/support/qrcode.png" width="200" alt="Ko-fi 二维码">
 
-> **本打赏为自愿馈赠，不构成交易。** 不包含任何技术服务、支持或功能承诺，也不产生任何商业关系或义务。无论是否打赏，Mend 都对所有用户保持免费和开源。
+> **这是一份自愿的心意，不是购买。** 无论是否打赏，Mend 的全部功能与更新都一视同仁地开放给你，项目始终保持免费和开源。你的支持只是让我有更多时间维护和改进它，不包含任何服务或功能承诺，也不形成任何商业关系。谢谢你愿意支持。
 
 ## 📦 发布文件说明（每个产物是做什么的）
 

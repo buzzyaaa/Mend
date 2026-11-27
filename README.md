@@ -21,6 +21,15 @@ Mend is a local-first, offline, encrypted personal password manager. It is built
 - **Updates** — in-app updates with signed OTA packages (releases are published on GitHub Releases).
 - **Adaptive layout** — desktop master-detail (sidebar + list + detail) and single-column mobile from the same code.
 
+## 🖼️ Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="./docs/screen/home.png" width="440" alt="Mend main vault view"><br>Main vault view</td>
+    <td align="center"><img src="./docs/screen/setting.png" width="440" alt="Mend settings page"><br>Settings</td>
+  </tr>
+</table>
+
 ## 📥 Download
 
 - [GitHub Releases](https://github.com/buzzyaaa/Mend/releases/latest) — primary source; in-app updates and OTA also use GitHub.
@@ -34,7 +43,7 @@ If Mend helps you, you can support ongoing development via Ko-fi.
 
 <img src="./docs/support/qrcode.png" width="200" alt="Ko-fi QR">
 
-> **This is a voluntary gift, not a transaction.** It includes no technical service, support, or feature guarantee, and creates no commercial relationship or obligation of any kind. Mend stays free and open source for everyone, whether or not you choose to donate.
+> **A voluntary thank-you, not a purchase.** Mend stays free and open source for everyone, with or without a tip — all features and updates are open to you either way. Your kindness simply gives me more time to maintain and improve the app; it comes with no service, no feature promise, and no commercial relationship of any kind. Thank you for being here.
 
 ## 📦 Release files — what each artifact does
 
