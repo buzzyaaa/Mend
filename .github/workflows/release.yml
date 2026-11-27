@@ -188,7 +188,9 @@ jobs:
           case '${{ matrix.target }}' in
             windows)
               echo "::group::CNB windows archive entries"
-              unzip -Z1 dist-cnb/Mend-cnb-*.zip | head -10
+              # 不用 head：提前关闭管道会让 unzip 收到 SIGPIPE，
+              # 在 set -o pipefail 下整个步骤以 141 失败。
+              unzip -Z1 dist-cnb/Mend-cnb-*.zip | sed -n '1,10p'
               echo "::endgroup::"
               unzip -Z1 dist-cnb/Mend-cnb-*.zip | tr -d '\r' | grep -q 'Mend\.exe' || {
                 echo "::error::CNB windows archive has no Mend.exe"; exit 1;
