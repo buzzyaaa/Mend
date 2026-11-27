@@ -183,11 +183,19 @@ jobs:
             exit 1
           }
           # 断言包内可执行文件没被改名，避免再次发出装不上的更新包。
+          # Windows 的 unzip 可能输出 `Mend\Mend.exe`，正/反斜杠都接受；
+          # 同时显式排除被 --name 改坏后的 `Mend.cnb.exe`。
           case '${{ matrix.target }}' in
             windows)
-              unzip -Z1 dist-cnb/Mend-cnb-*.zip | grep -qx 'Mend/Mend.exe' || {
-                echo "::error::CNB windows archive has no Mend/Mend.exe"; exit 1;
+              echo "::group::CNB windows archive entries"
+              unzip -Z1 dist-cnb/Mend-cnb-*.zip | head -10
+              echo "::endgroup::"
+              unzip -Z1 dist-cnb/Mend-cnb-*.zip | tr -d '\r' | grep -q 'Mend\.exe' || {
+                echo "::error::CNB windows archive has no Mend.exe"; exit 1;
               }
+              if unzip -Z1 dist-cnb/Mend-cnb-*.zip | grep -qi 'Mend\.cnb\.exe'; then
+                echo "::error::CNB windows archive has renamed Mend.cnb.exe"; exit 1
+              fi
               ;;
             *)
               if tar -tzf dist-cnb/Mend-cnb-*.tar.gz | grep -q 'Mend\.cnb'; then
