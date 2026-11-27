@@ -1,6 +1,6 @@
 [package]
 name = "mend-core"
-version = "0.6.11"
+version = "0.6.12"
 description = "Mend core: encryption, database and error types (no GUI dependencies)"
 edition = "2021"
 rust-version = "1.77"

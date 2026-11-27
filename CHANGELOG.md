@@ -7,6 +7,11 @@
 
 ## [Unreleased]
 
+## [0.6.12] - 2026-11-27
+
+#### Fixed
+- **CNB 版整包更新报 `the archive has no Mend.exe`**：0.6.11 起 CNB 变体打包传了 `--name Mend.cnb`，nsh 把这个名字同时用于包内可执行文件（`Mend.cnb/Mend.cnb.exe`），而更新器按运行中 app 的 `Mend.exe` 校验新包，导致安装失败。改为只固化 CNB 更新源、包内保持 `Mend`，仅外部文件名用 `Mend-cnb-*` 区分；流水线增加归档内可执行文件名断言。
+
 ## [0.6.11] - 2026-11-27
 
 #### Changed

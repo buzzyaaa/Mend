@@ -163,15 +163,39 @@ jobs:
             };
             fs.writeFileSync("nsh.json", JSON.stringify(c, null, 2) + "\n");
           '
-          nsh package . --target ${{ matrix.target }} --name Mend.cnb \
+          # 不能用 --name Mend.cnb：nsh 会把这个名字同时用于归档前缀和包内
+          # 可执行文件（Mend.cnb/Mend.cnb.exe），而运行中的 app 仍按 Mend.exe
+          # 校验新包，更新安装报 "the archive has no Mend.exe"。这里保持包内
+          # 名称与运行 app 完全一致，仅靠下面改文件名前缀区分两种更新源。
+          nsh package . --target ${{ matrix.target }} \
             --app-version "$VERSION" --build "$BUILD" -o dist-cnb
           restore
           trap - EXIT
+          # 文件名前缀仍叫 Mend-cnb，供 update-manifest 与下载页区分；包内是
+          # 原样的 Mend 应用（Windows 为 Mend/Mend.exe）。
+          for f in dist-cnb/Mend-*.zip dist-cnb/Mend-*.tar.gz; do
+            [ -f "$f" ] || continue
+            mv "$f" "dist-cnb/Mend-cnb-${f#dist-cnb/Mend-}"
+          done
           # 核对 CNB 源确实固化进包（在 CNB 包的 nsh-updater.json 里）。
           grep -rq "cnb.cool" dist-cnb || {
             echo "::error::CNB updater not baked into package"
             exit 1
           }
+          # 断言包内可执行文件没被改名，避免再次发出装不上的更新包。
+          case '${{ matrix.target }}' in
+            windows)
+              unzip -Z1 dist-cnb/Mend-cnb-*.zip | grep -qx 'Mend/Mend.exe' || {
+                echo "::error::CNB windows archive has no Mend/Mend.exe"; exit 1;
+              }
+              ;;
+            *)
+              if tar -tzf dist-cnb/Mend-cnb-*.tar.gz | grep -q 'Mend\.cnb'; then
+                echo "::error::CNB archive contains renamed Mend.cnb executable"
+                exit 1
+              fi
+              ;;
+          esac
 
       - name: Upload ${{ matrix.target }} CNB update archive
         uses: actions/upload-artifact@v4
@@ -212,9 +236,12 @@ jobs:
           Build-Installer $ghIss 'dist' ''
           # 丢掉 nsh 先编译的无版本/纯英文版本，避免误下载。
           Get-ChildItem -Path dist -Filter 'Mend-setup.exe' -Recurse | Remove-Item -Force
-          $cnbIss = Get-ChildItem -Path dist-cnb -Filter 'Mend.cnb.iss' -Recurse | Select-Object -First 1
+          $cnbIss = Get-ChildItem -Path dist-cnb -Filter 'Mend.iss' -Recurse | Select-Object -First 1
           Build-Installer $cnbIss 'dist-cnb' 'cnb'
-          Get-ChildItem -Path dist-cnb -Filter 'Mend.cnb-setup.exe' -Recurse | Remove-Item -Force
+          Get-ChildItem -Path dist-cnb -Filter 'Mend-setup.exe' -Recurse | Remove-Item -Force
+          # 两个 variant 的 .iss 都叫 Mend.iss；改个名字再上传，避免后续
+          # download-artifact merge-multiple 时同名文件互相覆盖。
+          Copy-Item $cnbIss.FullName (Join-Path (Split-Path $cnbIss.FullName) 'Mend-cnb.iss') -Force
 
       - name: Upload Windows installer
         if: matrix.target == 'windows'
@@ -233,7 +260,7 @@ jobs:
           name: windows-installer-cnb
           path: |
             dist-cnb/Mend-cnb-*-setup.exe
-            dist-cnb/Mend.cnb.iss
+            dist-cnb/Mend-cnb.iss
           if-no-files-found: error
 
   ot-package:
