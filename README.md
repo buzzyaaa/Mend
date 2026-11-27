@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Platform: Windows / macOS / Linux](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
-[![Version](https://img.shields.io/badge/Version-0.6.10-green.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-0.6.11-green.svg)](./CHANGELOG.md)
 
 English | [简体中文](./README.zh-CN.md)
 
@@ -35,11 +35,11 @@ Mend is a local-first, offline, encrypted personal password manager. It is built
 - [GitHub Releases](https://github.com/buzzyaaa/Mend/releases/latest) — primary source; in-app updates and OTA also use GitHub.
 - [CNB mirror](https://cnb.cool/smybxg/Mend/-/releases) — China mirror with identical artifacts, recommended for users in mainland China.
 
-## ☕ Support
+## <img src="./docs/support/Sticker%20logo.gif" width="32" alt=""> Support
 
 If Mend helps you, you can support ongoing development via Ko-fi.
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/C0M32BD0S3)
+<a href="https://ko-fi.com/C0M32BD0S3"><img src="./docs/support/Support%20me%202.gif" width="180" alt="Support me on Ko-fi"></a>
 
 <img src="./docs/support/qrcode.png" width="200" alt="Ko-fi QR">
 
@@ -207,11 +207,11 @@ Also `nsh.json` (app metadata and `rust: native` declaration), `theme.json` (des
 
 ---
 
-## ☕ Support
+## <img src="./docs/support/Sparkle%20mug.gif" width="32" alt=""> Support
 
 If Mend helps you, you can support ongoing development via Ko-fi.
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/C0M32BD0S3)
+<a href="https://ko-fi.com/C0M32BD0S3"><img src="./docs/support/Support%20me%203.gif" width="140" alt="Support me on Ko-fi"></a>
 
 <img src="./docs/support/qrcode.png" width="200" alt="Ko-fi QR">
 

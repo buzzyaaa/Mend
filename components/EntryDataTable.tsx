@@ -3,9 +3,11 @@ import {
   DataTable,
   type DataTableCell,
   type DataTableColumn,
+  type DataTableContextMenu,
   type DataTableHeaderCell,
   type DataTableRef,
 } from 'nsh/base'
+import { isAvailable, Menu as SystemMenu, type MenuItem as SystemMenuItem } from 'nsh/desktop'
 import { t } from 'nsh/i18n'
 
 import {
@@ -15,6 +17,8 @@ import {
   hasMoreEntries,
   loadedCount,
   loadMoreEntries,
+  tags,
+  toggleEntryTag,
   toggleSelectAll,
   visibleEntries,
 } from '../lib/state'
@@ -257,6 +261,27 @@ export function EntryDataTable(props: { empty: NshNode }) {
     )
   }
 
+  /** DataTable 在单元格上方盖了事件转发层，挂在单元格上的 onContextMenu 收不到右键；
+   *  用表格自己的右键事件（带行号/列号），只对标题列开菜单。菜单项在按下瞬间
+   *  从条目快照生成：表格槽位会被回收，回调里不能再用 row 号重新取条目。 */
+  function openTagMenu(event: DataTableContextMenu): void {
+    if (!isAvailable || columns()[event.column ?? -1]?.key !== 'name') return
+    const entry = displayedEntries()[event.row ?? -1]
+    if (!entry) return
+    const current = [...entry.tags]
+    const defined = tags().map((tag) => tag.name)
+    const all = [...defined, ...current.filter((tag) => !defined.includes(tag))]
+    const items: SystemMenuItem[] =
+      all.length > 0
+        ? all.map((tag) => ({
+            label: tag,
+            checked: current.includes(tag),
+            onSelect: () => toggleEntryTag(entry.id, tag),
+          }))
+        : [{ label: t('entry.noTagsSelected'), disabled: true }]
+    void SystemMenu.popup(items, { x: event.x, y: event.y })
+  }
+
   return (
     <View class="relative mx-4 mb-1 min-h-0 flex-1">
       <Each of={[columnSignature()]}>
@@ -308,6 +333,7 @@ export function EntryDataTable(props: { empty: NshNode }) {
             }}
             renderCell={renderCell}
             renderHeaderCell={renderHeaderCell}
+            onContextMenu={openTagMenu}
             onVisibleRowsChange={({ range }) => {
               // DataTable 的 rowCount 是全表，但 data 只持有已解密窗口；视野接近窗口末尾就提前补密。
               if (range.end + 80 >= loadedCount() && hasMoreEntries()) loadMoreEntries()

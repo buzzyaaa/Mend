@@ -23,6 +23,7 @@ import {
   purgeEntry,
   restoreEntry,
   selectedIds,
+  setTagFilter,
   tagColorOf,
   toggleFavorite,
   togglePasswordFor,
@@ -87,7 +88,8 @@ export function SelectAllCheckbox(props: { onChange: () => void }) {
 }
 
 /** 标题 + 标签共用一格：有标题时两行一起垂直居中，没标题时只剩标签也居中。
- *  entry 传 accessor 而不是快照，DataTable 的单元格会被回收给别的行。 */
+ *  entry 传 accessor 而不是快照，DataTable 的单元格会被回收给别的行。
+ *  点击范围只给图标和标题（打开网址）；标签改成筛选，右键菜单在 EntryDataTable 上。 */
 export function EntryTitleCell(props: {
   entry: () => EntrySummary
   category?: () => Category | undefined
@@ -95,26 +97,41 @@ export function EntryTitleCell(props: {
 }) {
   const link = () => (props.entry().url?.trim() ? normalizeUrl(props.entry().url ?? '') : null)
   const limit = () => (props.card ? 4 : LIST_TAG_LIMIT)
+  const openLink = () => void openExternal(props.entry().url ?? '')
+  const pressable = () => (link() ? 'cursor-pointer' : '')
+
   return (
-    <View
-      class="min-w-0 flex-row items-center gap-2"
-      style={{ cursor: link() ? 'pointer' : undefined }}
-      role={link() ? 'button' : undefined}
-      onPress={link() ? () => void openExternal(props.entry().url ?? '') : undefined}
-      accessibilityLabel={link() ? t('entry.openInBrowser') : undefined}
-    >
-      <EntryIcon entry={props.entry()} category={props.category?.() ?? categoryOf(props.entry())} />
+    <View class="min-w-0 flex-row items-center gap-2">
+      <View
+        class={pressable()}
+        role={link() ? 'button' : undefined}
+        onPress={link() ? openLink : undefined}
+        accessibilityLabel={link() ? t('entry.openInBrowser') : undefined}
+      >
+        <EntryIcon
+          entry={props.entry()}
+          category={props.category?.() ?? categoryOf(props.entry())}
+        />
+      </View>
       <View class="min-w-0 flex-1 flex-col justify-center gap-0.5">
         <If when={Boolean(props.entry().title)}>
-          <Text
-            class={
-              'text-xs font-medium ' + (link() ? 'text-primary hover:underline' : 'text-foreground')
-            }
-            style={{ numberOfLines: 1 }}
-            tooltip={fullTextTip(props.entry().title)}
+          <View
+            class={'min-w-0 self-start ' + pressable()}
+            role={link() ? 'button' : undefined}
+            onPress={link() ? openLink : undefined}
+            accessibilityLabel={link() ? t('entry.openInBrowser') : undefined}
           >
-            {props.entry().title}
-          </Text>
+            <Text
+              class={
+                'text-xs font-medium ' +
+                (link() ? 'text-primary hover:underline' : 'text-foreground')
+              }
+              style={{ numberOfLines: 1 }}
+              tooltip={fullTextTip(props.entry().title)}
+            >
+              {props.entry().title}
+            </Text>
+          </View>
         </If>
         <View
           class="min-w-0 flex-row items-center gap-1 overflow-hidden"
@@ -128,7 +145,13 @@ export function EntryTitleCell(props: {
                 .entry()
                 .tags.slice(0, limit())
                 .map((tag) => (
-                  <TagPill label={tag} color={tagColorOf(tag)} />
+                  <TagPill
+                    label={tag}
+                    color={tagColorOf(tag)}
+                    class="cursor-pointer"
+                    onPress={() => setTagFilter(tag)}
+                    accessibilityLabel={`${t('entry.tagFilter')}: ${tag}`}
+                  />
                 ))}
               <If when={props.entry().tags.length > limit()}>
                 <View class="shrink-0 rounded-full bg-muted px-1.5 py-0.5">

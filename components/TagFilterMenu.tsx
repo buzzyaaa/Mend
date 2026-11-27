@@ -71,11 +71,7 @@ export function TagFilterMenu() {
             accessibilityLabel={tag}
             onSelect={() => setTagFilter(tag)}
           >
-            <TagPill
-              label={tag}
-              color={tagColorOf(tag)}
-              class={tagFilters().includes(tag) ? 'ring-2 ring-primary' : 'opacity-90'}
-            />
+            <TagPill label={tag} color={tagColorOf(tag)} class="opacity-90" />
           </MenuItem>
         ))}
       </If>

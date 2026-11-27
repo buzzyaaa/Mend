@@ -341,6 +341,114 @@ test('tags are maintained in a dialog and only selectable on entries', async () 
   await app.waitFor('label:Master password')
 })
 
+// 列表里的标签胶囊不再继承「打开网址」：点一次直接激活左上角标签筛选，
+// 再点一次取消；这一步同时证明筛选读的是胶囊上的标签而不是整行。
+test('clicking a tag pill in the list toggles the tag filter', async () => {
+  const app = await open('./App.tsx', { platform: 'windows' })
+  await app.setViewport(1100, 780)
+  await app.waitFor('label:Master password')
+  await app.type('label:Master password', 'test-password-1234')
+  if (app.shows('label:Confirm master password')) {
+    await app.type('label:Confirm master password', 'test-password-1234')
+    await app.press('Create and enter')
+  } else {
+    await app.press('text:Unlock')
+  }
+  await app.waitFor('text:Passwords')
+
+  try {
+    // 用例共用一个库：标签名与条目名用独立前缀，避免撞上前面用例的数据。
+    await app.press('label:Tags >> nth=0')
+    await app.waitFor('label:Tag name')
+    await app.type('label:Tag name', 'quickfilter')
+    await app.press('label:Add tag')
+    await app.press('id:tags-close')
+
+    await app.press('id:add-entry')
+    await app.waitFor('text:New entry')
+    await app.type('label:Title', 'Filter Target')
+    await app.type('label:URL', 'https://example.com')
+    await app.type('id:entry-tags-input', 'quickfilter')
+    await app.waitFor('text:quickfilter')
+    // 同名候选有两处可点：取第二个（组合框弹层里的候选项）。
+    await app.press('text:quickfilter >> nth=1')
+    expect(app.shows('id:entry-tags-combobox >> label:quickfilter')).toBe(true)
+    await app.press('text:Save')
+    await app.waitFor('text:Filter Target')
+
+    await app.press('id:add-entry')
+    await app.waitFor('text:New entry')
+    await app.type('label:Title', 'Plain Entry')
+    await app.press('text:Save')
+    await app.waitFor('text:Plain Entry')
+
+    // 点列表里的胶囊：左上角筛选入口带计数，未命中的条目被筛掉。
+    await app.press('label:Filter by tags: quickfilter')
+    await app.waitFor('label:Filter by tags (1)')
+    expect(app.shows('text:Filter Target')).toBe(true)
+    expect(app.shows('text:Plain Entry')).toBe(false)
+
+    // 再点一次同一胶囊取消筛选，列表恢复。
+    await app.press('label:Filter by tags: quickfilter')
+    await app.waitFor('text:Plain Entry')
+    expect(app.shows('label:Filter by tags (1)')).toBe(false)
+  } finally {
+    // 失败也要锁定：后续用例共用数据目录，留着解锁态会让它们卡在首屏。
+    await app.press('label:Lock').catch(() => {})
+    await app.waitFor('label:Master password').catch(() => {})
+  }
+})
+
+// 表格在单元格上盖了事件转发层，右键菜单必须挂在 DataTable 自己的 onContextMenu 上。
+// 菜单勾选状态来自条目当场持有的标签，点选后立即写回并刷新行内胶囊。
+test('right-clicking a title cell toggles tags in the system menu', async () => {
+  const app = await open('./App.tsx', { platform: 'windows' })
+  await app.setViewport(1100, 780)
+  await app.waitFor('label:Master password')
+  await app.type('label:Master password', 'test-password-1234')
+  if (app.shows('label:Confirm master password')) {
+    await app.type('label:Confirm master password', 'test-password-1234')
+    await app.press('Create and enter')
+  } else {
+    await app.press('text:Unlock')
+  }
+  await app.waitFor('text:Passwords')
+
+  try {
+    await app.press('label:Tags >> nth=0')
+    await app.waitFor('label:Tag name')
+    await app.type('label:Tag name', 'ctxmenutag')
+    await app.press('label:Add tag')
+    await app.press('id:tags-close')
+
+    await app.press('id:add-entry')
+    await app.waitFor('text:New entry')
+    await app.type('label:Title', 'Menu Target')
+    await app.type('id:entry-tags-input', 'ctxmenutag')
+    await app.waitFor('text:ctxmenutag')
+    await app.press('text:ctxmenutag >> nth=1')
+    await app.press('text:Save')
+    await app.waitFor('text:Menu Target')
+    expect(app.shows('label:Filter by tags: ctxmenutag')).toBe(true)
+
+    await app.rightClick('text:Menu Target')
+    const open = app.menu()
+    expect(open?.find((item) => item.label === 'ctxmenutag')?.checked).toBe(true)
+    await app.chooseMenuItem('ctxmenutag')
+    expect(app.shows('label:Filter by tags: ctxmenutag')).toBe(false)
+
+    await app.rightClick('text:Menu Target')
+    const reopened = app.menu()
+    expect(reopened?.find((item) => item.label === 'ctxmenutag')?.checked).toBe(false)
+    await app.chooseMenuItem('ctxmenutag')
+    expect(app.shows('label:Filter by tags: ctxmenutag')).toBe(true)
+  } finally {
+    await app.closeMenu().catch(() => {})
+    await app.press('label:Lock').catch(() => {})
+    await app.waitFor('label:Master password').catch(() => {})
+  }
+})
+
 // 侧栏「我的分组」支持鼠标拖动排序：拖完写 sort_order，锁定/解锁后仍是新顺序。
 test('sidebar categories can be reordered by dragging', async () => {
   const app = await open('./App.tsx', { platform: 'windows' })

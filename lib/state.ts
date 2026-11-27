@@ -895,26 +895,51 @@ export async function saveEntry(input: EntryInput, id: string | null): Promise<E
   return view
 }
 
+/** 完整条目转成 EntryInput；行内编辑（备注、标签）只覆盖改动的字段，其余原样写回。 */
+function entryInputOf(view: EntryView, override: Partial<EntryInput> = {}): EntryInput {
+  return {
+    categoryId: view.categoryId,
+    title: view.title,
+    url: view.url,
+    username: view.username,
+    password: view.password,
+    email: view.email,
+    phone: view.phone,
+    notes: view.notes,
+    favorite: view.favorite,
+    tags: view.tags,
+    ...override,
+  }
+}
+
 /** 同步保存单条备注：getEntry/updateEntry 均为同步 API。读回完整 EntryView，
  *  组装完整 EntryInput 只替换 notes，其余字段原样写回。 */
 export function saveEntryNotes(id: string, notes: string): void {
   try {
     const view = native.getEntry(id)
-    const input: EntryInput = {
-      categoryId: view.categoryId,
-      title: view.title,
-      url: view.url,
-      username: view.username,
-      password: view.password,
-      email: view.email,
-      phone: view.phone,
-      notes,
-      favorite: view.favorite,
-      tags: view.tags,
-    }
-    native.updateEntry(id, input)
+    native.updateEntry(id, entryInputOf(view, { notes }))
     entryNotes.update((prev) => ({ ...prev, [id]: notes }))
     toast(t('entry.notesSaved'))
+    touchActivity()
+  } catch (error) {
+    showError(error)
+  }
+}
+
+/** 行内勾选/取消一个标签：不打开编辑弹窗，直接写回并更新列表里的标签胶囊。 */
+export function toggleEntryTag(id: string, tag: string): void {
+  try {
+    const view = native.getEntry(id)
+    const tags = view.tags.includes(tag)
+      ? view.tags.filter((item) => item !== tag)
+      : [...view.tags, tag]
+    const saved = native.updateEntry(id, entryInputOf(view, { tags }))
+    entries.update((list) =>
+      list.map((item) =>
+        item.id === id ? { ...item, tags: saved.tags, updatedAt: saved.updatedAt } : item,
+      ),
+    )
+    toast(t('toast.saved'))
     touchActivity()
   } catch (error) {
     showError(error)

@@ -31,11 +31,11 @@ Mend 是一款本地离线、存盘加密的个人密码管理器，基于 **Nat
 - [GitHub Releases](https://github.com/buzzyaaa/Mend/releases/latest)：主发布源；应用内更新与 OTA 也走 GitHub。
 - [CNB 镜像](https://cnb.cool/smybxg/Mend/-/releases)：国内下载镜像，产物与 GitHub Release 完全一致，推荐中国大陆用户使用。
 
-## ☕ 支持
+## <img src="./docs/support/Sticker%20logo.gif" width="32" alt=""> 支持
 
 如果 Mend 帮到了你，可以通过 Ko-fi 支持后续开发。
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/C0M32BD0S3)
+<a href="https://ko-fi.com/C0M32BD0S3"><img src="./docs/support/Support%20me%202.gif" width="180" alt="在 Ko-fi 支持我"></a>
 
 <img src="./docs/support/qrcode.png" width="200" alt="Ko-fi 二维码">
 
@@ -203,11 +203,11 @@ nsh package . --target windows # 产物：Mend/Mend.exe、Mend.zip、Mend-<版�
 
 ---
 
-## ☕ 支持
+## <img src="./docs/support/Sparkle%20mug.gif" width="32" alt=""> 支持
 
 如果 Mend 帮到了你，可以通过 Ko-fi 支持后续开发。
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/C0M32BD0S3)
+<a href="https://ko-fi.com/C0M32BD0S3"><img src="./docs/support/Support%20me%203.gif" width="140" alt="在 Ko-fi 支持我"></a>
 
 <img src="./docs/support/qrcode.png" width="200" alt="Ko-fi 二维码">
 
