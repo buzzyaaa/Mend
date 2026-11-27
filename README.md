@@ -204,3 +204,15 @@ Also `nsh.json` (app metadata and `rust: native` declaration), `theme.json` (des
 ## 📄 License
 
 [MIT](./LICENSE)
+
+---
+
+## ☕ Support
+
+If Mend helps you, you can support ongoing development via Ko-fi.
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/C0M32BD0S3)
+
+<img src="./docs/support/qrcode.png" width="200" alt="Ko-fi QR">
+
+> **A voluntary thank-you, not a purchase.** Mend stays free and open source for everyone, with or without a tip — all features and updates are open to you either way. Your kindness simply gives me more time to maintain and improve the app; it comes with no service, no feature promise, and no commercial relationship of any kind. Thank you for being here.

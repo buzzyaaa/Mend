@@ -200,3 +200,15 @@ nsh package . --target windows # 产物：Mend/Mend.exe、Mend.zip、Mend-<版�
 ## 📄 License
 
 [MIT](./LICENSE)
+
+---
+
+## ☕ 支持
+
+如果 Mend 帮到了你，可以通过 Ko-fi 支持后续开发。
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/C0M32BD0S3)
+
+<img src="./docs/support/qrcode.png" width="200" alt="Ko-fi 二维码">
+
+> **这是一份自愿的心意，不是购买。** 无论是否打赏，Mend 的全部功能与更新都一视同仁地开放给你，项目始终保持免费和开源。你的支持只是让我有更多时间维护和改进它，不包含任何服务或功能承诺，也不形成任何商业关系。谢谢你愿意支持。
