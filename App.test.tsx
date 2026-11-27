@@ -588,6 +588,9 @@ test('bottom rail has offline shortcut with confirmation, and theme uses cards',
   expect(allText).toContain('https://github.com/buzzyaaa/Mend')
   expect(allText).toContain('https://cnb.cool/smybxg/Mend')
   expect(allText.filter((text) => text === 'Open now').length).toBeGreaterThanOrEqual(2)
+  // 「关于」卡底部展示开源免责声明（走 i18n，英文界面下为英文）。
+  expect(allText).toContain('Disclaimer')
+  expect(allText.some((text) => text.startsWith('No software can guarantee'))).toBe(true)
   await app.press('id:about-link-cnb')
   await app.wait(100)
   expect(openedUrl).toBe('https://cnb.cool/smybxg/Mend')

@@ -384,8 +384,12 @@
   },
   "about": {
     "title": "About",
-    "hint": "Source repository and China mirror — tap a card to open it in your browser",
-    "open": "Open now"
+    "hint": "Source repository, China mirror and open-source disclaimer",
+    "open": "Open now",
+    "disclaimerTitle": "Disclaimer",
+    "disclaimer1": "Mend is free, open-source software licensed under the MIT License. It is provided \"AS IS\", without warranty of any kind, express or implied, including merchantability, fitness for a particular purpose and non-infringement.",
+    "disclaimer2": "No software can guarantee that data is never lost or compromised. Your master password cannot be recovered — back up your vault regularly; if both the password and your backups are lost, the data is gone permanently.",
+    "disclaimer3": "To the fullest extent permitted by law, the authors and contributors are not liable for any damages arising from the use of, or inability to use, this software. Only update checks and site-icon fetching use the network, both can be disabled in Settings. See the README for the full notice."
   },
   "toast": {
     "copied": "Copied to clipboard",

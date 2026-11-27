@@ -826,7 +826,8 @@ export function SettingsPage() {
               </View>
             </SettingsCard>
 
-            {/* 关于：源码与镜像入口，整张卡都是跳转区（用户主动打开浏览器，不受离线模式拦截）。 */}
+            {/* 关于：源码与镜像入口，整张卡都是跳转区（用户主动打开浏览器，不受离线模式拦截）。
+                免责声明与 README / LICENSE 同源，走 i18n 文案，不放硬编码中英文。 */}
             <SettingsCard>
               <CardHeader icon="info" title={t('about.title')} hint={t('about.hint')} />
               <View class="gap-2.5">
@@ -854,6 +855,14 @@ export function SettingsPage() {
                     </View>
                   )}
                 </Each>
+              </View>
+              <View class="gap-1.5 border-t border-border pt-3">
+                <Text class="text-xs font-semibold text-foreground">
+                  {t('about.disclaimerTitle')}
+                </Text>
+                <Text class="text-[11px] text-muted-foreground">{t('about.disclaimer1')}</Text>
+                <Text class="text-[11px] text-muted-foreground">{t('about.disclaimer2')}</Text>
+                <Text class="text-[11px] text-muted-foreground">{t('about.disclaimer3')}</Text>
               </View>
             </SettingsCard>
           </View>
